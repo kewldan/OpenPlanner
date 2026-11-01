@@ -24,6 +24,7 @@ export function PlanCanvas() {
     const observer = new ResizeObserver(([entry]) => {
       if (!entry) return;
       const { width, height } = entry.contentRect;
+      useEditor.getState().setViewport(width, height);
       sendToEngine({ type: "resize", width, height, devicePixelRatio: window.devicePixelRatio });
     });
     observer.observe(root);

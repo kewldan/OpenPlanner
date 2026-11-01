@@ -30,6 +30,10 @@ cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warni
 bunx biome check . && bunx tsc -b && bun test
 ```
 
+```bash
+cd apps/desktop && bunx vite build && bunx playwright test
+```
+
 ## Архитектурные решения
 
 Новые ключевые решения добавляются в `docs/decisions.md` до реализации.

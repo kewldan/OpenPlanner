@@ -41,6 +41,24 @@ export const ru = {
   "status.hint": "Прокрутка — сдвиг, ⌘ + прокрутка или щипок — масштаб, средняя кнопка — сдвиг",
 
   "error.engine": "Движок не запустился: {message}",
+  "error.title": "Ошибка",
+
+  "project.untitled": "Без имени",
+  "project.unsaved": "Не сохранено",
+  "project.saved": "Сохранено {time}",
+  "project.notSavedYet": "Ещё не сохранялся",
+
+  "recovery.title": "Восстановление",
+  "recovery.untitled": "После прошлого сеанса остались несохранённые изменения. Восстановить их?",
+  "recovery.file":
+    "В проекте «{name}» есть изменения, которые не успели сохраниться. Восстановить их?",
+  "recovery.restore": "Восстановить",
+  "recovery.discard": "Не восстанавливать",
+
+  "confirm.discardTitle": "Несохранённые изменения",
+  "confirm.discard": "Проект ещё не сохранён в файл. Если продолжить, изменения пропадут.",
+  "confirm.discardOk": "Продолжить без сохранения",
+  "confirm.cancel": "Отмена",
 } as const;
 
 export type MessageKey = keyof typeof ru;
