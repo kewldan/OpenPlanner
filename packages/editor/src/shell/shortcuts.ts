@@ -1,26 +1,25 @@
 import { useEffect } from "react";
-import { sendToEngine } from "../engine";
+import { actions, isEnabled } from "../actions";
+import { isMacPlatform, matches } from "../actions/shortcut";
+import { useEditor } from "../store/editor";
 
-const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
-
-/** Глобальные горячие клавиши редактора. Не срабатывают при вводе в поля. */
+/** Глобальные горячие клавиши из реестра команд. */
 export function useShortcuts() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat && event.code !== "KeyZ") return;
       const target = event.target as HTMLElement | null;
-      if (target?.closest("input, textarea, [contenteditable='true']")) return;
+      const inInput = Boolean(target?.closest("input, textarea, select, [contenteditable='true']"));
+      // Пока открыто модальное окно, работают только сочетания, открывающие окна.
+      const dialogOpen = useEditor.getState().dialog !== null;
 
-      const mod = isMac ? event.metaKey : event.ctrlKey;
-      const key = event.key.toLowerCase();
-      if (mod && key === "z") {
+      for (const action of actions) {
+        if (!action.keys?.some((key) => matches(event, key, isMacPlatform))) continue;
+        if (inInput && !action.inInputs) return;
+        if (dialogOpen && action.group !== "help") return;
         event.preventDefault();
-        sendToEngine({ type: event.shiftKey ? "redo" : "undo" });
-      } else if (mod && key === "y" && !isMac) {
-        event.preventDefault();
-        sendToEngine({ type: "redo" });
-      } else if (event.shiftKey && key === "1") {
-        event.preventDefault();
-        sendToEngine({ type: "zoomToFit" });
+        if (isEnabled(action)) action.run();
+        return;
       }
     };
     window.addEventListener("keydown", onKeyDown);

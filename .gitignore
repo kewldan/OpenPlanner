@@ -17,3 +17,7 @@ dist/
 *.log
 .env
 .env.*
+
+# Playwright
+test-results/
+playwright-report/

@@ -3,10 +3,10 @@
   "compilerOptions": {
     "outDir": "../../target/tsc/desktop",
     "rootDir": ".",
-    "types": ["vite/client"],
+    "types": ["vite/client", "node"],
     "tsBuildInfoFile": "../../target/tsc/desktop.tsbuildinfo"
   },
-  "include": ["src", "vite.config.ts"],
+  "include": ["src", "vite.config.ts", "playwright.config.ts", "e2e"],
   "references": [
     {
       "path": "../../packages/editor"

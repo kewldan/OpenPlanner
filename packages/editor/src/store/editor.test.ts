@@ -12,19 +12,22 @@ describe("useEditor.applyEvents", () => {
         type: "documentChanged",
         document: { meta: { title: "Комендантский пр.", address: "" }, defaultCeilingHeight: 2700 },
       },
-      { type: "historyChanged", canUndo: true, canRedo: false },
+      { type: "historyChanged", canUndo: true, canRedo: false, dirty: true },
       { type: "viewChanged", scaleDenominator: 25, zoomPercent: 200 },
     ]);
     const state = useEditor.getState();
     expect(state.document?.meta.title).toBe("Комендантский пр.");
     expect(state.canUndo).toBe(true);
     expect(state.zoomPercent).toBe(200);
+    expect(state.dirty).toBe(true);
   });
 
   test("ошибка сохраняется до следующего изменения документа", () => {
     useEditor.getState().applyEvents([{ type: "error", message: "плохо" }]);
     expect(useEditor.getState().lastError).toBe("плохо");
-    useEditor.getState().applyEvents([{ type: "historyChanged", canUndo: false, canRedo: false }]);
+    useEditor
+      .getState()
+      .applyEvents([{ type: "historyChanged", canUndo: false, canRedo: false, dirty: false }]);
     expect(useEditor.getState().lastError).toBe("плохо");
   });
 });

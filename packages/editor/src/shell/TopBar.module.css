@@ -24,6 +24,15 @@
   text-overflow: ellipsis;
 }
 
+.dirty {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  align-self: center;
+  border-radius: 3px;
+  background: var(--text-3);
+}
+
 .variant {
   color: var(--text-3);
   white-space: nowrap;

@@ -1,0 +1,3 @@
+[test]
+# Юнит-тесты живут в пакетах; e2e (apps/desktop/e2e) запускает Playwright.
+root = "./packages"
