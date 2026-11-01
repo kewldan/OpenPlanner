@@ -67,7 +67,7 @@ project.oplan (ZIP)
 - Миграции между версиями формата — в `op-format`.
 - Автосохранение: журнал команд в `<project>.oplan.journal` рядом с файлом, периодическое пересохранение контейнера, восстановление после сбоя.
 
-## Структура репозитория (предложение)
+## Структура репозитория
 
 ```
 apps/
@@ -90,7 +90,7 @@ schema/               JSON Schema формата                       (MIT)
 docs/
 ```
 
-Сборка: Cargo workspace + pnpm workspaces + Vite **(предложение)**.
+Сборка: Cargo workspace + Bun workspaces + Vite.
 
 ## Зависимости (предложение)
 
@@ -111,7 +111,7 @@ docs/
 | IFC 4 | собственный писатель STEP | — |
 | WASM-мост | wasm-bindgen | MIT / Apache-2.0 |
 | UI | React, TypeScript | MIT |
-| Состояние UI | Zustand | MIT |
+| Состояние UI | Zustand (утверждено) | MIT |
 | Таблицы | TanStack Table + Virtual | MIT |
 | Палитра команд | cmdk | MIT |
 | Тесты Rust | cargo test, insta, proptest | MIT / Apache-2.0 |
