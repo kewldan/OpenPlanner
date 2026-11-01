@@ -18,6 +18,8 @@ export function useShortcuts() {
         if (inInput && !action.inInputs) return;
         if (dialogOpen && action.group !== "help") return;
         event.preventDefault();
+        // Файловые команды из поля ввода: сначала зафиксировать правку (поля коммитят по blur).
+        if (inInput && action.group === "file" && target instanceof HTMLElement) target.blur();
         if (isEnabled(action)) action.run();
         return;
       }
