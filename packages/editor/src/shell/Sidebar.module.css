@@ -1,0 +1,41 @@
+.toolbar {
+  width: var(--toolbar-w);
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) 0;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+}
+
+.panel {
+  width: var(--sidebar-w);
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+}
+
+.tabs {
+  height: 36px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: 0 var(--space-6);
+  border-bottom: 1px solid var(--line);
+  font-weight: 600;
+}
+
+.inactive {
+  color: var(--text-3);
+  font-weight: 500;
+}
+
+.empty {
+  padding: var(--space-6);
+  color: var(--text-3);
+}
