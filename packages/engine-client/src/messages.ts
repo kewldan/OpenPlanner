@@ -18,7 +18,8 @@ export type EngineCall =
   | { type: "exportFile"; generator: string }
   | { type: "importFile"; bytes: Uint8Array }
   | { type: "replayJournal"; text: string }
-  | { type: "journalHeader" };
+  | { type: "journalHeader" }
+  | { type: "documentTitle" };
 
 /** Тип результата вызова. */
 export interface EngineCallResult {
@@ -26,6 +27,7 @@ export interface EngineCallResult {
   importFile: undefined;
   replayJournal: undefined;
   journalHeader: string;
+  documentTitle: string;
 }
 
 /** UI → воркер. */

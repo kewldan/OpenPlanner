@@ -1,6 +1,6 @@
 import type { Command } from "@openplanner/engine-client";
 import { Field } from "@openplanner/ui";
-import { type KeyboardEvent, useEffect, useState } from "react";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { sendToEngine } from "../engine";
 import { t } from "../i18n";
 import { useEditor } from "../store/editor";
@@ -60,9 +60,15 @@ interface CommitFieldProps {
 /** Поле, которое отправляет команду по Enter или при потере фокуса; Esc — отмена правки. */
 function CommitField({ label, value, unit, numeric, toCommand }: CommitFieldProps) {
   const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
+  const editing = useRef(false);
+  // Значение из документа подхватывается, только когда поле не редактируется:
+  // подтверждение прошлой правки не должно затирать то, что пользователь набирает сейчас.
+  useEffect(() => {
+    if (!editing.current) setDraft(value);
+  }, [value]);
 
   const commit = () => {
+    editing.current = false;
     if (draft !== value) sendToEngine({ type: "command", command: toCommand(draft) });
   };
 
@@ -71,6 +77,7 @@ function CommitField({ label, value, unit, numeric, toCommand }: CommitFieldProp
     if (event.key === "Enter") input.blur();
     if (event.key === "Escape") {
       setDraft(value);
+      editing.current = false;
       // Сначала React применит откат черновика, потом поле потеряет фокус без коммита.
       requestAnimationFrame(() => input.blur());
     }
@@ -84,6 +91,9 @@ function CommitField({ label, value, unit, numeric, toCommand }: CommitFieldProp
       numeric={numeric ?? false}
       inputMode={numeric ? "decimal" : "text"}
       onChange={(event) => setDraft(event.target.value)}
+      onFocus={() => {
+        editing.current = true;
+      }}
       onBlur={commit}
       onKeyDown={onKeyDown}
     />

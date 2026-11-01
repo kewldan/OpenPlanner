@@ -61,6 +61,8 @@ function setup(
       switch (call.type) {
         case "journalHeader":
           return HEADER;
+        case "documentTitle":
+          return "Комендантский пр.";
         case "exportFile":
           controller?.onEngineEvents(duringExport);
           duringExport = [];
@@ -70,7 +72,6 @@ function setup(
       }
     }) as EngineApi["call"],
     isDirty: () => dirty,
-    documentTitle: () => "Комендантский пр.",
   };
 
   controller = new ProjectController(platform, engine);

@@ -12,7 +12,6 @@ export const project = new ProjectController(platform, {
   send: sendToEngine,
   call: callEngine,
   isDirty: () => useEditor.getState().dirty,
-  documentTitle: () => useEditor.getState().document?.meta.title ?? "",
 });
 
 /** Подписка React-компонентов на состояние проекта. */

@@ -47,6 +47,11 @@ function call(current: Engine, request: EngineCall): { value: unknown; transfer:
       return { value: undefined, transfer: [] };
     case "journalHeader":
       return { value: Engine.journalHeader(), transfer: [] };
+    case "documentTitle": {
+      // Ответ идёт после всех ранее отправленных команд — название всегда актуально.
+      const changed = current.snapshot().events.find((event) => event.type === "documentChanged");
+      return { value: changed?.document.meta.title ?? "", transfer: [] };
+    }
   }
 }
 

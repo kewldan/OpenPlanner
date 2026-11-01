@@ -29,8 +29,6 @@ export interface EngineApi {
   call<C extends EngineCall>(call: C): Promise<EngineCallResult[C["type"]]>;
   /** Есть ли несохранённые изменения (по последнему событию движка). */
   isDirty(): boolean;
-  /** Название проекта из документа — для имени нового файла. */
-  documentTitle(): string;
 }
 
 /** Интервал автосохранения проекта, у которого есть файл. */
@@ -151,7 +149,8 @@ export class ProjectController {
     let target: SavedFile | null =
       state.path && !forceChoose ? { path: state.path, name: state.name ?? "" } : null;
     if (!target) {
-      target = await this.platform.chooseSaveTarget(fileNameFor(this.engine.documentTitle()));
+      const title = await this.engine.call({ type: "documentTitle" });
+      target = await this.platform.chooseSaveTarget(fileNameFor(title));
       if (!target) return false;
     }
     // Всё, что пришло в журнал до выгрузки, войдёт в файл: эти строки больше не нужны.

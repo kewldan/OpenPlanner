@@ -56,7 +56,8 @@ test("шпаргалка горячих клавиш", async ({ page }) => {
 
 test("сохранение и открытие .oplan", async ({ page }) => {
   await openEditor(page);
-  await rename(page, "Комендантский пр.");
+  // ⌘S прямо из поля, без Enter: правка должна зафиксироваться и попасть в имя файла.
+  await page.getByLabel("Название").fill("Комендантский пр.");
 
   const downloading = page.waitForEvent("download");
   await page.keyboard.press("Control+KeyS");
@@ -86,8 +87,17 @@ test("несохранённые изменения восстанавливаю
   await openEditor(page);
   await rename(page, "Черновик");
   await rename(page, "Черновик 2");
-  // Журнал дописывается с небольшой задержкой.
-  await page.waitForTimeout(300);
+  // Журнал дописывается с небольшой задержкой — ждём, пока в нём появится последняя правка.
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Object.keys(localStorage)
+          .filter((key) => key.startsWith("openplanner.journal:"))
+          .map((key) => localStorage.getItem(key))
+          .join(""),
+      ),
+    )
+    .toContain("Черновик 2");
 
   page.removeAllListeners("dialog");
   page.once("dialog", (dialog) => {
