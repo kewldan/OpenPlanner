@@ -15,6 +15,10 @@ export default defineConfig({
     viewport: { width: 1440, height: 900 },
     trace: "retain-on-failure",
     launchOptions: {
+      // Свой Chromium вместо скачанного Playwright (например, в контейнере разработки).
+      ...(process.env.PLAYWRIGHT_CHROMIUM_PATH
+        ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH }
+        : {}),
       // В CI и контейнерах нет GPU: WebGL2 через программный SwiftShader.
       args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
       // Без UTF-8-локали Chromium заменяет кириллические имена скачиваемых файлов на «download».

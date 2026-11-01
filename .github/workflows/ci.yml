@@ -19,7 +19,7 @@ jobs:
     name: Rust · fmt, clippy, тесты
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Системные библиотеки Tauri
         run: |
           sudo apt-get update
@@ -37,7 +37,7 @@ jobs:
     name: Web · Biome, типы, тесты, сборка
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup show
       - uses: Swatinem/rust-cache@v2
       - name: wasm-bindgen-cli
@@ -58,7 +58,7 @@ jobs:
       - name: E2E (веб-сборка)
         run: bunx playwright test
         working-directory: apps/desktop
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-traces
@@ -74,7 +74,7 @@ jobs:
         os: [macos-latest, windows-latest, ubuntu-24.04]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Системные библиотеки Tauri
         if: runner.os == 'Linux'
         run: |
