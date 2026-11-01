@@ -1,0 +1,24 @@
+[package]
+name = "op-model"
+description = "Документ проекта OpenPlanner: модель, команды, отмена/повтор"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+# TS-типы для WASM-моста (tsify).
+wasm = ["dep:tsify", "dep:wasm-bindgen"]
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+tsify = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

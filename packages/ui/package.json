@@ -1,0 +1,21 @@
+{
+  "name": "@openplanner/ui",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles.css": "./src/styles.css"
+  },
+  "dependencies": {
+    "@base-ui/react": "1.9.0",
+    "@fontsource-variable/onest": "5.3.1",
+    "@fontsource/ibm-plex-mono": "5.3.0"
+  },
+  "peerDependencies": {
+    "react": "^19"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0"
+  }
+}

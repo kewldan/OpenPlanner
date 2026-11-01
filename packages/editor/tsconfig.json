@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "../../target/tsc/editor",
+    "rootDir": "src",
+    "types": ["bun"],
+    "tsBuildInfoFile": "../../target/tsc/editor.tsbuildinfo"
+  },
+  "include": ["src"],
+  "references": [
+    {
+      "path": "../ui"
+    },
+    {
+      "path": "../engine-client"
+    }
+  ]
+}

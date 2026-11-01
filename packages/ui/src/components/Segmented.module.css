@@ -1,0 +1,34 @@
+.root {
+  display: inline-flex;
+  padding: 1px;
+  gap: 1px;
+  background: var(--field);
+  border-radius: var(--radius-md);
+}
+
+.item {
+  height: 22px;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.item:disabled {
+  color: var(--text-3);
+  cursor: default;
+}
+
+.item[data-pressed] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow:
+    0 0 0 0.5px var(--line-2),
+    0 1px 1px rgb(0 0 0 / 6%);
+}

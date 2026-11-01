@@ -1,0 +1,18 @@
+[package]
+name = "op-render"
+description = "Рендерер OpenPlanner на wgpu: 2D-план, облако точек, 3D"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+bytemuck.workspace = true
+glam.workspace = true
+log.workspace = true
+thiserror.workspace = true
+wgpu.workspace = true
+
+[lints]
+workspace = true

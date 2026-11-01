@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kewldan/OpenPlanner/schema/manifest.schema.json",
+  "title": "Манифест .oplan",
+  "type": "object",
+  "required": ["formatVersion", "generator"],
+  "properties": {
+    "formatVersion": {
+      "description": "Версия формата контейнера",
+      "type": "integer",
+      "minimum": 1
+    },
+    "generator": {
+      "description": "Приложение и версия, записавшие файл",
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}
