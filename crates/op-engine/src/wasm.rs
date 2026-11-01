@@ -85,6 +85,46 @@ impl Engine {
         Ok(events.into_ts()?)
     }
 
+    /// Записывает проект в байты файла `.oplan`.
+    ///
+    /// # Errors
+    ///
+    /// Ошибка сериализации.
+    #[wasm_bindgen(js_name = exportFile)]
+    pub fn export_file(&self, generator: &str) -> Result<Vec<u8>, JsError> {
+        Ok(self.state.export_file(generator)?)
+    }
+
+    /// Открывает проект из байтов файла `.oplan`.
+    ///
+    /// # Errors
+    ///
+    /// Ошибка, если файл повреждён или создан более новой версией.
+    #[wasm_bindgen(js_name = importFile)]
+    pub fn import_file(&mut self, bytes: &[u8]) -> Result<Ts<EngineEvents>, JsError> {
+        Ok(self.state.import_file(bytes)?.into_ts()?)
+    }
+
+    /// Воспроизводит журнал автосохранения поверх текущего документа.
+    ///
+    /// # Errors
+    ///
+    /// Ошибка разбора журнала.
+    #[wasm_bindgen(js_name = replayJournal)]
+    pub fn replay_journal(&mut self, text: &str) -> Result<Ts<EngineEvents>, JsError> {
+        Ok(self.state.replay_journal(text)?.into_ts()?)
+    }
+
+    /// Первая строка нового журнала автосохранения.
+    ///
+    /// # Errors
+    ///
+    /// Ошибка сериализации (не должна возникать).
+    #[wasm_bindgen(js_name = journalHeader)]
+    pub fn journal_header() -> Result<String, JsError> {
+        Ok(op_format::journal::header_line()?)
+    }
+
     /// Рисует кадр.
     pub fn render(&mut self) {
         self.renderer
