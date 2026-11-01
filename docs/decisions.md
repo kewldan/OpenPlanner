@@ -129,3 +129,17 @@ Tauri (нативный Rust)
 ## 2026-11-01 · IFC 4: собственный писатель STEP
 
 Пишем нужное подмножество IFC 4 (стены, проёмы, помещения, мебель, этажи) на Rust без внешних зависимостей. В CI проверяем результат через IfcOpenShell (только в тестах, в дистрибутив не входит).
+
+## 2026-11-01 · Rust: rustfmt + строгий clippy
+
+- `rustfmt` с общим `rustfmt.toml`.
+- clippy в CI с `-D warnings`, плюс выборочные pedantic-правила в `[workspace.lints]`. Среди них: запрет `unwrap`/`expect` в библиотечном коде, контроль приведений чисел (`cast_possible_truncation`, `cast_sign_loss` и т.п.), `float_cmp`.
+
+## 2026-11-01 · Проверки: Lefthook + CI
+
+- Lefthook перед коммитом: формат и быстрый линт только изменённых файлов, проверка сообщения коммита.
+- CI: полный формат-чек, clippy, линт TS, `tsc --noEmit`, тесты Rust и TS, сборка под macOS, Windows, Linux.
+
+## 2026-11-01 · Коммиты: Conventional Commits
+
+`feat(scan): …`, `fix(model): …`, `docs: …` и т.д. Скоупы соответствуют crates и пакетам. Changelog и версия собираются из истории.
