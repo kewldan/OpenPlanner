@@ -143,3 +143,9 @@ Tauri (нативный Rust)
 ## 2026-11-01 · Коммиты: Conventional Commits
 
 `feat(scan): …`, `fix(model): …`, `docs: …` и т.д. Скоупы соответствуют crates и пакетам. Changelog и версия собираются из истории.
+
+## 2026-11-01 · TS/CSS/JSON: Biome
+
+- Biome — линтер и форматтер для TS, TSX, CSS (включая CSS Modules) и JSON, один конфиг `biome.json` в корне.
+- Типы проверяет `tsc --noEmit` в CI.
+- `bun lint` / `bun fmt` рассмотрены. Вернёмся к ним, когда линтер появится в стабильном Bun.
