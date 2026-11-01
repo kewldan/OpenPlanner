@@ -6,7 +6,7 @@ default-members = ["crates/*"]
 [workspace.package]
 version = "0.0.0"
 edition = "2024"
-rust-version = "1.97"
+rust-version = "1.99"
 license = "AGPL-3.0-only"
 repository = "https://github.com/kewldan/OpenPlanner"
 publish = false
@@ -42,6 +42,7 @@ tauri = "2"
 tauri-build = "2"
 tauri-plugin-dialog = "2"
 percent-encoding = "2"
+tempfile = "3"
 
 [workspace.lints.rust]
 unsafe_code = "deny"
