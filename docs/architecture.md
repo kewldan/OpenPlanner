@@ -94,33 +94,33 @@ docs/
 
 ## Зависимости
 
-| Задача | Библиотека | Лицензия |
-|---|---|---|
-| Оболочка | Tauri 2 | MIT / Apache-2.0 |
-| GPU | wgpu | MIT / Apache-2.0 |
-| Математика | glam | MIT / Apache-2.0 |
-| Тесселяция | lyon | MIT / Apache-2.0 |
-| Булевы операции над полигонами | i_overlay (через geo) | MIT |
-| Пространственный индекс | rstar; kiddo для облака точек | MIT / Apache-2.0 |
-| Параллелизм (нативно) | rayon | MIT / Apache-2.0 |
-| GLB/glTF | gltf | MIT / Apache-2.0 |
-| ZIP | zip | MIT |
-| PDF | krilla | MIT / Apache-2.0 |
-| XLSX запись / чтение | rust_xlsxwriter / calamine | MIT / Apache-2.0, MIT |
-| DXF | dxf | MIT |
-| IFC 4 | собственный писатель STEP | — |
-| WASM-мост | wasm-bindgen | MIT / Apache-2.0 |
-| UI | React, TypeScript | MIT |
-| Состояние UI | Zustand | MIT |
-| UI-примитивы | Base UI | MIT |
-| Типы Rust → TS | tsify, serde-wasm-bindgen | MIT / Apache-2.0 |
-| Таблицы | TanStack Table + Virtual | MIT |
-| Палитра команд | cmdk | MIT |
-| Тесты Rust | cargo test, insta, proptest | MIT / Apache-2.0 |
-| Линт и формат Rust | rustfmt, clippy (строгий) | MIT / Apache-2.0 |
-| Линт и формат TS/CSS/JSON | Biome | MIT / Apache-2.0 |
-| Git-хуки | Lefthook | MIT |
-| Тесты TS | Vitest, Playwright (веб-сборка) | MIT / Apache-2.0 |
+| Задача                         | Библиотека                        | Лицензия              |
+| ------------------------------ | --------------------------------- | --------------------- |
+| Оболочка                       | Tauri 2                           | MIT / Apache-2.0      |
+| GPU                            | wgpu                              | MIT / Apache-2.0      |
+| Математика                     | glam                              | MIT / Apache-2.0      |
+| Тесселяция                     | lyon                              | MIT / Apache-2.0      |
+| Булевы операции над полигонами | i_overlay (через geo)             | MIT                   |
+| Пространственный индекс        | rstar; kiddo для облака точек     | MIT / Apache-2.0      |
+| Параллелизм (нативно)          | rayon                             | MIT / Apache-2.0      |
+| GLB/glTF                       | gltf                              | MIT / Apache-2.0      |
+| ZIP                            | zip                               | MIT                   |
+| PDF                            | krilla                            | MIT / Apache-2.0      |
+| XLSX запись / чтение           | rust_xlsxwriter / calamine        | MIT / Apache-2.0, MIT |
+| DXF                            | dxf                               | MIT                   |
+| IFC 4                          | собственный писатель STEP         | —                     |
+| WASM-мост                      | wasm-bindgen                      | MIT / Apache-2.0      |
+| UI                             | React, TypeScript                 | MIT                   |
+| Состояние UI                   | Zustand                           | MIT                   |
+| UI-примитивы                   | Base UI                           | MIT                   |
+| Типы Rust → TS                 | tsify, serde-wasm-bindgen         | MIT / Apache-2.0      |
+| Таблицы                        | TanStack Table + Virtual          | MIT                   |
+| Палитра команд                 | cmdk                              | MIT                   |
+| Тесты Rust                     | cargo test, insta, proptest       | MIT / Apache-2.0      |
+| Линт и формат Rust             | rustfmt, clippy (строгий)         | MIT / Apache-2.0      |
+| Линт и формат TS/CSS/JSON      | Biome                             | MIT / Apache-2.0      |
+| Git-хуки                       | Lefthook                          | MIT                   |
+| Тесты TS                       | bun test, Playwright (веб-сборка) | MIT / Apache-2.0      |
 
 Утверждены: Zustand, Base UI, tsify, krilla, собственный писатель IFC. Остальные — рабочий выбор, могут меняться по ходу без отдельного решения. Все совместимы с AGPL-3.0.
 
@@ -129,4 +129,4 @@ docs/
 - Ядро: юнит-тесты, property-тесты геометрии, снапшот-тесты экспорта (PDF/DXF/XLSX как структура, а не байты).
 - Скан: корпус эталонных сканов с ожидаемыми планами и метриками точности (стены ±N мм, проёмы, площади).
 - Рендерер: снапшоты кадров на headless wgpu (нативно) с допуском.
-- UI: компонентные тесты (Vitest) и e2e на веб-сборке (Playwright). WebDriver для Tauri на macOS не поддерживается, поэтому сценарии e2e гоняются в браузере с моками нативных сервисов.
+- UI: юнит- и компонентные тесты (`bun test`) и e2e на веб-сборке (Playwright). WebDriver для Tauri на macOS не поддерживается, поэтому сценарии e2e гоняются в браузере с моками нативных сервисов.
