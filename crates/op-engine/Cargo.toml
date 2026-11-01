@@ -13,6 +13,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 glam.workspace = true
 log.workspace = true
+op-format.workspace = true
 op-model = { workspace = true, features = ["wasm"] }
 op-render.workspace = true
 serde.workspace = true

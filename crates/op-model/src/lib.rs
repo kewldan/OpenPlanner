@@ -7,7 +7,9 @@
 mod command;
 mod document;
 mod history;
+mod schema;
 
 pub use command::{Command, CommandError};
 pub use document::{Document, ProjectMeta};
-pub use history::History;
+pub use history::{History, HistoryOp};
+pub use schema::model_schema;

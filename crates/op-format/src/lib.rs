@@ -10,6 +10,11 @@
 //!
 //! Крейт не зависит от модели приложения: документ передаётся как любой
 //! `serde`-тип. Лицензия — MIT.
+//!
+//! Рядом с файлом проекта может лежать журнал автосохранения — см. [`journal`].
+
+pub mod journal;
+mod migrate;
 
 use std::io::{Read, Seek, Write};
 
@@ -36,6 +41,14 @@ pub enum FormatError {
     /// Некорректный JSON.
     #[error("некорректные данные проекта: {0}")]
     Json(#[from] serde_json::Error),
+    /// Не удалось перевести модель из старой версии формата.
+    #[error("не удалось обновить проект из формата {from}: {reason}")]
+    Migration {
+        /// Версия формата в файле.
+        from: u32,
+        /// Причина.
+        reason: String,
+    },
     /// Файл создан более новой версией приложения.
     #[error(
         "проект создан более новой версией OpenPlanner (формат {found}, поддерживается до {supported})"
@@ -109,7 +122,8 @@ where
             supported: FORMAT_VERSION,
         });
     }
-    let model = read_json(&mut zip, MODEL_PATH)?;
+    let raw: serde_json::Value = read_json(&mut zip, MODEL_PATH)?;
+    let model = serde_json::from_value(migrate::migrate(raw, manifest.format_version)?)?;
     Ok((manifest, model))
 }
 
