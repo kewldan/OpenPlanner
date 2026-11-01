@@ -1,6 +1,6 @@
 # Архитектура OpenPlanner
 
-Принятые решения и их обоснование: [`decisions.md`](decisions.md). Здесь — как всё складывается вместе. Пункты с пометкой **(предложение)** ещё не утверждены.
+Принятые решения и их обоснование: [`decisions.md`](decisions.md). Здесь — как всё складывается вместе.
 
 ## Процессы и потоки
 
@@ -37,7 +37,7 @@
 
 ## Протокол UI ↔ воркер
 
-- Сообщения типизированы. Типы TS генерируются из Rust **(предложение: `specta` / `ts-rs`)**.
+- Сообщения — JS-объекты (serde-wasm-bindgen). Типы TS генерируются из Rust через tsify.
 - UI → воркер: `command`, `pointer`, `key`, `viewport`, `query`.
 - Воркер → UI: `diff` (изменённые сущности для панелей), `selection`, `hover`, `status` (подсказка инструмента, координаты), `result` (ответ на query).
 - Большие данные (скан, превью) передаются как `Transferable` (ArrayBuffer), без копирования.
@@ -92,7 +92,7 @@ docs/
 
 Сборка: Cargo workspace + Bun workspaces + Vite.
 
-## Зависимости (предложение)
+## Зависимости
 
 | Задача | Библиотека | Лицензия |
 |---|---|---|
@@ -111,13 +111,15 @@ docs/
 | IFC 4 | собственный писатель STEP | — |
 | WASM-мост | wasm-bindgen | MIT / Apache-2.0 |
 | UI | React, TypeScript | MIT |
-| Состояние UI | Zustand (утверждено) | MIT |
+| Состояние UI | Zustand | MIT |
+| UI-примитивы | Base UI | MIT |
+| Типы Rust → TS | tsify, serde-wasm-bindgen | MIT / Apache-2.0 |
 | Таблицы | TanStack Table + Virtual | MIT |
 | Палитра команд | cmdk | MIT |
 | Тесты Rust | cargo test, insta, proptest | MIT / Apache-2.0 |
 | Тесты TS | Vitest, Playwright (веб-сборка) | MIT / Apache-2.0 |
 
-Все совместимы с AGPL-3.0.
+Утверждены: Zustand, Base UI, tsify, krilla, собственный писатель IFC. Остальные — рабочий выбор, могут меняться по ходу без отдельного решения. Все совместимы с AGPL-3.0.
 
 ## Тестирование
 
