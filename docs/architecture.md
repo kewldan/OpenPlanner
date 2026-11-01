@@ -117,6 +117,9 @@ docs/
 | Таблицы | TanStack Table + Virtual | MIT |
 | Палитра команд | cmdk | MIT |
 | Тесты Rust | cargo test, insta, proptest | MIT / Apache-2.0 |
+| Линт и формат Rust | rustfmt, clippy (строгий) | MIT / Apache-2.0 |
+| Линт и формат TS/CSS/JSON | Biome | MIT / Apache-2.0 |
+| Git-хуки | Lefthook | MIT |
 | Тесты TS | Vitest, Playwright (веб-сборка) | MIT / Apache-2.0 |
 
 Утверждены: Zustand, Base UI, tsify, krilla, собственный писатель IFC. Остальные — рабочий выбор, могут меняться по ходу без отдельного решения. Все совместимы с AGPL-3.0.
