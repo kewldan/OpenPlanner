@@ -194,6 +194,17 @@ describe("ProjectController", () => {
     expect(s.journals.get("/p/Другой.oplan.journal")).toBe(HEADER);
   });
 
+  test("команда во время запуска выполняется после него, а не теряется", async () => {
+    const s = setup({
+      opened: { path: "/p/Другой.oplan", name: "Другой", bytes: new Uint8Array([9]) },
+    });
+    const starting = s.controller.start();
+    const opening = s.controller.openProject();
+    await Promise.all([starting, opening]);
+    expect(s.calls).toContain("importFile");
+    expect(s.controller.store.getState().path).toBe("/p/Другой.oplan");
+  });
+
   test("автосохранение не трогает проект без файла", async () => {
     const s = setup();
     await s.controller.start();

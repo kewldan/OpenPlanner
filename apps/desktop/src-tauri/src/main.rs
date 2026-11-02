@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    openplanner_desktop::run();
+    openplanner_desktop_lib::run();
 }

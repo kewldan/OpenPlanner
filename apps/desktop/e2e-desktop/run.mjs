@@ -85,6 +85,15 @@ function readZipEntry(path, entry) {
 async function launch() {
   const session = await newSession(APP);
   await waitFor("запуск движка", async () => /GPU: /.test(await session.text()));
+  // Клавиатурные события xdotool идут в активное окно — активируем окно приложения.
+  const app = await waitFor("окно приложения", () => {
+    try {
+      return xdo("search", "--onlyvisible", "--name", "OpenPlanner").split("\n")[0];
+    } catch {
+      return null;
+    }
+  });
+  xdo("windowactivate", "--sync", app);
   return session;
 }
 
