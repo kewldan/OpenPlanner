@@ -82,6 +82,16 @@ Full details: [product spec](docs/product-spec.md) (in Russian).
 
 More in [architecture](docs/architecture.md) and the [decision log](docs/decisions.md) (both in Russian).
 
+## 🧪 Try a build
+
+Every CI run publishes the desktop app as an artifact: open a green run on the [Actions page](https://github.com/kewldan/OpenPlanner/actions/workflows/ci.yml) and download **OpenPlanner-macOS** (Apple Silicon `.app`), **OpenPlanner-Windows** (`.exe`, needs WebView2 — built into Windows 10/11) or **OpenPlanner-Linux** (binary, needs WebKitGTK 4.1).
+
+The macOS build is not notarised yet. After unzipping, either right-click the app → **Open**, or run:
+
+```bash
+xattr -dr com.apple.quarantine OpenPlanner.app
+```
+
 ## 🚀 Getting started
 
 **Prerequisites**
