@@ -6,6 +6,7 @@ import type {
   Leader,
   Opening,
   OpeningKind,
+  ProjectMeta,
   Room,
   Underlay,
   Wall,
@@ -14,7 +15,7 @@ import type {
 import { Button, Segmented } from "@openplanner/ui";
 import type { ReactNode } from "react";
 import { sendToEngine } from "../engine";
-import { formatNumber, t } from "../i18n";
+import { formatNumber, type MessageKey, t } from "../i18n";
 import { useEditor } from "../store/editor";
 import { demolishedIds, statusOf, viewVariant } from "../variants/status";
 import { CommitField } from "./CommitField";
@@ -175,12 +176,42 @@ export function Inspector() {
           )}
         </Section>
       )}
+      {selection.length === 0 && document && <TitleBlockSection meta={document.meta} />}
       {lastError && (
         <p className={styles.error} role="alert">
           {lastError}
         </p>
       )}
     </aside>
+  );
+}
+
+const titleBlockFields = [
+  ["designation", "inspector.designation"],
+  ["stage", "inspector.stage"],
+  ["organization", "inspector.organization"],
+  ["developer", "inspector.developer"],
+  ["checker", "inspector.checker"],
+] as const satisfies readonly (readonly [keyof ProjectMeta, MessageKey])[];
+
+/** Графы основной надписи листов: правка — команда `setMeta` со всеми сведениями. */
+function TitleBlockSection({ meta }: { meta: ProjectMeta }) {
+  return (
+    <Section title={t("inspector.titleBlock")}>
+      {titleBlockFields.map(([field, label]) => (
+        <CommitField
+          key={field}
+          label={t(label)}
+          value={meta[field] ?? ""}
+          onCommit={(value) =>
+            sendToEngine({
+              type: "command",
+              command: { type: "setMeta", meta: { ...meta, [field]: value } },
+            })
+          }
+        />
+      ))}
+    </Section>
   );
 }
 

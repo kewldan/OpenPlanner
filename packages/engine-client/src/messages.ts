@@ -1,15 +1,28 @@
 // Обёртка протокола между UI-потоком и воркером.
 // Типы ToEngine/FromEngine генерируются из Rust (crates/op-engine/src/protocol.rs) через tsify.
 
-import type { FromEngine, ScanImport, ScanResult, ToEngine } from "../wasm/op_engine";
+import type {
+  DrawingFormat,
+  DrawingRequest,
+  DrawingSetInfo,
+  FromEngine,
+  ScanImport,
+  ScanResult,
+  ToEngine,
+} from "../wasm/op_engine";
 
 export type {
   Anchor,
   Command,
   Dimension,
   Document,
+  DrawingFormat,
+  DrawingRequest,
+  DrawingSetInfo,
+  DrawingSettings,
   Element,
   EngineEvents,
+  ExportNames,
   FromEngine,
   HistoryOp,
   IssueKind,
@@ -22,6 +35,7 @@ export type {
   Node,
   Opening,
   OpeningKind,
+  PaperFormat,
   PointerPhase,
   ProjectMeta,
   Room,
@@ -38,6 +52,7 @@ export type {
   ScanRaster,
   ScanResult,
   ScanWall,
+  SheetPreview,
   Side,
   SnapKind,
   ToEngine,
@@ -60,7 +75,10 @@ export type EngineCall =
   | { type: "importScan"; request: ScanImport; source?: Uint8Array }
   | { type: "replayJournal"; text: string }
   | { type: "journalHeader" }
-  | { type: "documentTitle" };
+  | { type: "documentTitle" }
+  | { type: "drawingSet"; request: DrawingRequest }
+  | { type: "exportDrawings"; request: DrawingRequest; format: DrawingFormat }
+  | { type: "zipFiles"; names: string[]; files: Uint8Array[] };
 
 /** Тип результата вызова. */
 export interface EngineCallResult {
@@ -71,6 +89,9 @@ export interface EngineCallResult {
   replayJournal: undefined;
   journalHeader: string;
   documentTitle: string;
+  drawingSet: DrawingSetInfo;
+  exportDrawings: Uint8Array;
+  zipFiles: Uint8Array;
 }
 
 /** UI → воркер. */

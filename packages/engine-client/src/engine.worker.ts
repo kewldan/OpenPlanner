@@ -66,6 +66,16 @@ function call(current: Engine, request: EngineCall): { value: unknown; transfer:
       return { value: undefined, transfer: [] };
     case "journalHeader":
       return { value: Engine.journalHeader(), transfer: [] };
+    case "drawingSet":
+      return { value: current.drawingSet(request.request), transfer: [] };
+    case "exportDrawings": {
+      const bytes = current.exportDrawings(request.request, request.format);
+      return { value: bytes, transfer: [bytes.buffer] };
+    }
+    case "zipFiles": {
+      const bytes = Engine.zipFiles(request.names, request.files);
+      return { value: bytes, transfer: [bytes.buffer] };
+    }
     case "documentTitle": {
       // Ответ идёт после всех ранее отправленных команд — название всегда актуально.
       const changed = current.snapshot().events.find((event) => event.type === "documentChanged");

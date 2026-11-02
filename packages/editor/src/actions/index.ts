@@ -194,6 +194,16 @@ export const actions: readonly Action[] = [
     run: openScanWizard,
   },
   {
+    id: "file.drawings",
+    title: "Чертежи и экспорт…",
+    group: "file",
+    keywords: "листы pdf dxf svg png xlsx печать штамп пакет бригада экспорт",
+    keys: [{ code: "KeyP", mod: true }],
+    inInputs: true,
+    enabled: notBusy,
+    run: () => useEditor.getState().setDialog("drawings"),
+  },
+  {
     id: "file.addUnderlay",
     title: "Добавить подложку…",
     group: "file",

@@ -1,5 +1,7 @@
 import {
   baseName,
+  exportExtension,
+  exportFormats,
   IMAGE_EXTENSIONS,
   type Platform,
   PROJECT_EXTENSION,
@@ -27,8 +29,8 @@ function pickFile(accept: string): Promise<File | null> {
   });
 }
 
-function download(bytes: Uint8Array, name: string) {
-  const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "application/zip" }));
+function download(bytes: Uint8Array, name: string, type = "application/zip") {
+  const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type }));
   const link = document.createElement("a");
   link.href = url;
   link.download = name;
@@ -75,6 +77,12 @@ export const browserPlatform: Platform = {
 
   async writeProject(bytes, target) {
     download(bytes, `${target.name}.${PROJECT_EXTENSION}`);
+  },
+
+  async saveExport(bytes, name) {
+    const ext = exportExtension(name);
+    download(bytes, name, ext ? exportFormats[ext].mime : "application/octet-stream");
+    return true;
   },
 
   journal: {

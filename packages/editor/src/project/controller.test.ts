@@ -30,6 +30,7 @@ function setup(
     writeProject: async (bytes, target) => {
       written.push({ bytes, target });
     },
+    saveExport: async () => true,
     journal: {
       locate: async (path, name) => (path ? `${path}.journal` : `recovery/${name}.oplan.journal`),
       read: async (key) => journals.get(key) ?? null,

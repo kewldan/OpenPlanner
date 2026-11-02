@@ -21,7 +21,7 @@ export type EditorMode =
   | "plumbing"
   | "finish";
 
-export type EditorDialog = "palette" | "shortcuts" | "scan" | "compare" | null;
+export type EditorDialog = "palette" | "shortcuts" | "scan" | "compare" | "drawings" | null;
 
 export type EngineStatus =
   | { state: "starting" }

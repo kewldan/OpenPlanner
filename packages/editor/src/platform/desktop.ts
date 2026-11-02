@@ -3,6 +3,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask, message, open, save } from "@tauri-apps/plugin-dialog";
 import {
   baseName,
+  exportExtension,
+  exportFormats,
   fileName,
   IMAGE_EXTENSIONS,
   type Platform,
@@ -70,6 +72,20 @@ export const desktopPlatform: Platform = {
     await invoke("write_project", bytes, {
       headers: { "x-path": encodeURIComponent(target.path) },
     });
+  },
+
+  async saveExport(bytes, name) {
+    const ext = exportExtension(name);
+    if (!ext) throw new Error(`неизвестный формат экспорта: ${name}`);
+    const chosen = await save({
+      title: "Экспорт",
+      defaultPath: name,
+      filters: [{ name: exportFormats[ext].label, extensions: [ext] }],
+    });
+    if (!chosen) return false;
+    const path = chosen.toLowerCase().endsWith(`.${ext}`) ? chosen : `${chosen}.${ext}`;
+    await invoke("write_export", bytes, { headers: { "x-path": encodeURIComponent(path) } });
+    return true;
   },
 
   journal: {
