@@ -30,7 +30,9 @@ export function StatusBar() {
       </IconButton>
       <span data-testid="save-status">{saveStatus}</span>
       {engine.state === "ready" && (
-        <span className={styles.mono}>{t("status.backend", { backend: engine.backend })}</span>
+        <span className={styles.mono} title={`WebGPU: ${engine.webgpu}`}>
+          {t("status.backend", { backend: engine.backend })}
+        </span>
       )}
     </footer>
   );

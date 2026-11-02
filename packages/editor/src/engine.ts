@@ -17,8 +17,8 @@ export function startEngine(canvas: HTMLCanvasElement): () => void {
   const { setEngine, applyEvents } = useEditor.getState();
   setEngine({ state: "starting" });
   const current = new EngineClient(canvas, {
-    onReady: (backend) => {
-      setEngine({ state: "ready", backend });
+    onReady: (backend, webgpu) => {
+      setEngine({ state: "ready", backend, webgpu });
       for (const listener of readyListeners) listener();
     },
     onEvents: (events) => {
