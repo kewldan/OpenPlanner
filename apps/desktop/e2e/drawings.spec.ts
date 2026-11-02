@@ -78,11 +78,12 @@ test("комплект листов: основная надпись, форма
   await expect(designation).toHaveValue("2026-01-АР");
   await expect(inspector(page).getByLabel("Стадия")).toHaveValue("Р");
 
-  // Обмер: один лист в 1:50.
+  // Обмер: план в 1:50 и развёртки стен.
   await page.getByRole("button", { name: /^Чертежи/ }).click();
   await expect(dialog(page)).toBeVisible();
-  await expect(sheets(page)).toHaveCount(1);
+  await expect(sheets(page)).toHaveCount(2);
   await expect(sheets(page).first()).toContainText("Обмерный план");
+  await expect(sheets(page).nth(1)).toContainText("Развёртки стен");
   await expect(dialog(page).getByLabel("Масштаб")).toContainText("Авто (1:50)");
   await expect(dialog(page).getByTestId("sheet-preview")).toHaveAttribute("style", /420 \/ 297/);
 
@@ -101,7 +102,7 @@ test("комплект листов: основная надпись, форма
   await expect(dialog(page).getByTestId("sheet-preview")).toHaveAttribute("style", /420 \/ 297/);
   await page.keyboard.press("Escape");
 
-  // Вариант: демонтаж перегородки — листы демонтажа и помещений.
+  // Вариант: демонтаж перегородки — листы демонтажа, помещений и развёрток.
   await page.getByRole("button", { name: "Перепланировка" }).click();
   await expect(page.getByTestId("view-name")).toContainText("Вариант А");
   await page.keyboard.press("KeyX");
@@ -109,9 +110,10 @@ test("комплект листов: основная надпись, форма
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: /^Чертежи/ }).click();
   await expect(dialog(page).getByLabel("Вид")).toHaveValue(/.+/);
-  await expect(sheets(page)).toHaveCount(3);
+  await expect(sheets(page)).toHaveCount(4);
   await expect(sheets(page).nth(1)).toContainText("План демонтажа");
   await expect(sheets(page).nth(2)).toContainText("План помещений");
+  await expect(sheets(page).nth(3)).toContainText("Развёртки стен");
   await sheets(page).nth(1).click();
   await expect(dialog(page).getByTestId("sheet-preview")).toHaveAttribute("alt", "План демонтажа");
 
@@ -123,12 +125,12 @@ test("комплект листов: основная надпись, форма
   expect(bundle.bytes.subarray(0, 2).toString()).toBe("PK");
   expect(bundle.bytes.includes(Buffer.from("Новый проект — Вариант А.pdf"))).toBe(true);
 
-  // PNG растеризуется в UI: три листа — архив.
+  // PNG растеризуется в UI: четыре листа — архив.
   const png = await download(page, dialog(page).getByRole("button", { name: "PNG" }));
   expect(png.name).toBe("Новый проект — Вариант А — PNG.zip");
   expect(png.bytes.includes(Buffer.from("02 План демонтажа.png"))).toBe(true);
 
-  // Обратно на обмер — снова один лист.
+  // Обратно на обмер — снова план и развёртки.
   await dialog(page).getByLabel("Вид").selectOption({ label: "Обмер (как есть)" });
-  await expect(sheets(page)).toHaveCount(1);
+  await expect(sheets(page)).toHaveCount(2);
 });

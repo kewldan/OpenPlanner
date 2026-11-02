@@ -106,7 +106,8 @@ export const ru = {
   "drawings.exporting": "Экспорт…",
   "drawings.saved": "Сохранено: {name}",
   "drawings.titleBlockHint": "Графы основной надписи — в панели «Проект» справа.",
-  "drawings.surveyOnly": "Обмер: один лист. Вариант добавляет демонтаж, монтаж и помещения.",
+  "drawings.surveyOnly":
+    "Обмер: обмерный план и развёртки стен. Вариант добавляет демонтаж, монтаж и помещения.",
 
   "layers.add": "Добавить слой",
   "layers.newName": "Слой {n}",
