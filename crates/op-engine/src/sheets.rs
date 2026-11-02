@@ -7,6 +7,8 @@
 //! справа от плана над основной надписью или под планом — где плану просторнее;
 //! что не поместилось, переносится на листы продолжения.
 
+mod elevations;
+
 use std::collections::{HashMap, HashSet};
 
 use glam::DVec2;
@@ -220,6 +222,22 @@ pub fn build(doc: &Document, variant: Option<&str>, date: &str) -> SheetSet {
         }
     }
 
+    // Развёртки стен итогового вида и площади стен.
+    let elevation_rooms = elevations::rooms(&views);
+    let walls_table = elevations::walls_table(&elevation_rooms);
+    pages.extend(elevations::sheets(
+        &elevation_rooms,
+        walls_table.clone(),
+        size,
+    ));
+    let mut worksheets = views.worksheets();
+    if let Some(table) = walls_table {
+        worksheets.push(Worksheet {
+            name: "Стены".into(),
+            tables: vec![table],
+        });
+    }
+
     let view = view_name(doc, views.variant.as_ref().map(|v| v.id.as_str()));
     let building = if doc.meta.title.trim().is_empty() {
         view.clone()
@@ -247,7 +265,7 @@ pub fn build(doc: &Document, variant: Option<&str>, date: &str) -> SheetSet {
 
     SheetSet {
         sheets: pages,
-        worksheets: views.worksheets(),
+        worksheets,
         scale,
         auto_scale,
         warnings,

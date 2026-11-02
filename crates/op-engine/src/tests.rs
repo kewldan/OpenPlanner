@@ -1094,8 +1094,8 @@ fn survey_sheet_with_title_block_and_schedule() {
     })));
 
     let set = s.drawings(&request(None));
-    assert_eq!(set.sheets.len(), 1);
-    assert_eq!(set.sheets[0].title, "Обмерный план");
+    let titles: Vec<&str> = set.sheets.iter().map(|s| s.title.as_str()).collect();
+    assert_eq!(titles, ["Обмерный план", "Развёртки стен"]);
     assert_eq!(set.scale, 50, "квартира на A3 — в 1:50");
     assert!(set.auto_scale && set.warnings.is_empty());
     assert_eq!(set.name, "Квартира — Обмер (как есть)");
@@ -1118,11 +1118,25 @@ fn survey_sheet_with_title_block_and_schedule() {
 
     let pdf = set.export(crate::protocol::DrawingFormat::Pdf).unwrap();
     assert!(pdf.starts_with(b"%PDF"));
-    assert_eq!(set.extension(crate::protocol::DrawingFormat::Svg), "svg");
+    // Два листа: SVG и DXF — архивы по листу.
+    assert_eq!(set.extension(crate::protocol::DrawingFormat::Svg), "zip");
     let svg = set.export(crate::protocol::DrawingFormat::Svg).unwrap();
-    assert!(svg.starts_with(b"<svg"));
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(svg)).unwrap();
+    let mut names: Vec<String> = archive
+        .file_names()
+        .map(|n| n.unwrap().into_owned())
+        .collect();
+    names.sort_unstable();
+    assert_eq!(names, ["01 Обмерный план.svg", "02 Развёртки стен.svg"]);
+    let mut first = String::new();
+    std::io::Read::read_to_string(&mut archive.by_index(0).unwrap(), &mut first).unwrap();
+    assert!(first.starts_with("<svg"));
     let dxf = set.export(crate::protocol::DrawingFormat::Dxf).unwrap();
-    assert!(String::from_utf8_lossy(&dxf).contains("AC1009"));
+    // DXF — в cp1251, читается байтами.
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(dxf)).unwrap();
+    let mut first = Vec::new();
+    std::io::Read::read_to_end(&mut archive.by_index(0).unwrap(), &mut first).unwrap();
+    assert!(String::from_utf8_lossy(&first).contains("AC1009"));
     let preview = set.preview();
     assert!(preview.sheets[0].svg.contains("<path"));
 }
@@ -1139,19 +1153,20 @@ fn variant_sheet_set_lists_demolition_and_partitions() {
             "Обмерный план",
             "План демонтажа",
             "План монтажа перегородок",
-            "План помещений"
+            "План помещений",
+            "Развёртки стен"
         ]
     );
-    // Все листы в одном масштабе и с одним положением плана.
+    // Все планы в одном масштабе и с одним положением плана.
     let first = &set.sheets[0].viewports[0];
-    for sheet in &set.sheets {
+    for sheet in set.sheets.iter().filter(|s| s.title.starts_with("План")) {
         let vp = &sheet.viewports[0];
         assert!((vp.center - first.center).length() < 1e-9);
         assert!((vp.denominator - 50.0).abs() < 1e-9);
     }
     // Номера листов в основной надписи.
     let texts = sheet_texts(&set.sheets[1]);
-    assert!(texts.iter().any(|t| t == "2") && texts.iter().any(|t| t == "4"));
+    assert!(texts.iter().any(|t| t == "2") && texts.iter().any(|t| t == "5"));
     assert!(texts.iter().any(|t| t == "Д1"), "марка на плане: {texts:?}");
 
     // Демонтаж: перегородка 4 м × 2,7 м (дверь уходит вместе с ней).
@@ -1209,7 +1224,7 @@ fn variant_sheet_set_lists_demolition_and_partitions() {
     assert_eq!(set.extension(crate::protocol::DrawingFormat::Svg), "zip");
     let svgs = set.export(crate::protocol::DrawingFormat::Svg).unwrap();
     let archive = zip::ZipArchive::new(std::io::Cursor::new(svgs)).unwrap();
-    assert_eq!(archive.len(), 4);
+    assert_eq!(archive.len(), 5);
 }
 
 #[test]
@@ -1220,6 +1235,11 @@ fn drawing_scale_follows_plan_size_and_settings() {
     let set = s.drawings(&request(None));
     assert_eq!(set.scale, 200);
     assert!(set.warnings.is_empty());
+    // Без помещений развёрток нет: один лист, SVG — без архива.
+    assert_eq!(set.sheets.len(), 1);
+    assert_eq!(set.extension(crate::protocol::DrawingFormat::Svg), "svg");
+    let svg = set.export(crate::protocol::DrawingFormat::Svg).unwrap();
+    assert!(svg.starts_with(b"<svg"));
 
     // Заданный масштаб не помещается — предупреждение.
     s.handle(ToEngine::Command {
@@ -1276,4 +1296,59 @@ fn big_square(s: &mut EngineState, side: f64) {
     assert!(!has_error(&s.handle(ToEngine::Command {
         command: Command::Batch { commands },
     })));
+}
+
+#[test]
+fn wall_elevations_show_openings_and_wall_areas() {
+    let mut s = state();
+    replanned(&mut s);
+    let doc = s.document().clone();
+    let (door, window) = (&doc.openings[0], &doc.openings[1]);
+    let set = s.drawings(&request(None));
+    let sheet = set.sheets.last().unwrap();
+    assert_eq!(sheet.title, "Развёртки стен");
+    let texts = sheet_texts(sheet);
+    for expected in [
+        "Развёртки стен (М 1:50)",
+        "1. Помещение 1",
+        "Стена А",
+        "Стена Г",
+        "Площади стен",
+    ] {
+        assert!(texts.iter().any(|t| t == expected), "{expected}: {texts:?}");
+    }
+    // Ширина окна и высота двери — в размерах развёрток.
+    let width = crate::geometry::format_length(window.width);
+    let height = crate::geometry::format_length(door.height);
+    assert!(
+        texts.contains(&width) && texts.contains(&height),
+        "{texts:?}"
+    );
+
+    // Помещение 1: 1,38 × 3,88 м по граням, высота 2,7 м; проёмы — окно и дверь.
+    let table = &set
+        .worksheets
+        .iter()
+        .find(|w| w.name == "Стены")
+        .unwrap()
+        .tables[0];
+    let row = &table.rows[0];
+    assert_eq!(row[2].display(), "10,52");
+    let gross = 10.52 * 2.7;
+    let openings = (window.width * window.height + door.width * door.height) / 1e6;
+    assert_eq!(row[4].display(), op_export::table::format_number(gross, 2));
+    assert_eq!(
+        row[5].display(),
+        op_export::table::format_number(openings, 2)
+    );
+    assert_eq!(
+        row[6].display(),
+        op_export::table::format_number(gross - openings, 2)
+    );
+    // Дверь в перегородке видна из обоих помещений.
+    let room2 = &table.rows[1];
+    assert_eq!(
+        room2[5].display(),
+        op_export::table::format_number(door.width * door.height / 1e6, 2)
+    );
 }
