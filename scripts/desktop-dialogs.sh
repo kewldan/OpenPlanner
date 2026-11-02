@@ -36,19 +36,19 @@ mac_keys() {
 }
 
 win_send() {
-  # Экранирование спецсимволов SendKeys: + ^ % ~ ( ) { } [ ]
-  local text
-  text=$(printf '%s' "$1" | sed -e 's/[][+^%~(){}]/{&}/g')
-  powershell -NoProfile -Command "
-    \$ws = New-Object -ComObject WScript.Shell
-    [void]\$ws.AppActivate('OpenPlanner')
+  # Путь вставляется из буфера обмена: при посимвольном вводе автодополнение
+  # поля «Имя файла» съедает часть символов.
+  OP_TEXT="$1" powershell -NoProfile -Command '
+    Set-Clipboard -Value $env:OP_TEXT
+    $ws = New-Object -ComObject WScript.Shell
+    [void]$ws.AppActivate("OpenPlanner")
     Start-Sleep -Milliseconds 500
     # Alt+N — фокус в поле «Имя файла» (в диалоге открытия он стоит в списке).
-    \$ws.SendKeys('$2')
+    $ws.SendKeys("%n")
     Start-Sleep -Milliseconds 300
-    \$ws.SendKeys('$text')
-    Start-Sleep -Milliseconds 300
-    \$ws.SendKeys('{ENTER}')"
+    $ws.SendKeys("^a^v")
+    Start-Sleep -Milliseconds 500
+    $ws.SendKeys("{ENTER}")'
 }
 
 pass_save_dialog() {
@@ -71,7 +71,7 @@ pass_save_dialog() {
         -e 'delay 0.5' \
         -e 'key code 36'
       ;;
-    windows) win_send "$dir\\$name" '%n^a' ;;
+    windows) win_send "$dir\\$name.oplan" ;;
     linux)
       xdotool key --clearmodifiers ctrl+a
       xdotool type --delay 20 "$dir/$name"
@@ -97,7 +97,7 @@ pass_open_dialog() {
         -e 'delay 1.5' \
         -e 'key code 36'
       ;;
-    windows) win_send "$file" '%n^a' ;;
+    windows) win_send "$file" ;;
     linux)
       xdotool key --clearmodifiers ctrl+l
       xdotool type --delay 20 "$file"
