@@ -117,12 +117,26 @@ jobs:
       - name: Самопроверка на WebGPU (WebView2 + программный адаптер)
         if: runner.os == 'Windows'
         shell: bash
-        run: bash scripts/desktop-selftest.sh "${{ matrix.binary }}"
         env:
           EXPECT_BACKEND: BrowserWebGpu
-          WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: >-
-            --enable-unsafe-webgpu --enable-features=Vulkan --use-webgpu-adapter=swiftshader
-            --use-vulkan=swiftshader --use-angle=swiftshader --enable-unsafe-swiftshader
+        run: |
+          # У раннера нет GPU: WebGPU нужен программный адаптер. Пробуем варианты
+          # (D3D12 на WARP в обход блоклиста и Vulkan SwiftShader), достаточно одного.
+          variants=(
+            "--enable-unsafe-webgpu --ignore-gpu-blocklist"
+            "--enable-unsafe-webgpu --ignore-gpu-blocklist --use-webgpu-adapter=swiftshader"
+            "--enable-unsafe-webgpu --ignore-gpu-blocklist --enable-features=Vulkan --use-vulkan=swiftshader --use-webgpu-adapter=swiftshader"
+          )
+          for args in "${variants[@]}"; do
+            echo "::group::WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=$args"
+            if WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="$args" bash scripts/desktop-selftest.sh "${{ matrix.binary }}"; then
+              echo "::endgroup::"
+              echo "WebGPU в настоящем окне WebView2: $args"
+              exit 0
+            fi
+            echo "::endgroup::"
+          done
+          exit 1
       - name: tauri-driver
         if: runner.os == 'Linux'
         run: cargo install tauri-driver --locked
