@@ -17,6 +17,7 @@ mod state;
 #[cfg(test)]
 mod tests;
 pub mod tools;
+pub mod variants;
 #[cfg(target_arch = "wasm32")]
 mod wasm;
 

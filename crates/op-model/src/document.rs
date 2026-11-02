@@ -116,6 +116,10 @@ impl Layer {
 pub struct Node {
     /// Идентификатор.
     pub id: String,
+    /// Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub variant: Option<String>,
     /// X, мм.
     pub x: f64,
     /// Y, мм (вниз).
@@ -145,6 +149,10 @@ pub struct Wall {
     pub id: String,
     /// Слой.
     pub layer: String,
+    /// Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub variant: Option<String>,
     /// Начальный узел.
     pub a: String,
     /// Конечный узел.
@@ -157,6 +165,52 @@ pub struct Wall {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "wasm", tsify(optional))]
     pub height: Option<f64>,
+    /// Материал (для новых перегородок).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub material: Option<WallMaterial>,
+}
+
+/// Материал стены.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub enum WallMaterial {
+    /// Газобетон.
+    AeratedConcrete,
+    /// Гипсокартон на каркасе.
+    Gypsum,
+    /// Кирпич.
+    Brick,
+}
+
+impl WallMaterial {
+    /// Все материалы.
+    pub const ALL: [Self; 3] = [Self::AeratedConcrete, Self::Gypsum, Self::Brick];
+
+    /// Толщина перегородки по умолчанию, мм.
+    #[must_use]
+    pub fn default_thickness(self) -> f64 {
+        match self {
+            Self::AeratedConcrete | Self::Gypsum => 100.0,
+            Self::Brick => 120.0,
+        }
+    }
+}
+
+/// Вариант перепланировки: новые элементы (с полем `variant`) и демонтаж
+/// элементов обмера. Обмер общий: его правка попадает во все варианты.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub struct Variant {
+    /// Идентификатор.
+    pub id: String,
+    /// Название, например «Вариант А».
+    pub name: String,
+    /// Элементы обмера, которые в этом варианте демонтируются.
+    #[serde(default)]
+    pub demolished: Vec<String>,
 }
 
 impl Wall {
@@ -217,6 +271,10 @@ pub struct Opening {
     pub id: String,
     /// Слой.
     pub layer: String,
+    /// Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub variant: Option<String>,
     /// Стена.
     pub wall: String,
     /// Тип.
@@ -247,6 +305,10 @@ pub struct Room {
     pub id: String,
     /// Слой.
     pub layer: String,
+    /// Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub variant: Option<String>,
     /// Название.
     pub name: String,
     /// X точки подписи, мм.
@@ -291,6 +353,10 @@ pub struct Dimension {
     pub id: String,
     /// Слой.
     pub layer: String,
+    /// Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub variant: Option<String>,
     /// Начало.
     pub start: Anchor,
     /// Конец.
@@ -308,6 +374,10 @@ pub struct Leader {
     pub id: String,
     /// Слой.
     pub layer: String,
+    /// Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub variant: Option<String>,
     /// X точки, на которую указывает выноска, мм.
     pub x: f64,
     /// Y точки, мм.
@@ -375,6 +445,9 @@ pub struct Document {
     pub leaders: Vec<Leader>,
     /// Подложки.
     pub underlays: Vec<Underlay>,
+    /// Варианты перепланировки.
+    #[serde(default)]
+    pub variants: Vec<Variant>,
     /// Двоичные файлы проекта по путям внутри `.oplan`. В `model.json` не входят.
     #[serde(skip)]
     #[schemars(skip)]
@@ -409,6 +482,7 @@ impl Document {
             dimensions: Vec::new(),
             leaders: Vec::new(),
             underlays: Vec::new(),
+            variants: Vec::new(),
             assets: BTreeMap::new(),
         }
     }
@@ -453,6 +527,12 @@ impl Document {
     #[must_use]
     pub fn leader(&self, id: &str) -> Option<&Leader> {
         self.leaders.iter().find(|l| l.id == id)
+    }
+
+    /// Вариант по идентификатору.
+    #[must_use]
+    pub fn variant(&self, id: &str) -> Option<&Variant> {
+        self.variants.iter().find(|v| v.id == id)
     }
 
     /// Подложка по идентификатору.

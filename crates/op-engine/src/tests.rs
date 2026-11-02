@@ -125,13 +125,13 @@ fn numeric_length_and_angle() {
     s.handle(ToEngine::Finish);
     assert_eq!(s.step(), ToolStep::WallStart);
     s.handle(ToEngine::Cancel);
-    assert!(matches!(
-        s.snapshot().events.last(),
-        Some(FromEngine::ToolChanged {
+    assert!(s.snapshot().events.iter().any(|e| matches!(
+        e,
+        FromEngine::ToolChanged {
             tool: Tool::Select,
             ..
-        })
-    ));
+        }
+    )));
 }
 
 #[test]
@@ -590,6 +590,325 @@ fn every_element_survives_json() {
         let back: Command = serde_json::from_str(&json).unwrap();
         assert_eq!(back, command, "{json}");
     }
+}
+
+// ---------- Перепланировка и варианты ----------
+
+/// Две комнаты: прямоугольник и перегородка посередине (x = 2500).
+fn two_rooms(s: &mut EngineState) {
+    rectangle(s);
+    tool(s, Tool::Wall);
+    click(s, 2500.0, 1000.0);
+    click(s, 2500.0, 5000.0);
+    s.handle(ToEngine::Finish);
+    s.handle(ToEngine::FindRooms);
+    tool(s, Tool::Select);
+}
+
+fn variant_id(s: &EngineState) -> String {
+    match s.view.clone() {
+        crate::protocol::View::Variant { id } => id,
+        other => panic!("ожидался вариант, а не {other:?}"),
+    }
+}
+
+fn summaries(events: &EngineEvents) -> Vec<crate::protocol::ViewSummary> {
+    events
+        .events
+        .iter()
+        .rev()
+        .find_map(|e| match e {
+            FromEngine::VariantsSummary { views } => Some(views.clone()),
+            _ => None,
+        })
+        .unwrap()
+}
+
+fn partition(s: &EngineState) -> String {
+    s.document()
+        .walls
+        .iter()
+        .find(|w| {
+            let d = s.document();
+            let (a, b) = (d.node(&w.a).unwrap(), d.node(&w.b).unwrap());
+            (a.x - 2500.0).abs() < 1.0 && (b.x - 2500.0).abs() < 1.0
+        })
+        .unwrap()
+        .id
+        .clone()
+}
+
+#[test]
+fn variant_demolishes_and_adds_partitions() {
+    let mut s = state();
+    two_rooms(&mut s);
+    s.handle(ToEngine::CreateVariant {
+        name: "Вариант А".into(),
+        copy_of: None,
+    });
+    let v = variant_id(&s);
+
+    // Delete в варианте не удаляет стену обмера, а демонтирует её.
+    let wall = partition(&s);
+    s.handle(ToEngine::Select {
+        ids: vec![wall.clone()],
+    });
+    let events = s.handle(ToEngine::DeleteSelection);
+    assert!(s.document().wall(&wall).is_some(), "обмер не меняется");
+    assert_eq!(
+        s.document().variant(&v).unwrap().demolished,
+        vec![wall.clone()]
+    );
+    let views = summaries(&events);
+    assert!(
+        (views[1].demolished_length - 4.0).abs() < 1e-6,
+        "{:?}",
+        views[1]
+    );
+    assert!((views[1].demolished_area - 10.8).abs() < 1e-6);
+
+    // Новая перегородка из ГКЛ — только в варианте.
+    s.handle(ToEngine::SetToolOptions {
+        options: crate::protocol::ToolOptions {
+            wall_thickness: 100.0,
+            justification: op_model::Justification::Center,
+            material: Some(op_model::WallMaterial::Gypsum),
+        },
+    });
+    tool(&mut s, Tool::Wall);
+    click(&mut s, 1000.0, 2000.0);
+    let events = click(&mut s, 4000.0, 2000.0);
+    let new = s.document().walls.last().unwrap().clone();
+    assert_eq!(new.variant.as_deref(), Some(v.as_str()));
+    assert_eq!(new.material, Some(op_model::WallMaterial::Gypsum));
+    let views = summaries(&events);
+    assert!(views[0].new_walls.is_empty(), "обмер без новых стен");
+    assert!(
+        (views[1].new_walls[0].length - 3.0).abs() < 1e-6,
+        "{:?}",
+        views[1].new_walls
+    );
+    // В варианте комнаты по-новому: перегородка демонтирована, новая — поперёк;
+    // подписи помещений обмера попали в нижнюю часть, верхняя получает новое помещение.
+    s.handle(ToEngine::Cancel);
+    let events = s.handle(ToEngine::FindRooms);
+    assert!(!has_error(&events));
+    let views = summaries(&events);
+    let total: f64 = views[1].rooms.iter().map(|r| r.area).sum();
+    assert!(
+        views[1].rooms.iter().all(|r| r.area > 0.0),
+        "{:?}",
+        views[1].rooms
+    );
+    assert!(total > 10.0);
+
+    // В обмере новой стены нет, перегородка на месте.
+    s.handle(ToEngine::SetView {
+        view: crate::protocol::View::Survey,
+    });
+    assert!(s.doc().wall(&new.id).is_none());
+    assert!(s.doc().wall(&wall).is_some());
+}
+
+#[test]
+fn survey_edits_reach_all_variants() {
+    let mut s = state();
+    two_rooms(&mut s);
+    s.handle(ToEngine::CreateVariant {
+        name: "А".into(),
+        copy_of: None,
+    });
+    s.handle(ToEngine::CreateVariant {
+        name: "Б".into(),
+        copy_of: None,
+    });
+    s.handle(ToEngine::SetView {
+        view: crate::protocol::View::Survey,
+    });
+    let wall = partition(&s);
+    // Двигаем перегородку в обмере: оба варианта видят новое положение.
+    let w = s.doc().wall(&wall).unwrap().clone();
+    s.handle(ToEngine::Select {
+        ids: vec![wall.clone()],
+    });
+    let mut moved = Vec::new();
+    crate::edit::translate(s.doc(), std::slice::from_ref(&wall), DVec2::new(300.0, 0.0))
+        .into_iter()
+        .for_each(|c| moved.push(c));
+    s.handle(ToEngine::Command {
+        command: Command::batch(moved),
+    });
+    for v in s.document().variants.clone() {
+        s.handle(ToEngine::SetView {
+            view: crate::protocol::View::Variant { id: v.id },
+        });
+        let a = s.doc().node(&w.a).unwrap();
+        assert!((a.x - 2800.0).abs() < 1e-6);
+    }
+}
+
+#[test]
+fn survey_deletion_cascades_into_variants() {
+    let mut s = state();
+    two_rooms(&mut s);
+    s.handle(ToEngine::CreateVariant {
+        name: "А".into(),
+        copy_of: None,
+    });
+    let v = variant_id(&s);
+    let wall = partition(&s);
+    s.handle(ToEngine::SetDemolished {
+        ids: vec![wall.clone()],
+        demolished: true,
+    });
+    // Новая стена варианта от узла перегородки обмера.
+    let node = s.document().wall(&wall).unwrap().a.clone();
+    let n = s.document().node(&node).unwrap().clone();
+    tool(&mut s, Tool::Wall);
+    click(&mut s, n.x, n.y);
+    click(&mut s, n.x + 1000.0, n.y + 1000.0);
+    s.handle(ToEngine::Finish);
+    let variant_walls = |s: &EngineState| {
+        s.document()
+            .walls
+            .iter()
+            .filter(|w| w.variant.is_some())
+            .count()
+    };
+    assert_eq!(variant_walls(&s), 1);
+
+    s.handle(ToEngine::SetView {
+        view: crate::protocol::View::Survey,
+    });
+    s.handle(ToEngine::Select {
+        ids: vec![wall.clone()],
+    });
+    let events = s.handle(ToEngine::DeleteSelection);
+    assert!(!has_error(&events), "{:?}", events.events);
+    assert!(s.document().wall(&wall).is_none());
+    assert_eq!(
+        variant_walls(&s),
+        0,
+        "стена варианта на удалённом узле удалена"
+    );
+    assert!(s.document().variant(&v).unwrap().demolished.is_empty());
+    s.handle(ToEngine::Undo);
+    assert_eq!(variant_walls(&s), 1);
+}
+
+#[test]
+fn demolish_tool_toggles_and_copies_survive() {
+    let mut s = state();
+    two_rooms(&mut s);
+    s.handle(ToEngine::CreateVariant {
+        name: "А".into(),
+        copy_of: None,
+    });
+    let a = variant_id(&s);
+    tool(&mut s, Tool::Demolish);
+    click(&mut s, 2500.0, 2000.0);
+    let wall = partition(&s);
+    assert_eq!(
+        s.document().variant(&a).unwrap().demolished,
+        vec![wall.clone()]
+    );
+    // Копия варианта переносит демонтаж; повторный щелчок в копии снимает его только там.
+    s.handle(ToEngine::CreateVariant {
+        name: "Копия".into(),
+        copy_of: Some(a.clone()),
+    });
+    let b = variant_id(&s);
+    tool(&mut s, Tool::Demolish);
+    click(&mut s, 2500.0, 2000.0);
+    assert!(s.document().variant(&b).unwrap().demolished.is_empty());
+    assert_eq!(s.document().variant(&a).unwrap().demolished, vec![wall]);
+    // Удаление варианта.
+    s.handle(ToEngine::DeleteVariant { id: b });
+    assert_eq!(s.document().variants.len(), 1);
+    assert_eq!(s.view, crate::protocol::View::Survey);
+}
+
+#[test]
+fn compare_view_shows_both_and_is_read_only() {
+    let mut s = state();
+    two_rooms(&mut s);
+    s.handle(ToEngine::CreateVariant {
+        name: "А".into(),
+        copy_of: None,
+    });
+    let a = variant_id(&s);
+    s.handle(ToEngine::SetDemolished {
+        ids: vec![partition(&s)],
+        demolished: true,
+    });
+    s.take_scenes();
+    s.handle(ToEngine::SetView {
+        view: crate::protocol::View::Compare {
+            left: None,
+            right: Some(a),
+        },
+    });
+    let (doc, _) = s.take_scenes();
+    let doc = doc.unwrap();
+    assert!(doc.glyphs.len() > 20, "подписи видов и помещений");
+    assert!(has_error(&s.handle(ToEngine::SetTool { tool: Tool::Wall })));
+    let before = s.document().clone();
+    click(&mut s, 2000.0, 2000.0);
+    assert_eq!(s.document(), &before);
+}
+
+#[test]
+fn undo_variant_creation_returns_to_survey() {
+    let mut s = state();
+    two_rooms(&mut s);
+    s.handle(ToEngine::CreateVariant {
+        name: "А".into(),
+        copy_of: None,
+    });
+    s.handle(ToEngine::Undo);
+    assert_eq!(s.view, crate::protocol::View::Survey);
+    assert!(s.document().variants.is_empty());
+}
+
+#[test]
+fn variants_survive_file_and_journal() {
+    let mut s = state();
+    let mut log = journal::header_line().unwrap();
+    let record = |events: EngineEvents, log: &mut String| {
+        for e in events.events {
+            if let FromEngine::Journal { line } = e {
+                log.push_str(&line);
+            }
+        }
+    };
+    tool(&mut s, Tool::Wall);
+    for (x, y) in [
+        (1000.0, 1000.0),
+        (4000.0, 1000.0),
+        (4000.0, 5000.0),
+        (1000.0, 5000.0),
+        (1000.0, 1000.0),
+    ] {
+        record(click(&mut s, x, y), &mut log);
+    }
+    record(
+        s.handle(ToEngine::CreateVariant {
+            name: "А".into(),
+            copy_of: None,
+        }),
+        &mut log,
+    );
+    tool(&mut s, Tool::Wall);
+    record(click(&mut s, 2500.0, 1000.0), &mut log);
+    record(click(&mut s, 2500.0, 5000.0), &mut log);
+    let bytes = s.export_file("test").unwrap();
+    let mut other = state();
+    other.import_file(&bytes).unwrap();
+    assert_eq!(other.document().variants, s.document().variants);
+    assert_eq!(other.document().walls, s.document().walls);
+    let mut recovered = state();
+    recovered.replay_journal(&log).unwrap();
+    assert_eq!(recovered.document().walls, s.document().walls);
 }
 
 fn scan_request(mode: crate::protocol::ScanImportMode) -> (crate::protocol::ScanImport, Vec<u8>) {
