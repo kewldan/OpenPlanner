@@ -2,6 +2,7 @@ import { Button } from "@openplanner/ui";
 import { useState } from "react";
 import { DeviceCatalog } from "../electric/DeviceCatalog";
 import { formatNumber, t } from "../i18n";
+import { PlumbingCatalog } from "../plumbing/PlumbingCatalog";
 import { useEditor } from "../store/editor";
 import styles from "./Catalog.module.css";
 import { byCategory, DRAG_TYPE, importModel, pickItem, searchCatalog } from "./items";
@@ -10,6 +11,7 @@ import { byCategory, DRAG_TYPE, importModel, pickItem, searchCatalog } from "./i
 export function Catalog() {
   const mode = useEditor((s) => s.mode);
   if (mode === "electric" || mode === "light") return <DeviceCatalog lighting={mode === "light"} />;
+  if (mode === "plumbing") return <PlumbingCatalog />;
   return <FurnitureCatalog />;
 }
 

@@ -4,9 +4,13 @@ import type {
   DeviceEntry,
   Document,
   ElectricalReport,
+  FinishReport,
   FromEngine,
   LengthInfo,
+  Material,
   Options3d,
+  PlumbingEntry,
+  PlumbingReport,
   RoomInfo,
   SnapKind,
   SunInfo,
@@ -30,7 +34,23 @@ export type EditorMode =
 export type EditorDialog = "palette" | "shortcuts" | "scan" | "compare" | "drawings" | null;
 
 /** Вкладка левой панели. */
-export type SidebarTab = "objects" | "layers" | "variants" | "catalog" | "electrical";
+export type SidebarTab =
+  | "objects"
+  | "layers"
+  | "variants"
+  | "catalog"
+  | "electrical"
+  | "plumbing"
+  | "finish";
+
+/** Режимы, которые не меняют вид (обмер или вариант): каталоги и расчёты. */
+export const catalogModes: readonly EditorMode[] = [
+  "furniture",
+  "electric",
+  "light",
+  "plumbing",
+  "finish",
+];
 
 export type EngineStatus =
   | { state: "starting" }
@@ -93,6 +113,14 @@ export interface EditorState {
   deviceCatalog: DeviceEntry[];
   /** Расчёт электрики текущего вида. */
   electrical: ElectricalReport | null;
+  /** Каталог сантехнических точек из движка. */
+  plumbingCatalog: PlumbingEntry[];
+  /** Расчёт сантехники текущего вида. */
+  plumbing: PlumbingReport | null;
+  /** Библиотека отделочных материалов из движка. */
+  materialLibrary: Material[];
+  /** Поверхности и расчёт отделки текущего вида. */
+  finishes: FinishReport | null;
   /** Открытая вкладка левой панели. */
   sidebarTab: SidebarTab;
   setSidebarTab: (tab: SidebarTab) => void;
@@ -142,6 +170,10 @@ export const useEditor = create<EditorState>()((set) => ({
   catalog: [],
   deviceCatalog: [],
   electrical: null,
+  plumbingCatalog: [],
+  plumbing: null,
+  materialLibrary: [],
+  finishes: null,
   sidebarTab: "objects",
   setSidebarTab: (sidebarTab) => set({ sidebarTab }),
   setMode: (mode) => set({ mode }),
@@ -199,7 +231,7 @@ function reduce(acc: Partial<EditorState>, event: FromEngine): Partial<EditorSta
         view: event.view,
         // Режим «Мебель» работает в любом виде и сохраняется, пока его не сменят.
         mode:
-          acc.mode === "furniture" || acc.mode === "electric" || acc.mode === "light"
+          acc.mode && catalogModes.includes(acc.mode)
             ? acc.mode
             : event.view.type === "survey"
               ? "measure"
@@ -214,6 +246,14 @@ function reduce(acc: Partial<EditorState>, event: FromEngine): Partial<EditorSta
       return { ...acc, deviceCatalog: event.items };
     case "electrical":
       return { ...acc, electrical: event.report };
+    case "plumbingCatalog":
+      return { ...acc, plumbingCatalog: event.items };
+    case "plumbing":
+      return { ...acc, plumbing: event.report };
+    case "materialLibrary":
+      return { ...acc, materialLibrary: event.items };
+    case "finishes":
+      return { ...acc, finishes: event.report };
     case "view3dChanged":
       return {
         ...acc,

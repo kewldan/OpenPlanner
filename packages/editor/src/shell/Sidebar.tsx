@@ -1,13 +1,23 @@
-import type { DeviceKind, Document, Layer, OpeningKind, View } from "@openplanner/engine-client";
+import type {
+  DeviceKind,
+  Document,
+  Layer,
+  OpeningKind,
+  PlumbingKind,
+  View,
+} from "@openplanner/engine-client";
 import { IconButton } from "@openplanner/ui";
 import { type KeyboardEvent, type MouseEvent, useState } from "react";
 import { addUnderlay, isEnabled, toolActions } from "../actions";
 import { format, isMacPlatform } from "../actions/shortcut";
 import { ElectricalPanel } from "../electric/ElectricalPanel";
 import { sendToEngine } from "../engine";
+import { FinishPanel } from "../finish/FinishPanel";
 import { Catalog } from "../furniture/Catalog";
 import { formatNumber, type MessageKey, t } from "../i18n";
 import { formatArea } from "../inspector/format";
+import { PlumbingPanel } from "../plumbing/PlumbingPanel";
+import { systemCodes } from "../plumbing/points";
 import { openScanWizard } from "../scan/store";
 import { type DerivedInfo, type SidebarTab, useEditor } from "../store/editor";
 import { demolishedIds, type Status, statusOf, viewVariant, visibleIn } from "../variants/status";
@@ -71,6 +81,8 @@ const tabTitles: Record<SidebarTab, MessageKey> = {
   layers: "sidebar.layers",
   variants: "sidebar.variants",
   electrical: "sidebar.electrical",
+  plumbing: "sidebar.plumbing",
+  finish: "sidebar.finish",
 };
 
 /** Левая панель: дерево объектов, каталог мебели, слои, варианты. */
@@ -78,12 +90,21 @@ export function Sidebar() {
   const selected = useEditor((s) => s.sidebarTab);
   const setTab = useEditor((s) => s.setSidebarTab);
   const mode = useEditor((s) => s.mode);
-  // Вкладка щита нужна только в режимах «Электрика» и «Освещение».
-  const electric = mode === "electric" || mode === "light";
-  const tabs = (["objects", "catalog", "electrical", "layers", "variants"] as const).filter(
-    (value) => value !== "electrical" || electric,
-  );
-  const tab = selected === "electrical" && !electric ? "objects" : selected;
+  // Вкладки расчётов — только в своих режимах: щит — в «Электрике» и «Освещении»,
+  // трубы — в «Сантехнике», отделка — в «Отделке».
+  const shown: Record<SidebarTab, boolean> = {
+    objects: true,
+    catalog: mode !== "finish",
+    electrical: mode === "electric" || mode === "light",
+    plumbing: mode === "plumbing",
+    finish: mode === "finish",
+    layers: true,
+    variants: true,
+  };
+  const tabs = (
+    ["objects", "catalog", "electrical", "plumbing", "finish", "layers", "variants"] as const
+  ).filter((value) => shown[value]);
+  const tab = shown[selected] ? selected : "objects";
   return (
     <aside className={styles.panel} aria-label={t("sidebar.objects")}>
       <div className={styles.tabs} role="tablist" aria-label={t("sidebar.tabs")}>
@@ -107,6 +128,10 @@ export function Sidebar() {
           <Catalog />
         ) : tab === "electrical" ? (
           <ElectricalPanel />
+        ) : tab === "plumbing" ? (
+          <PlumbingPanel />
+        ) : tab === "finish" ? (
+          <FinishPanel />
         ) : tab === "layers" ? (
           <Layers />
         ) : (
@@ -148,6 +173,12 @@ interface TreeItem {
   meta?: string;
   status?: Status | null;
 }
+
+const plumbingKinds: Record<PlumbingKind, MessageKey> = {
+  outlet: "plumbing.outlet",
+  riser: "plumbing.riser",
+  manifold: "plumbing.manifold",
+};
 
 const openingKeys: Record<OpeningKind, MessageKey> = {
   door: "item.door",
@@ -227,6 +258,25 @@ export function treeGroups(
         label: d.label ? `${deviceNames[d.kind]} · ${d.label}` : deviceNames[d.kind],
         meta: `H ${formatNumber(d.height)}`,
         status: status(d),
+      })),
+    },
+    {
+      key: "group.plumbing",
+      items: visible(doc.plumbing ?? []).map((p) => ({
+        id: p.id,
+        label: [t(plumbingKinds[p.kind]), systemCodes[p.system], p.label]
+          .filter(Boolean)
+          .join(" · "),
+        meta: `H ${formatNumber(Math.round(p.height))}`,
+        status: status(p),
+      })),
+    },
+    {
+      key: "group.pipes",
+      items: visible(doc.pipes ?? []).map((p) => ({
+        id: p.id,
+        label: t("item.pipe", { code: systemCodes[p.system], d: p.diameter }),
+        status: status(p),
       })),
     },
     {
@@ -310,6 +360,8 @@ function layerUsage(doc: Document, id: string): number {
     doc.underlays,
     doc.furniture ?? [],
     doc.devices ?? [],
+    doc.plumbing ?? [],
+    doc.pipes ?? [],
   ].reduce((sum, list) => sum + list.filter((e) => e.layer === id).length, 0);
 }
 

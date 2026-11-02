@@ -8,6 +8,8 @@ import type {
   Leader,
   Opening,
   OpeningKind,
+  Pipe,
+  PlumbingPoint,
   ProjectMeta,
   Room,
   Underlay,
@@ -19,6 +21,7 @@ import type { ReactNode } from "react";
 import { DeviceSection } from "../electric/DeviceSection";
 import { sendToEngine } from "../engine";
 import { formatNumber, type MessageKey, t } from "../i18n";
+import { PipeSection, PlumbingPointSection } from "../plumbing/PlumbingSection";
 import { useEditor } from "../store/editor";
 import { demolishedIds, statusOf, viewVariant } from "../variants/status";
 import { View3dPanel } from "../view3d/Panel";
@@ -106,7 +109,9 @@ type Selected =
   | { type: "leader"; element: Leader }
   | { type: "underlay"; element: Underlay }
   | { type: "furniture"; element: Furniture }
-  | { type: "device"; element: Device };
+  | { type: "device"; element: Device }
+  | { type: "plumbingPoint"; element: PlumbingPoint }
+  | { type: "pipe"; element: Pipe };
 
 /** Элемент документа по идентификатору. */
 export function findElement(doc: Document, id: string): Selected | null {
@@ -126,6 +131,10 @@ export function findElement(doc: Document, id: string): Selected | null {
   if (furniture) return { type: "furniture", element: furniture };
   const device = (doc.devices ?? []).find((e) => e.id === id);
   if (device) return { type: "device", element: device };
+  const point = (doc.plumbing ?? []).find((e) => e.id === id);
+  if (point) return { type: "plumbingPoint", element: point };
+  const pipe = (doc.pipes ?? []).find((e) => e.id === id);
+  if (pipe) return { type: "pipe", element: pipe };
   return null;
 }
 
@@ -366,6 +375,8 @@ const sectionTitles: Record<Selected["type"], () => string> = {
   underlay: () => t("inspector.underlay"),
   furniture: () => t("inspector.furniture"),
   device: () => t("devices.device"),
+  plumbingPoint: () => t("inspector.plumbing"),
+  pipe: () => t("inspector.pipe"),
 };
 
 function StatusSection({ selected, demolished }: { selected: Selected; demolished: boolean }) {
@@ -384,7 +395,9 @@ function StatusSection({ selected, demolished }: { selected: Selected; demolishe
     selected.type === "opening" ||
     selected.type === "room" ||
     selected.type === "furniture" ||
-    selected.type === "device";
+    selected.type === "device" ||
+    selected.type === "plumbingPoint" ||
+    selected.type === "pipe";
   return (
     <Section title={title}>
       {selected.type === "wall" && length !== undefined && (
@@ -462,6 +475,34 @@ function ElementFields({ selected, document }: { selected: Selected; document: D
               document={document}
               value={selected.element.layer}
               onChange={(layer) => put({ type: "device", ...selected.element, layer })}
+            />
+            <DeleteButton />
+          </Section>
+        </>
+      );
+    case "plumbingPoint":
+      return (
+        <>
+          <PlumbingPointSection point={selected.element} />
+          <Section title="">
+            <LayerSelect
+              document={document}
+              value={selected.element.layer}
+              onChange={(layer) => put({ type: "plumbingPoint", ...selected.element, layer })}
+            />
+            <DeleteButton />
+          </Section>
+        </>
+      );
+    case "pipe":
+      return (
+        <>
+          <PipeSection pipe={selected.element} />
+          <Section title="">
+            <LayerSelect
+              document={document}
+              value={selected.element.layer}
+              onChange={(layer) => put({ type: "pipe", ...selected.element, layer })}
             />
             <DeleteButton />
           </Section>

@@ -1,9 +1,10 @@
 import { Button, IconButton, Kbd, Segmented } from "@openplanner/ui";
 import { actions, isEnabled } from "../actions";
 import { format, isMacPlatform } from "../actions/shortcut";
+import { sendToEngine } from "../engine";
 import { t } from "../i18n";
 import { useProject } from "../project";
-import { type EditorMode, useEditor } from "../store/editor";
+import { catalogModes, type EditorMode, type SidebarTab, useEditor } from "../store/editor";
 import { enterReplan, enterSurvey } from "../variants/actions";
 import { toggle3d } from "../view3d/actions";
 import { Icon } from "./icons";
@@ -15,8 +16,8 @@ const modes: readonly { value: EditorMode; label: string; disabled: boolean }[] 
   { value: "furniture", label: t("mode.furniture"), disabled: false },
   { value: "electric", label: t("mode.electric"), disabled: false },
   { value: "light", label: t("mode.light"), disabled: false },
-  { value: "plumbing", label: t("mode.plumbing"), disabled: true },
-  { value: "finish", label: t("mode.finish"), disabled: true },
+  { value: "plumbing", label: t("mode.plumbing"), disabled: false },
+  { value: "finish", label: t("mode.finish"), disabled: false },
 ];
 
 type ViewKind = "2d" | "3d";
@@ -50,10 +51,14 @@ export function TopBar() {
     return s.summaries.find((x) => x.variant === id)?.name ?? t("variants.survey");
   });
   const setMode = (next: EditorMode) => {
-    // «Мебель», «Электрика» и «Освещение» не меняют вид (обмер или вариант) — открывают каталог.
-    if (next === "furniture" || next === "electric" || next === "light") {
+    // Раскладка пола на плане видна только в режиме «Отделка».
+    if ((next === "finish") !== (useEditor.getState().mode === "finish"))
+      sendToEngine({ type: "showFinishes", show: next === "finish" });
+    // Режимы каталогов не меняют вид (обмер или вариант): открывают каталог или расчёт.
+    if (catalogModes.includes(next)) {
+      const tab: SidebarTab = next === "finish" ? "finish" : "catalog";
       useEditor.getState().setMode(next);
-      useEditor.getState().setSidebarTab("catalog");
+      useEditor.getState().setSidebarTab(tab);
     } else {
       useEditor.getState().setMode(next);
       useEditor.getState().setSidebarTab("objects");

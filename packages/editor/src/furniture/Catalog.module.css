@@ -92,3 +92,16 @@
   font-family: var(--font-mono);
   font-size: 10px;
 }
+
+/* Сантехника: обозначение цветом системы, как на плане. */
+.item[data-system="cold"] svg {
+  stroke: #2563eb;
+}
+
+.item[data-system="hot"] svg {
+  stroke: #dc2626;
+}
+
+.item[data-system="drain"] svg {
+  stroke: #7c5a3a;
+}
