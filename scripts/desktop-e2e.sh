@@ -20,7 +20,13 @@ xvfb=$!
 cleanup() {
   kill "${driver:-}" "${wm:-}" "$xvfb" 2>/dev/null || true
   pkill -9 -f openplanner-desktop 2>/dev/null || true
-  rm -rf "$tmp"
+  # Дочерние процессы WebKit ещё какое-то время дописывают кэш шейдеров Mesa
+  # в $HOME: удаление повторяется, а неудача уборки не меняет итог проверок.
+  for _ in 1 2 3 4 5; do
+    rm -rf "$tmp" 2>/dev/null && return 0
+    sleep 1
+  done
+  echo "не удалось убрать временную папку $tmp" >&2
 }
 trap cleanup EXIT
 sleep 1
