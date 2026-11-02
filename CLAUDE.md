@@ -4,7 +4,7 @@ Guidance for AI coding agents working in this repository.
 
 ## Project
 
-OpenPlanner is an open-source **desktop apartment-renovation planner**. One model of an apartment produces themed working-drawing sheets (survey, demolition, partitions, furniture, electrical, plumbing, finishes), an estimate and a 3D view. Work proceeds in **stages** (no throwaway MVP); Stages 0 (foundation), 1 (survey: walls, openings, rooms, dimensions, leaders, layers, image underlay), 2 (LiDAR scan import with review) and 3 (replanning variants: demolition, partitions with materials, comparison) are done; Stage 4 (drawings and export: sheet set from the model, title block, PDF/DXF/SVG/PNG/XLSX) is mostly done — wall elevations remain.
+OpenPlanner is an open-source **desktop apartment-renovation planner**. One model of an apartment produces themed working-drawing sheets (survey, demolition, partitions, furniture, electrical, plumbing, finishes), an estimate and a 3D view. Work proceeds in **stages** (no throwaway MVP); Stages 0 (foundation), 1 (survey: walls, openings, rooms, dimensions, leaders, layers, image underlay), 2 (LiDAR scan import with review) 3 (replanning variants: demolition, partitions with materials, comparison) and 4 (drawings and export: sheet set with wall elevations, title block, PDF/DXF/SVG/PNG/XLSX) are done; Stage 5 (3D) is next.
 
 Key documents (written in Russian — read them before larger changes):
 
