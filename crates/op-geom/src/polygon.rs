@@ -118,6 +118,37 @@ pub fn interior_point(outer: &[DVec2], holes: &[Vec<DVec2>]) -> Option<DVec2> {
     best.map(|(_, p)| p)
 }
 
+/// Выпуклая оболочка точек (монотонная цепочка), обход против часовой стрелки
+/// в математических осях. Меньше трёх различных точек — как есть.
+#[must_use]
+pub fn hull(points: &[DVec2]) -> Vec<DVec2> {
+    let mut pts: Vec<DVec2> = points.iter().copied().filter(|p| p.is_finite()).collect();
+    pts.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
+    pts.dedup_by(|a, b| (*a - *b).length() < 1e-12);
+    if pts.len() < 3 {
+        return pts;
+    }
+    let cross = |o: DVec2, a: DVec2, b: DVec2| (a - o).perp_dot(b - o);
+    let mut lower: Vec<DVec2> = Vec::new();
+    for p in &pts {
+        while lower.len() >= 2 && cross(lower[lower.len() - 2], lower[lower.len() - 1], *p) <= 0.0 {
+            lower.pop();
+        }
+        lower.push(*p);
+    }
+    let mut upper: Vec<DVec2> = Vec::new();
+    for p in pts.iter().rev() {
+        while upper.len() >= 2 && cross(upper[upper.len() - 2], upper[upper.len() - 1], *p) <= 0.0 {
+            upper.pop();
+        }
+        upper.push(*p);
+    }
+    lower.pop();
+    upper.pop();
+    lower.extend(upper);
+    lower
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -157,6 +188,19 @@ mod tests {
         let room = rect(100.0, 100.0);
         assert!(contains(&room, DVec2::new(50.0, 50.0)));
         assert!(!contains(&room, DVec2::new(150.0, 50.0)));
+    }
+
+    #[test]
+    fn hull_drops_inner_points() {
+        let mut points = rect(100.0, 100.0);
+        points.extend([
+            DVec2::new(50.0, 50.0),
+            DVec2::new(20.0, 70.0),
+            DVec2::new(100.0, 50.0),
+        ]);
+        let h = hull(&points);
+        assert_eq!(h.len(), 4);
+        assert!((area(&h) - 10_000.0).abs() < 1e-9);
     }
 
     #[test]

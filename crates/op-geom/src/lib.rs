@@ -13,7 +13,7 @@ pub mod shapes;
 pub mod walls;
 
 pub use glam::DVec2;
-pub use polygon::{area, centroid, contains, interior_point, perimeter, signed_area};
+pub use polygon::{area, centroid, contains, hull, interior_point, perimeter, signed_area};
 
 /// Перевод мм² в м².
 #[must_use]
