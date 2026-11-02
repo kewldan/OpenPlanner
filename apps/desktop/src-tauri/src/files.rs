@@ -60,8 +60,19 @@ fn is_scan(path: &Path) -> bool {
         .is_some_and(|ext| SCAN_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
 }
 
-/// Файлы экспорта: чертежи, изображения листов, ведомости, архивы.
-const EXPORT_EXTENSIONS: [&str; 6] = ["pdf", "svg", "dxf", "png", "xlsx", "zip"];
+/// Файлы экспорта: чертежи, изображения листов, ведомости, смета, архивы.
+const EXPORT_EXTENSIONS: [&str; 7] = ["pdf", "svg", "dxf", "png", "xlsx", "csv", "zip"];
+
+/// Таблицы прайса для импорта.
+const TABLE_EXTENSIONS: [&str; 2] = ["csv", "xlsx"];
+/// Прайс больше этого (байт) не читается.
+const MAX_TABLE_BYTES: u64 = 64 << 20;
+
+fn is_table(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| TABLE_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+}
 
 fn is_export(path: &Path) -> bool {
     path.extension()
@@ -127,6 +138,21 @@ pub fn read_scan(path: PathBuf) -> CmdResult<Response> {
         .map_err(|err| io_error("прочитать", &path, &err))
 }
 
+/// Читает таблицу прайса (CSV или XLSX) до 64 МБ.
+#[tauri::command]
+pub fn read_table(path: PathBuf) -> CmdResult<Response> {
+    check(&path, is_table)?;
+    let size = fs::metadata(&path)
+        .map_err(|err| io_error("прочитать", &path, &err))?
+        .len();
+    if size > MAX_TABLE_BYTES {
+        return Err(format!("файл «{}» больше 64 МБ", path.display()));
+    }
+    fs::read(&path)
+        .map(Response::new)
+        .map_err(|err| io_error("прочитать", &path, &err))
+}
+
 /// Путь и байты бинарной записи: тело запроса — байты, путь — в заголовке `x-path`.
 fn binary_write<'a>(request: &'a Request<'_>) -> CmdResult<(PathBuf, &'a [u8])> {
     let header = request
@@ -154,7 +180,7 @@ pub fn write_project(request: Request<'_>) -> CmdResult<()> {
     write_atomic(&path, bytes).map_err(|err| io_error("сохранить", &path, &err))
 }
 
-/// Записывает файл экспорта (PDF, SVG, DXF, PNG, XLSX, ZIP).
+/// Записывает файл экспорта (PDF, SVG, DXF, PNG, XLSX, CSV, ZIP).
 #[tauri::command]
 pub fn write_export(request: Request<'_>) -> CmdResult<()> {
     let (path, bytes) = binary_write(&request)?;
@@ -244,6 +270,8 @@ mod tests {
         assert!(!is_journal(Path::new("/x/кв.oplan")));
         assert!(is_export(Path::new("/x/Кв — Вариант А.PDF")));
         assert!(is_export(Path::new("/x/листы.zip")));
+        assert!(is_export(Path::new("/x/Кв — смета.csv")));
+        assert!(is_table(Path::new("/x/прайс.XLSX")) && !is_table(Path::new("/x/прайс.pdf")));
         assert!(!is_export(Path::new("/x/кв.oplan")));
         assert!(!is_export(Path::new("/x/.bashrc")));
     }
