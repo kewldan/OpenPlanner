@@ -147,7 +147,8 @@ docs/
 - UI: юнит- и компонентные тесты (`bun test`) и e2e на веб-сборке (Playwright).
 - Десктоп (CI, на каждый пуш):
   - самопроверка собранного приложения на macOS, Windows и Linux — запуск окна и движка, бэкенд GPU;
-  - системные диалоги «Сохранить» и «Открыть» на macOS (AppleScript), Windows (SendKeys) и Linux (xdotool) — `scripts/desktop-dialogs.sh`;
+  - системные диалоги «Сохранить» и «Открыть», аварийное завершение и восстановление через системный вопрос — на macOS (AppleScript), Windows (SendKeys) и Linux (xdotool), `scripts/desktop-dialogs.sh`;
+  - рендер кадра без окна на нативном бэкенде платформы (Metal, D3D12, Vulkan) с проверкой пикселей — `op-render`;
   - WebGPU в настоящем окне Windows (программный адаптер);
   - e2e настоящего окна на Linux через tauri-driver — файлы и журнал на диске, восстановление после аварийного завершения. WebDriver для Tauri на macOS не поддерживается.
 - WebGPU и WebGL2 в браузере: Playwright, пиксельная проверка сетки на обоих бэкендах.

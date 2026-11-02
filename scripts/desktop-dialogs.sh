@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# Самопроверка с настоящими системными диалогами файлов.
+# Самопроверка с настоящими системными диалогами файлов и восстановлением после сбоя.
 #
-# Приложение запускается в сценарии `dialogs`: само вызывает «Сохранить» и
-# «Открыть», а этот скрипт проходит открывшиеся системные диалоги так, как это
-# сделал бы человек с клавиатуры:
+# Приложение запускается трижды, в сценариях самопроверки:
+#   dialogs — само вызывает «Сохранить» и «Открыть»;
+#   crash   — открывает файл, вносит правку, ждёт записи журнала; затем kill -9;
+#   recover — открывает файл, системный вопрос о восстановлении, сверка правки.
+# Этот скрипт проходит открывшиеся системные окна так, как это сделал бы
+# человек с клавиатуры:
 #   macOS   — AppleScript (System Events): NSSavePanel / NSOpenPanel;
 #   Windows — WScript.Shell SendKeys: стандартные диалоги Windows;
 #   Linux   — xdotool: GtkFileChooserDialog (нужен X-сервер с оконным менеджером).
@@ -107,15 +110,46 @@ pass_open_dialog() {
   esac
 }
 
-# Сценарий ────────────────────────────────────────────────────────────────────
+press_enter() {
+  case $os in
+    mac)
+      mac_keys \
+        -e "set frontmost of (first process whose unix id is $pid) to true" \
+        -e 'delay 0.5' \
+        -e 'key code 36'
+      ;;
+    windows)
+      powershell -NoProfile -Command '
+        $ws = New-Object -ComObject WScript.Shell
+        [void]$ws.AppActivate("OpenPlanner")
+        Start-Sleep -Milliseconds 500
+        $ws.SendKeys("{ENTER}")'
+      ;;
+    linux) xdotool key Return ;;
+  esac
+}
 
-export OPENPLANNER_SELFTEST="$(native_path "$report")"
-export OPENPLANNER_SELFTEST_SCENARIO=dialogs
-: >"$report"
+# Открыть файл и согласиться на восстановление: Enter нажимает кнопку по
+# умолчанию («Восстановить») в системном вопросе.
+pass_open_and_recover() {
+  pass_open_dialog
+  sleep 3
+  screenshot recovery-question
+  press_enter
+}
 
-"$app" &
-pid=$!
+# Запуски приложения ─────────────────────────────────────────────────────────
+
+pid=""
 trap 'kill $pid 2>/dev/null || true' EXIT
+
+start_app() {
+  export OPENPLANNER_SELFTEST="$(native_path "$report")"
+  export OPENPLANNER_SELFTEST_SCENARIO="$1"
+  : >"$report"
+  "$app" &
+  pid=$!
+}
 
 wait_line() {
   for _ in $(seq 1 "${2:-90}"); do
@@ -143,8 +177,8 @@ screenshot() {
   esac
 }
 
-# Проходит диалог: ввод повторяется, пока приложение не подтвердит шаг
-# (первый ввод мог уйти раньше, чем диалог получил фокус).
+# Проходит системное окно: ввод повторяется, пока приложение не подтвердит шаг
+# (первый ввод мог уйти раньше, чем окно получило фокус).
 pass_dialog() {
   local action="$1" expect="$2"
   for attempt in 1 2 3 4; do
@@ -164,13 +198,34 @@ fail() {
   exit 1
 }
 
+# 1. Сохранение и открытие ────────────────────────────────────────────────────
+start_app dialogs
 wait_line 'STEP dialog:save' || fail "приложение не дошло до сохранения"
 pass_dialog pass_save_dialog 'STEP saved:' || fail "файл не сохранён через диалог"
 [[ -s "$target" ]] || fail "файла нет на диске: $target"
 echo "✓ системный диалог сохранения: $(grep 'STEP saved:' "$report" | sed 's/STEP saved://')"
-
 wait_line 'STEP dialog:open' 30 || fail "приложение не дошло до открытия"
 pass_dialog pass_open_dialog 'STEP opened' || fail "файл не открыт через диалог"
 wait_line '^OK ' 30 || fail "приложение не завершило сценарий"
 echo "✓ системный диалог открытия: проект открыт, название из файла совпало"
+cat "$report"
+wait "$pid" 2>/dev/null || true
+
+# 2. Правка и аварийное завершение ────────────────────────────────────────────
+journal="$target.journal"
+start_app crash
+wait_line 'STEP dialog:open' || fail "сбой: приложение не дошло до открытия"
+pass_dialog pass_open_dialog 'STEP journaled' || fail "сбой: правка не записана в журнал"
+grep -q 'Recovered' "$journal" || fail "сбой: в журнале нет правки ($journal)"
+echo "✓ правка записана в журнал рядом с файлом"
+kill -9 "$pid"
+wait "$pid" 2>/dev/null || true
+echo "✓ процесс аварийно завершён (kill -9)"
+
+# 3. Восстановление ───────────────────────────────────────────────────────────
+start_app recover
+wait_line 'STEP dialog:open' || fail "восстановление: приложение не дошло до открытия"
+pass_dialog pass_open_and_recover 'STEP recovered' || fail "восстановление: правка не восстановлена"
+wait_line '^OK ' 30 || fail "восстановление: приложение не завершило сценарий"
+echo "✓ системный вопрос о восстановлении: правка из журнала восстановлена, проект помечен несохранённым"
 cat "$report"

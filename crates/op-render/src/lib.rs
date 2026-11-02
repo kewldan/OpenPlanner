@@ -8,7 +8,11 @@
 
 mod camera;
 mod grid;
+#[cfg(not(target_arch = "wasm32"))]
+mod offscreen;
 mod renderer;
 
 pub use camera::Camera2D;
+#[cfg(not(target_arch = "wasm32"))]
+pub use offscreen::{Image, render_plan_image};
 pub use renderer::{RenderError, Renderer};

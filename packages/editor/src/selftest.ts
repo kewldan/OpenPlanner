@@ -8,10 +8,14 @@ import { useEditor } from "./store/editor";
  *
  * - `OPENPLANNER_SELFTEST=<файл>` — после запуска движка (или ошибки) в файл
  *   пишется результат с графическим бэкендом, и приложение завершается;
- * - `OPENPLANNER_SELFTEST_SCENARIO=dialogs` — перед этим приложение само
- *   вызывает «Сохранить» и «Открыть». Настоящие системные диалоги проходит
- *   внешний драйвер (`scripts/desktop-dialogs.sh`), ориентируясь на строки
- *   `STEP …` в файле отчёта.
+ * - `OPENPLANNER_SELFTEST_SCENARIO` — сценарий перед отчётом. Настоящие
+ *   системные диалоги проходит внешний драйвер (`scripts/desktop-dialogs.sh`),
+ *   ориентируясь на строки `STEP …` в файле отчёта:
+ *   - `dialogs` — «Сохранить» и «Открыть» через системные диалоги;
+ *   - `crash` — открыть файл, внести правку и дождаться записи журнала
+ *     (после этого драйвер аварийно завершает процесс);
+ *   - `recover` — открыть тот же файл, согласиться на восстановление в
+ *     системном вопросе и сверить восстановленную правку.
  */
 export async function installSelftest(): Promise<void> {
   if (!isTauri() || !(await invoke<boolean>("selftest_enabled"))) return;
@@ -25,9 +29,14 @@ export async function installSelftest(): Promise<void> {
 
   const onReady = async (backend: string, webgpu: string) => {
     const summary = `backend=${backend} webgpu=${webgpu}`;
-    if (scenario === "dialogs") {
+    const run = scenarios[scenario ?? ""];
+    if (scenario && !run) {
+      report(false, `${summary} неизвестный сценарий ${scenario}`);
+      return;
+    }
+    if (run) {
       try {
-        await dialogsScenario();
+        await run();
       } catch (error) {
         report(
           false,
@@ -64,6 +73,38 @@ async function waitFor(what: string, condition: () => boolean, timeout = 30_000)
 }
 
 const title = () => useEditor.getState().document?.meta.title;
+
+const CRASH_TITLE = "Recovered";
+
+/** Открыть сохранённый файл, внести правку и дождаться её записи в журнал. */
+async function crashScenario() {
+  await waitFor("запуск проекта", () => !project.store.getState().busy && title() !== undefined);
+  await step("dialog:open");
+  await project.openProject();
+  await waitFor("открытый файл", () => title() === "Selftest 2");
+  sendToEngine({ type: "command", command: { type: "setTitle", title: CRASH_TITLE } });
+  await waitFor("правка", () => title() === CRASH_TITLE);
+  await project.flushJournal();
+  await step("journaled");
+  // Дальше драйвер завершает процесс через kill -9; отчёт не пишется.
+  await new Promise(() => {});
+}
+
+/** После сбоя: открыть файл и восстановить правку из журнала. */
+async function recoverScenario() {
+  await waitFor("запуск проекта", () => !project.store.getState().busy && title() !== undefined);
+  await step("dialog:open");
+  await project.openProject();
+  await waitFor("восстановленная правка", () => title() === CRASH_TITLE, 60_000);
+  if (!useEditor.getState().dirty) throw new Error("восстановленное должно быть несохранённым");
+  await step("recovered");
+}
+
+const scenarios: Record<string, (() => Promise<void>) | undefined> = {
+  dialogs: dialogsScenario,
+  crash: crashScenario,
+  recover: recoverScenario,
+};
 
 /** Сохранение и открытие через настоящие системные диалоги. */
 async function dialogsScenario() {
