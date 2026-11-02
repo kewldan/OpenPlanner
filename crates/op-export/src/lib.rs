@@ -5,6 +5,7 @@
 //! собирает движок; здесь — рамка с основной надписью, таблицы, штриховки и
 //! запись в PDF (векторный, со слоями), SVG, DXF (по слоям), XLSX и ZIP.
 
+pub mod dxf;
 pub mod font;
 pub mod frame;
 pub mod hatch;
@@ -12,6 +13,7 @@ pub mod pdf;
 pub mod sheet;
 pub mod svg;
 pub mod table;
+pub mod xlsx;
 
 pub use frame::TitleBlock;
 pub use sheet::{Align, Item, Rgb, Shape, Sheet, Text, Viewport};
