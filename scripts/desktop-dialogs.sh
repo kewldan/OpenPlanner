@@ -43,6 +43,7 @@ win_send() {
     \$ws = New-Object -ComObject WScript.Shell
     [void]\$ws.AppActivate('OpenPlanner')
     Start-Sleep -Milliseconds 500
+    # Alt+N — фокус в поле «Имя файла» (в диалоге открытия он стоит в списке).
     \$ws.SendKeys('$2')
     Start-Sleep -Milliseconds 300
     \$ws.SendKeys('$text')
@@ -70,7 +71,7 @@ pass_save_dialog() {
         -e 'delay 0.5' \
         -e 'key code 36'
       ;;
-    windows) win_send "$dir\\$name" '^a' ;;
+    windows) win_send "$dir\\$name" '%n^a' ;;
     linux)
       xdotool key --clearmodifiers ctrl+a
       xdotool type --delay 20 "$dir/$name"
@@ -96,7 +97,7 @@ pass_open_dialog() {
         -e 'delay 1.5' \
         -e 'key code 36'
       ;;
-    windows) win_send "$file" '^a' ;;
+    windows) win_send "$file" '%n^a' ;;
     linux)
       xdotool key --clearmodifiers ctrl+l
       xdotool type --delay 20 "$file"
