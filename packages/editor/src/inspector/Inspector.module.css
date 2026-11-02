@@ -28,3 +28,51 @@
   color: var(--danger);
   font-size: var(--text-xs);
 }
+
+.error {
+  margin: 0;
+  padding: var(--space-4) var(--space-6);
+}
+
+.section .error {
+  padding: 0;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 28px;
+}
+
+.label {
+  color: var(--text-3);
+}
+
+.control {
+  min-width: 0;
+  display: flex;
+}
+
+.select {
+  width: 100%;
+  height: var(--control-h);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+}
+
+.select:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.buttons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}

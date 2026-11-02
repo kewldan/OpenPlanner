@@ -6,7 +6,8 @@ struct Globals {
     center: vec2<f32>,   // точка плана в центре холста, мм
     scale: f32,          // физических пикселей на мм
     srgb_output: f32,    // 1 — поверхность sRGB, нужен перевод в линейное пространство
-    _pad: vec2<f32>,
+    dpr: f32,
+    _pad: f32,
 };
 
 @group(0) @binding(0) var<uniform> g: Globals;

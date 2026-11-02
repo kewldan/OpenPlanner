@@ -1,4 +1,13 @@
-import type { Document, FromEngine } from "@openplanner/engine-client";
+import type {
+  Document,
+  FromEngine,
+  LengthInfo,
+  RoomInfo,
+  SnapKind,
+  Tool,
+  ToolOptions,
+  ToolStep,
+} from "@openplanner/engine-client";
 import { create } from "zustand";
 
 export type EditorMode =
@@ -17,9 +26,27 @@ export type EngineStatus =
   | { state: "ready"; backend: string; webgpu: string }
   | { state: "failed"; message: string };
 
+/** Курсор на плане после привязки. */
+export interface CursorInfo {
+  x: number;
+  y: number;
+  snap: SnapKind | null;
+  length: number | null;
+  angle: number | null;
+}
+
+/** Вычисленные величины модели. */
+export interface DerivedInfo {
+  rooms: Record<string, RoomInfo>;
+  walls: Record<string, number>;
+  dimensions: Record<string, number>;
+  freeRegions: number;
+}
+
 export interface EditorState {
   engine: EngineStatus;
   document: Document | null;
+  derived: DerivedInfo;
   canUndo: boolean;
   canRedo: boolean;
   /** Есть несохранённые изменения. */
@@ -32,17 +59,32 @@ export interface EditorState {
   dialog: EditorDialog;
   /** Размер холста, CSS-пиксели. */
   viewport: { width: number; height: number };
+  selection: string[];
+  tool: Tool;
+  step: ToolStep;
+  toolOptions: ToolOptions;
+  cursor: CursorInfo | null;
+  /** Элемент, которому нужен ввод текста (новая выноска). */
+  editText: string | null;
   setMode: (mode: EditorMode) => void;
   setDialog: (dialog: EditorDialog) => void;
   setViewport: (width: number, height: number) => void;
   setEngine: (status: EngineStatus) => void;
+  clearEditText: () => void;
   applyEvents: (events: FromEngine[]) => void;
+}
+
+const emptyDerived: DerivedInfo = { rooms: {}, walls: {}, dimensions: {}, freeRegions: 0 };
+
+function byId(list: LengthInfo[]): Record<string, number> {
+  return Object.fromEntries(list.map((item) => [item.id, item.length]));
 }
 
 /** Проекции модели для панелей. Источник истины — движок в воркере. */
 export const useEditor = create<EditorState>()((set) => ({
   engine: { state: "starting" },
   document: null,
+  derived: emptyDerived,
   canUndo: false,
   canRedo: false,
   dirty: false,
@@ -52,10 +94,17 @@ export const useEditor = create<EditorState>()((set) => ({
   mode: "measure",
   dialog: null,
   viewport: { width: 0, height: 0 },
+  selection: [],
+  tool: "select",
+  step: "idle",
+  toolOptions: { wallThickness: 120, justification: "center" },
+  cursor: null,
+  editText: null,
   setMode: (mode) => set({ mode }),
   setDialog: (dialog) => set({ dialog }),
   setViewport: (width, height) => set({ viewport: { width, height } }),
   setEngine: (engine) => set({ engine }),
+  clearEditText: () => set({ editText: null }),
   applyEvents: (events) =>
     set((state) => events.reduce<Partial<EditorState>>(reduce, { lastError: state.lastError })),
 }));
@@ -64,10 +113,37 @@ function reduce(acc: Partial<EditorState>, event: FromEngine): Partial<EditorSta
   switch (event.type) {
     case "documentChanged":
       return { ...acc, document: event.document, lastError: null };
+    case "derivedChanged":
+      return {
+        ...acc,
+        derived: {
+          rooms: Object.fromEntries(event.rooms.map((room) => [room.id, room])),
+          walls: byId(event.walls),
+          dimensions: byId(event.dimensions),
+          freeRegions: event.freeRegions,
+        },
+      };
     case "historyChanged":
       return { ...acc, canUndo: event.canUndo, canRedo: event.canRedo, dirty: event.dirty };
     case "viewChanged":
       return { ...acc, scaleDenominator: event.scaleDenominator, zoomPercent: event.zoomPercent };
+    case "selectionChanged":
+      return { ...acc, selection: event.ids };
+    case "toolChanged":
+      return { ...acc, tool: event.tool, step: event.step, toolOptions: event.options };
+    case "cursor":
+      return {
+        ...acc,
+        cursor: {
+          x: event.x,
+          y: event.y,
+          snap: event.snap ?? null,
+          length: event.length ?? null,
+          angle: event.angle ?? null,
+        },
+      };
+    case "editText":
+      return { ...acc, editText: event.id };
     case "error":
       return { ...acc, lastError: event.message };
     case "journal":

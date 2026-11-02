@@ -6,10 +6,15 @@
 
 mod command;
 mod document;
+mod element;
 mod history;
 mod schema;
 
 pub use command::{Command, CommandError};
-pub use document::{Document, ProjectMeta};
+pub use document::{
+    Anchor, AssetData, Dimension, Document, Justification, Layer, LayerKind, Leader, Node, Opening,
+    OpeningKind, ProjectMeta, Room, Side, Underlay, Wall,
+};
+pub use element::Element;
 pub use history::{History, HistoryOp};
 pub use schema::model_schema;

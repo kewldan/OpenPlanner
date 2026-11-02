@@ -4,19 +4,41 @@
 import type { FromEngine, ToEngine } from "../wasm/op_engine";
 
 export type {
+  Anchor,
   Command,
+  Dimension,
   Document,
+  Element,
   EngineEvents,
   FromEngine,
   HistoryOp,
+  Justification,
+  Layer,
+  LayerKind,
+  Leader,
+  LengthInfo,
+  Node,
+  Opening,
+  OpeningKind,
+  PointerPhase,
   ProjectMeta,
+  Room,
+  RoomInfo,
+  Side,
+  SnapKind,
   ToEngine,
+  Tool,
+  ToolOptions,
+  ToolStep,
+  Underlay,
+  Wall,
 } from "../wasm/op_engine";
 
 /** Вызов движка, на который приходит ответ. */
 export type EngineCall =
   | { type: "exportFile"; generator: string }
   | { type: "importFile"; bytes: Uint8Array }
+  | { type: "addUnderlay"; bytes: Uint8Array; name: string }
   | { type: "replayJournal"; text: string }
   | { type: "journalHeader" }
   | { type: "documentTitle" };
@@ -25,6 +47,7 @@ export type EngineCall =
 export interface EngineCallResult {
   exportFile: Uint8Array;
   importFile: undefined;
+  addUnderlay: undefined;
   replayJournal: undefined;
   journalHeader: string;
   documentTitle: string;

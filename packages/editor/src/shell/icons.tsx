@@ -9,6 +9,20 @@ const paths = {
   door: "M4 17V4h7v13M11 4a7 7 0 0 1 6 7",
   room: "M3 3h14v14H3zM3 10h6v7M12 3v4",
   ruler: "M3 13 13 3l4 4L7 17zM6 10l1.5 1.5M8.5 7.5 10 9M11 5l1.5 1.5",
+  window: "M3 6h14v8H3zM3 9h14M3 11h14",
+  arch: "M4 17V9a6 6 0 0 1 12 0v8",
+  leader: "M4 16l6-6h7M4 16h0.01",
+  calibrate: "M3 15 15 3M3 15l3-1M3 15l1-3M15 3l-3 1M15 3l-1 3M11 15h6M14 12v6",
+  image: "M3 4h14v12H3zM3 13l4-4 3 3 2-2 5 5M13 7.5h0.01",
+  eye: "M2 10s3-5.5 8-5.5 8 5.5 8 5.5-3 5.5-8 5.5S2 10 2 10zM10 12.2a2.2 2.2 0 1 0 0-4.4 2.2 2.2 0 0 0 0 4.4z",
+  eyeOff:
+    "M3 3l14 14M8.2 5a8 8 0 0 1 1.8-.5c5 0 8 5.5 8 5.5a14 14 0 0 1-2 2.6M5.4 6.4C3.3 7.9 2 10 2 10s3 5.5 8 5.5a7.6 7.6 0 0 0 3.4-.8",
+  lock: "M5 9h10v8H5zM7 9V6.5a3 3 0 0 1 6 0V9",
+  unlock: "M5 9h10v8H5zM7 9V6.5a3 3 0 0 1 5.8-1",
+  plus: "M10 4v12M4 10h12",
+  trash: "M4 6h12M8 6V4h4v2M6 6l1 11h6l1-11",
+  chevron: "M7 5l5 5-5 5",
+  rooms: "M3 3h14v14H3zM10 3v14",
 } as const;
 
 export type IconName = keyof typeof paths;
