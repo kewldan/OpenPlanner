@@ -128,8 +128,8 @@ jobs:
             "--enable-unsafe-webgpu --ignore-gpu-blocklist --enable-features=Vulkan --use-vulkan=swiftshader --use-webgpu-adapter=swiftshader"
           )
           for args in "${variants[@]}"; do
-            echo "::group::WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=$args"
-            if WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="$args" bash scripts/desktop-selftest.sh "${{ matrix.binary }}"; then
+            echo "::group::OPENPLANNER_WEBVIEW2_ARGS=$args"
+            if OPENPLANNER_WEBVIEW2_ARGS="$args" bash scripts/desktop-selftest.sh "${{ matrix.binary }}"; then
               echo "::endgroup::"
               echo "WebGPU в настоящем окне WebView2: $args"
               exit 0

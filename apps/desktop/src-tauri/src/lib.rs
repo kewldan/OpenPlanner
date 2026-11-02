@@ -71,19 +71,39 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            #[cfg(target_os = "linux")]
-            if let Some(window) = tauri::Manager::get_webview_window(app, "main") {
-                // Флаг применяется к новым страницам: включаем и перезагружаем окно,
-                // чтобы воркер движка создался уже с WebGL.
-                window.with_webview(|webview| {
-                    let webview = webview.inner();
-                    if linux::enable_webgl_in_workers(&webview) {
-                        webkit2gtk::WebViewExt::reload(&webview);
-                    }
-                })?;
+            // Главное окно создаётся здесь (в конфиге `create: false`), чтобы
+            // можно было передать настройки WebView до его создания.
+            let config = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|window| window.label == "main")
+                .cloned()
+                .ok_or("в tauri.conf.json нет окна main")?;
+            #[allow(unused_mut)] // изменяется только на Windows
+            let mut builder = tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?;
+            #[cfg(windows)]
+            if let Ok(args) = std::env::var("OPENPLANNER_WEBVIEW2_ARGS") {
+                // Для проверок в CI (например, программный WebGPU-адаптер). Флаги
+                // Tauri по умолчанию сохраняются.
+                builder = builder.additional_browser_args(&format!(
+                    "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection {args}"
+                ));
             }
+            let window = builder.build()?;
+
+            #[cfg(target_os = "linux")]
+            // Флаг применяется к новым страницам: включаем и перезагружаем окно,
+            // чтобы воркер движка создался уже с WebGL.
+            window.with_webview(|webview| {
+                let webview = webview.inner();
+                if linux::enable_webgl_in_workers(&webview) {
+                    webkit2gtk::WebViewExt::reload(&webview);
+                }
+            })?;
             #[cfg(not(target_os = "linux"))]
-            let _ = app;
+            let _ = window;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
