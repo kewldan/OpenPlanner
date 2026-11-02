@@ -309,3 +309,192 @@ mod tests {
         assert_eq!(column_letter(26), "AA");
     }
 }
+
+/// Значение атрибута `name` в открывающем теге.
+fn attribute<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
+    let key = format!(" {name}=\"");
+    let start = tag.find(&key)? + key.len();
+    let end = tag[start..].find('"')? + start;
+    Some(&tag[start..end])
+}
+
+/// Раскрывает сущности XML.
+fn unescape(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(i) = rest.find('&') {
+        out.push_str(&rest[..i]);
+        let tail = &rest[i..];
+        let Some(end) = tail.find(';') else {
+            out.push_str(tail);
+            return out;
+        };
+        let entity = &tail[1..end];
+        let decoded = match entity {
+            "amp" => Some('&'),
+            "lt" => Some('<'),
+            "gt" => Some('>'),
+            "quot" => Some('"'),
+            "apos" => Some('\''),
+            _ => entity
+                .strip_prefix("#x")
+                .and_then(|h| u32::from_str_radix(h, 16).ok())
+                .or_else(|| entity.strip_prefix('#').and_then(|d| d.parse().ok()))
+                .and_then(char::from_u32),
+        };
+        match decoded {
+            Some(c) => out.push(c),
+            None => out.push_str(&tail[..=end]),
+        }
+        rest = &tail[end + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Текст всех `<t>` внутри фрагмента (строка с форматированием — несколько кусков).
+fn texts(xml: &str) -> String {
+    let mut out = String::new();
+    let mut rest = xml;
+    while let Some(i) = rest.find("<t") {
+        let tail = &rest[i..];
+        // `<t>` или `<t xml:space="preserve">`, но не `<tc>` и подобные.
+        let after = tail[2..].chars().next();
+        if !matches!(after, Some('>' | ' ')) {
+            rest = &tail[2..];
+            continue;
+        }
+        let Some(open) = tail.find('>') else { break };
+        if tail[..open].ends_with('/') {
+            rest = &tail[open + 1..];
+            continue;
+        }
+        let Some(close) = tail.find("</t>") else {
+            break;
+        };
+        out.push_str(&unescape(&tail[open + 1..close]));
+        rest = &tail[close + 4..];
+    }
+    out
+}
+
+/// Номер столбца (с нуля) по адресу ячейки: «C12» → 2.
+fn column(at: &str) -> usize {
+    at.chars()
+        .take_while(char::is_ascii_alphabetic)
+        .fold(0, |n, c| {
+            n * 26 + (c.to_ascii_uppercase() as usize - 'A' as usize + 1)
+        })
+        .saturating_sub(1)
+}
+
+fn part(archive: &mut zip::ZipArchive<std::io::Cursor<&[u8]>>, name: &str) -> Option<String> {
+    use std::io::Read as _;
+    let mut file = archive.by_name(name).ok()?;
+    let mut text = String::new();
+    file.read_to_string(&mut text).ok()?;
+    Some(text)
+}
+
+/// Строки первого листа книги XLSX как текст (числа — как записаны в файле).
+///
+/// # Errors
+///
+/// Файл не ZIP или в нём нет листа.
+pub fn read(bytes: &[u8]) -> Result<Vec<Vec<String>>, ExportError> {
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))?;
+    let shared: Vec<String> = part(&mut archive, "xl/sharedStrings.xml")
+        .map(|xml| {
+            xml.split("<si>")
+                .skip(1)
+                .map(|si| texts(si.split("</si>").next().unwrap_or("")))
+                .collect()
+        })
+        .unwrap_or_default();
+    let sheet = part(&mut archive, "xl/worksheets/sheet1.xml")
+        .ok_or_else(|| ExportError::Format("в книге нет первого листа".into()))?;
+    let mut rows: Vec<Vec<String>> = Vec::new();
+    for row in sheet.split("<row").skip(1) {
+        let row = row.split("</row>").next().unwrap_or("");
+        let mut cells: Vec<String> = Vec::new();
+        for cell in row.split("<c").skip(1) {
+            let Some(open) = cell.find('>') else { continue };
+            let tag = &cell[..open];
+            if !(tag.starts_with(' ') || tag.is_empty()) {
+                continue;
+            }
+            let body = if tag.ends_with('/') {
+                ""
+            } else {
+                cell[open + 1..].split("</c>").next().unwrap_or("")
+            };
+            let value = || {
+                body.split_once("<v>")
+                    .and_then(|(_, v)| v.split_once("</v>"))
+                    .map(|(v, _)| unescape(v))
+                    .unwrap_or_default()
+            };
+            let text = match attribute(tag, "t") {
+                Some("s") => value()
+                    .parse::<usize>()
+                    .ok()
+                    .and_then(|i| shared.get(i).cloned())
+                    .unwrap_or_default(),
+                Some("inlineStr") => texts(body),
+                _ => value(),
+            };
+            let at = attribute(tag, "r").map_or(cells.len(), column);
+            if cells.len() <= at {
+                cells.resize(at + 1, String::new());
+            }
+            cells[at] = text;
+        }
+        rows.push(cells);
+    }
+    Ok(rows)
+}
+
+#[cfg(test)]
+mod read_tests {
+    use super::*;
+    use crate::{Align, Column};
+
+    #[test]
+    fn written_book_reads_back() {
+        let table = Table {
+            title: "Прайс & цены".into(),
+            columns: vec![
+                Column::new("Наименование", 50.0, Align::Left),
+                Column::new("Цена", 20.0, Align::Right),
+            ],
+            rows: vec![vec![Cell::text("Плитка <пол>"), Cell::number(1800.0, 2)]],
+            footer: None,
+        };
+        let bytes = write(&[Worksheet {
+            name: "Прайс".into(),
+            tables: vec![table],
+        }])
+        .unwrap();
+        let rows = read(&bytes).unwrap();
+        assert!(
+            rows.iter()
+                .any(|r| r.first().is_some_and(|c| c == "Прайс & цены"))
+        );
+        let item = rows
+            .iter()
+            .find(|r| r.first().is_some_and(|c| c == "Плитка <пол>"))
+            .unwrap();
+        assert_eq!(item[1].parse::<f64>().unwrap(), 1800.0);
+    }
+
+    #[test]
+    fn shared_strings_and_columns() {
+        assert_eq!(column("A1"), 0);
+        assert_eq!(column("AB7"), 27);
+        assert_eq!(
+            texts("<r><t>Ка</t></r><r><t xml:space=\"preserve\">бель</t></r>"),
+            "Кабель"
+        );
+        assert_eq!(unescape("a &amp; b &#1060;"), "a & b Ф");
+    }
+}
