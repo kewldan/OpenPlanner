@@ -17,7 +17,7 @@
 
 Most room planners stop at a pretty 3D picture. OpenPlanner is built around what a renovation crew actually needs: **one model of the apartment** that turns into themed drawing sheets — survey, demolition, new partitions, furniture, electrical, plumbing, finishes — plus an estimate whose quantities come straight from the model. Exporting your own project will never be paywalled. 🆓
 
-Measure the apartment by hand, import a LiDAR scan or a DXF drawing, sketch replanning variants on top of the survey across several floors, furnish it from the catalog or your own glTF models, place outlets, switches, lights, floor heating, air conditioning and ventilation with load and air calculations, lay out water and drain outlets with pipe routing and slope checks, finish floors, walls and ceilings with tile layouts and material quantities, price it all with an estimate whose quantities follow the model, get the working drawings as PDF, DXF, SVG, PNG or XLSX and the building model as IFC 4, walk through the result in 3D with real sunlight, render photoreal shots, and share a read-only link to the web version.
+Measure the apartment by hand, import a LiDAR scan or a DXF drawing, sketch replanning variants on top of the survey across several floors, furnish it from the catalog or your own glTF models, place outlets, switches, lights, floor heating, air conditioning and ventilation with load and air calculations, lay out water and drain outlets with pipe routing and slope checks, finish floors, walls and ceilings with tile layouts and material quantities, price it all with an estimate whose quantities follow the model, get the working drawings as PDF, DXF, SVG, PNG or XLSX and the building model as IFC 4, walk through the result in 3D with real sunlight, render photoreal shots, and share a read-only link to the web version — or let an AI agent do the work over MCP.
 
 ## ✨ Highlights
 
@@ -60,6 +60,31 @@ Measure the apartment by hand, import a LiDAR scan or a DXF drawing, sketch repl
   <img src="docs/images/crash-recovery.png" alt="Native recovery prompt after the app was killed" width="760"><br>
   <sub>After <code>kill -9</code>: the native prompt offers to restore the edits from the journal.</sub>
 </p>
+
+## 🤖 Use with AI agents (MCP)
+
+OpenPlanner speaks the [Model Context Protocol](https://modelcontextprotocol.io): an agent such as Claude works with the project open in the app — reads rooms, areas and calculations, draws walls and openings, places furniture and outlets, sets finishes, prices the estimate and exports drawings, IFC or the estimate. Every change is a normal undoable edit that shows up in the window right away.
+
+Point your MCP client at the app binary with the `mcp` argument; it connects to the running OpenPlanner (or starts it):
+
+```json
+{
+  "mcpServers": {
+    "openplanner": {
+      "command": "/Applications/OpenPlanner.app/Contents/MacOS/openplanner-desktop",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+For Claude Code:
+
+```bash
+claude mcp add openplanner -- /Applications/OpenPlanner.app/Contents/MacOS/openplanner-desktop mcp
+```
+
+On Windows and Linux use the path to `openplanner-desktop(.exe)`. The connection stays on your machine: the app listens on 127.0.0.1 only and accepts a per-launch token from a file only your user can read.
 
 ## 🏗️ How it fits together
 
@@ -133,8 +158,9 @@ bun run dev
 | 🌐 E2E on the web build (WebGL2 + WebGPU)   | `cd apps/desktop && bunx vite build && bunx playwright test`                                                    |
 | 🖥️ E2E on the real Linux desktop window     | `bash scripts/desktop-e2e.sh` (needs a built app, Xvfb, openbox, xdotool, `tauri-driver`)                       |
 | 🗂️ Native dialogs + crash recovery (any OS) | `bash scripts/desktop-dialogs.sh <path to app binary>`                                                          |
+| 🤖 MCP through the real app                 | `python3 scripts/desktop-mcp.py <path to app binary>`                                                           |
 
-CI runs the Rust, TypeScript, engine and web e2e checks on every push and builds the app on **macOS 26, Windows and Linux** with a launch selftest. The heavy native checks — dialogs and crash recovery, the real Linux window, WebGPU in WebView2 and offscreen frames on **Metal and D3D12** — run in the [Desktop checks](https://github.com/kewldan/OpenPlanner/actions/workflows/desktop-checks.yml) workflow weekly or on demand.
+CI runs the Rust, TypeScript, engine and web e2e checks on every push and builds the app on **macOS 26, Windows and Linux** with a launch selftest. The heavy native checks — MCP through the real app, dialogs and crash recovery, the real Linux window, WebGPU in WebView2 and offscreen frames on **Metal and D3D12** — run in the [Desktop checks](https://github.com/kewldan/OpenPlanner/actions/workflows/desktop-checks.yml) workflow weekly or on demand.
 
 ## 📁 Repository layout
 
