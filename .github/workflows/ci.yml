@@ -1,5 +1,10 @@
 name: CI
 
+# Быстрые проверки на каждый пуш и PR: Rust, веб (с e2e в браузере) и сборка
+# приложения под три ОС с самопроверкой запуска. Задачи идут параллельно.
+# Тяжёлые нативные проверки (системные диалоги, WebGPU в WebView2, e2e окна
+# через tauri-driver, рендер кадра на GPU) — в desktop-checks.yml.
+
 on:
   push:
   pull_request:
@@ -31,18 +36,14 @@ jobs:
         run: mkdir -p apps/desktop/dist && echo '<!doctype html>' > apps/desktop/dist/index.html
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo clippy -p op-engine --target wasm32-unknown-unknown -- -D warnings
       - run: cargo test --workspace
         env:
           # Рендер без окна обязан пройти (Vulkan на программном lavapipe).
           OPENPLANNER_REQUIRE_GPU: "1"
-      - name: Нативный рендер кадра (wgpu на Vulkan)
-        run: cargo test -p op-render -- --nocapture
-        env:
-          OPENPLANNER_REQUIRE_GPU: "1"
-      - run: cargo clippy -p op-engine --target wasm32-unknown-unknown -- -D warnings
 
   web:
-    name: Web · Biome, типы, тесты, сборка
+    name: Web · Biome, типы, тесты, e2e
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -72,19 +73,9 @@ jobs:
           name: playwright-traces
           path: apps/desktop/test-results/
           retention-days: 7
-      # Веб-версия для хостинга (любая папка сайта: пути относительные).
-      - name: Веб-версия (WASM в релизной сборке)
-        run: bun run build:web
-        working-directory: apps/desktop
-      - uses: actions/upload-artifact@v7
-        with:
-          name: OpenPlanner-Web
-          path: apps/desktop/dist/
-          retention-days: 14
 
   desktop:
-    name: Desktop · ${{ matrix.os }}
-    needs: [rust, web]
+    name: Сборка · ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -104,12 +95,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
-      - name: Системные библиотеки Tauri и окружение для e2e
+      - name: Системные библиотеки Tauri
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev \
-            xvfb openbox xdotool imagemagick webkit2gtk-driver
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev xvfb
       - run: rustup show
       - uses: Swatinem/rust-cache@v2
       - name: wasm-bindgen-cli
@@ -129,56 +119,6 @@ jobs:
       - name: Самопроверка (запуск окна и движка)
         if: runner.os == 'Linux'
         run: xvfb-run -a bash scripts/desktop-selftest.sh "${{ matrix.binary }}"
-      - name: Версия ОС
-        if: runner.os == 'macOS'
-        run: sw_vers
-      - name: Нативный рендер кадра (wgpu на Metal / D3D12)
-        if: runner.os != 'Linux'
-        run: cargo test -p op-render -- --nocapture
-        env:
-          OPENPLANNER_REQUIRE_GPU: "1"
-      - name: Системные диалоги и восстановление после сбоя
-        if: runner.os != 'Linux'
-        shell: bash
-        run: bash scripts/desktop-dialogs.sh "${{ matrix.binary }}"
-        env:
-          SHOTS: ${{ github.workspace }}/apps/desktop/test-results/desktop
-      - name: Системные диалоги и восстановление после сбоя
-        if: runner.os == 'Linux'
-        run: xvfb-run -a bash -c 'openbox & sleep 1; bash scripts/desktop-dialogs.sh "${{ matrix.binary }}"'
-        env:
-          SHOTS: ${{ github.workspace }}/apps/desktop/test-results/desktop
-      - name: Самопроверка на WebGPU (WebView2 + программный адаптер)
-        if: runner.os == 'Windows'
-        shell: bash
-        env:
-          EXPECT_BACKEND: BrowserWebGpu
-        run: |
-          # У раннера нет GPU: WebGPU нужен программный адаптер. Пробуем варианты
-          # (D3D12 на WARP в обход блоклиста и Vulkan SwiftShader), достаточно одного.
-          variants=(
-            "--enable-unsafe-webgpu --ignore-gpu-blocklist"
-            "--enable-unsafe-webgpu --ignore-gpu-blocklist --use-webgpu-adapter=swiftshader"
-            "--enable-unsafe-webgpu --ignore-gpu-blocklist --enable-features=Vulkan --use-vulkan=swiftshader --use-webgpu-adapter=swiftshader"
-          )
-          for args in "${variants[@]}"; do
-            echo "::group::OPENPLANNER_WEBVIEW2_ARGS=$args"
-            if OPENPLANNER_WEBVIEW2_ARGS="$args" bash scripts/desktop-selftest.sh "${{ matrix.binary }}"; then
-              echo "::endgroup::"
-              echo "WebGPU в настоящем окне WebView2: $args"
-              exit 0
-            fi
-            echo "::endgroup::"
-          done
-          exit 1
-      - name: tauri-driver
-        if: runner.os == 'Linux'
-        run: cargo install tauri-driver --locked
-      - name: E2E десктопа (нативные диалоги, файлы, восстановление)
-        if: runner.os == 'Linux'
-        run: bash scripts/desktop-e2e.sh
-        env:
-          APP: ${{ github.workspace }}/${{ matrix.binary }}
       # Сборка для ручной проверки: скачивается со страницы прогона (Artifacts).
       - name: Пакет macOS для скачивания
         if: always() && runner.os == 'macOS' && steps.build.outcome == 'success'
@@ -193,9 +133,27 @@ jobs:
           name: OpenPlanner-${{ runner.os }}
           path: ${{ matrix.artifact }}
           retention-days: 14
-      - uses: actions/upload-artifact@v7
-        if: failure()
+
+  web-dist:
+    name: Веб-версия
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - name: wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VERSION" --locked
+      - uses: oven-sh/setup-bun@v2
         with:
-          name: desktop-screenshots-${{ runner.os }}
-          path: apps/desktop/test-results/desktop/
-          retention-days: 7
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile
+      # Пути относительные: сайт можно выложить в любую папку.
+      - name: Веб-версия (WASM в релизной сборке)
+        run: bun run build:web
+        working-directory: apps/desktop
+      - uses: actions/upload-artifact@v7
+        with:
+          name: OpenPlanner-Web
+          path: apps/desktop/dist/
+          retention-days: 14
