@@ -8,7 +8,8 @@ import type {
 } from "./messages";
 
 export interface EngineClientHandlers {
-  onReady: (backend: string) => void;
+  /** `webgpu` — диагностика: есть ли WebGPU в воркере и выдаётся ли адаптер. */
+  onReady: (backend: string, webgpu: string) => void;
   onEvents: (events: FromEngine[]) => void;
   onFatal: (message: string) => void;
 }
@@ -33,7 +34,7 @@ export class EngineClient {
       const response = event.data;
       switch (response.kind) {
         case "ready":
-          handlers.onReady(response.backend);
+          handlers.onReady(response.backend, response.webgpu);
           break;
         case "events":
           handlers.onEvents(response.events);

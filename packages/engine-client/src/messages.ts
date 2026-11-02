@@ -44,7 +44,7 @@ export type WorkerRequest =
 
 /** Воркер → UI. */
 export type WorkerResponse =
-  | { kind: "ready"; backend: string }
+  | { kind: "ready"; backend: string; webgpu: string }
   | { kind: "events"; events: FromEngine[] }
   | { kind: "result"; id: number; value: unknown }
   | { kind: "failure"; id: number; message: string }

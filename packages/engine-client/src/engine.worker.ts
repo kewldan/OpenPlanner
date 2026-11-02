@@ -28,6 +28,19 @@ function requestFrame() {
   }
 }
 
+type GpuNavigator = WorkerNavigator & { gpu?: { requestAdapter(): Promise<unknown> } };
+
+/** Диагностика WebGPU в воркере: почему движок выбрал тот или иной бэкенд. */
+async function probeWebGpu(): Promise<string> {
+  const gpu = (self.navigator as GpuNavigator).gpu;
+  if (!gpu) return "нет navigator.gpu";
+  try {
+    return (await gpu.requestAdapter()) ? "адаптер доступен" : "адаптер не выдан";
+  } catch (error) {
+    return `ошибка: ${errorMessage(error)}`;
+  }
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -80,7 +93,7 @@ async function start(request: Extract<WorkerRequest, { kind: "init" }>) {
       request.height,
       request.devicePixelRatio,
     );
-    post({ kind: "ready", backend: engine.backend });
+    post({ kind: "ready", backend: engine.backend, webgpu: await probeWebGpu() });
     post({ kind: "events", events: engine.snapshot().events });
     for (const pending of queue.splice(0)) handle(pending);
     requestFrame();

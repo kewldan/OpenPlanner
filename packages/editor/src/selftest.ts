@@ -13,7 +13,7 @@ export async function installSelftest(): Promise<void> {
 
   const check = () => {
     const { engine } = useEditor.getState();
-    if (engine.state === "ready") report(true, `backend=${engine.backend}`);
+    if (engine.state === "ready") report(true, `backend=${engine.backend} webgpu=${engine.webgpu}`);
     if (engine.state === "failed") report(false, engine.message);
     return engine.state !== "starting";
   };

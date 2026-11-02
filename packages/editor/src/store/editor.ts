@@ -14,7 +14,7 @@ export type EditorDialog = "palette" | "shortcuts" | null;
 
 export type EngineStatus =
   | { state: "starting" }
-  | { state: "ready"; backend: string }
+  | { state: "ready"; backend: string; webgpu: string }
   | { state: "failed"; message: string };
 
 export interface EditorState {
