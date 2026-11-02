@@ -1,7 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask, message, open, save } from "@tauri-apps/plugin-dialog";
-import { baseName, fileName, IMAGE_EXTENSIONS, type Platform, PROJECT_EXTENSION } from "./types";
+import {
+  baseName,
+  fileName,
+  IMAGE_EXTENSIONS,
+  type Platform,
+  PROJECT_EXTENSION,
+  SCAN_EXTENSIONS,
+} from "./types";
 
 const filters = [{ name: "Проект OpenPlanner", extensions: [PROJECT_EXTENSION] }];
 
@@ -36,6 +43,18 @@ export const desktopPlatform: Platform = {
     });
     if (typeof path !== "string") return null;
     const buffer = await invoke<ArrayBuffer>("read_image", { path });
+    return { name: fileName(path), bytes: new Uint8Array(buffer) };
+  },
+
+  async openScan() {
+    const path = await open({
+      title: "Импорт скана",
+      multiple: false,
+      directory: false,
+      filters: [{ name: "Скан (Polycam, RoomPlan)", extensions: [...SCAN_EXTENSIONS] }],
+    });
+    if (typeof path !== "string") return null;
+    const buffer = await invoke<ArrayBuffer>("read_scan", { path });
     return { name: fileName(path), bytes: new Uint8Array(buffer) };
   },
 

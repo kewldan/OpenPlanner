@@ -1,7 +1,7 @@
 // Обёртка протокола между UI-потоком и воркером.
 // Типы ToEngine/FromEngine генерируются из Rust (crates/op-engine/src/protocol.rs) через tsify.
 
-import type { FromEngine, ToEngine } from "../wasm/op_engine";
+import type { FromEngine, ScanImport, ScanResult, ToEngine } from "../wasm/op_engine";
 
 export type {
   Anchor,
@@ -12,6 +12,7 @@ export type {
   EngineEvents,
   FromEngine,
   HistoryOp,
+  IssueKind,
   Justification,
   Layer,
   LayerKind,
@@ -24,6 +25,17 @@ export type {
   ProjectMeta,
   Room,
   RoomInfo,
+  ScanAnswer,
+  ScanFailure,
+  ScanFormat,
+  ScanImport,
+  ScanImportMode,
+  ScanIssue,
+  ScanOpening,
+  ScanParams,
+  ScanRaster,
+  ScanResult,
+  ScanWall,
   Side,
   SnapKind,
   ToEngine,
@@ -39,6 +51,7 @@ export type EngineCall =
   | { type: "exportFile"; generator: string }
   | { type: "importFile"; bytes: Uint8Array }
   | { type: "addUnderlay"; bytes: Uint8Array; name: string }
+  | { type: "importScan"; request: ScanImport; source?: Uint8Array }
   | { type: "replayJournal"; text: string }
   | { type: "journalHeader" }
   | { type: "documentTitle" };
@@ -48,6 +61,7 @@ export interface EngineCallResult {
   exportFile: Uint8Array;
   importFile: undefined;
   addUnderlay: undefined;
+  importScan: undefined;
   replayJournal: undefined;
   journalHeader: string;
   documentTitle: string;
@@ -72,3 +86,14 @@ export type WorkerResponse =
   | { kind: "result"; id: number; value: unknown }
   | { kind: "failure"; id: number; message: string }
   | { kind: "fatal"; message: string };
+
+/** UI → воркер распознавания. */
+export interface ScanWorkerRequest {
+  bytes: Uint8Array;
+}
+
+/** Воркер распознавания → UI. */
+export type ScanWorkerResponse =
+  | { kind: "progress"; stage: number; count: number }
+  | { kind: "result"; result: ScanResult }
+  | { kind: "error"; message: string };

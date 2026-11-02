@@ -58,6 +58,9 @@ function call(current: Engine, request: EngineCall): { value: unknown; transfer:
     case "addUnderlay":
       post({ kind: "events", events: current.addUnderlay(request.bytes, request.name).events });
       return { value: undefined, transfer: [] };
+    case "importScan":
+      post({ kind: "events", events: current.importScan(request.request, request.source).events });
+      return { value: undefined, transfer: [] };
     case "replayJournal":
       post({ kind: "events", events: current.replayJournal(request.text).events });
       return { value: undefined, transfer: [] };
