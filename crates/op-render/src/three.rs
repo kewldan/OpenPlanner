@@ -94,6 +94,16 @@ impl Mesh {
         }
     }
 
+    /// Треугольник с нормалью по обходу (против часовой стрелки — лицом к зрителю).
+    pub fn triangle(&mut self, corners: [DVec3; 3], color: Color) {
+        let [a, b, c] = corners;
+        let normal = (b - a).cross(c - a);
+        if normal.length() < 1e-12 {
+            return;
+        }
+        self.polygon(&corners, &[[0, 1, 2]], normal.normalize(), color);
+    }
+
     /// Четырёхугольник `a b c d` с нормалью `normal`.
     pub fn quad(&mut self, corners: [DVec3; 4], normal: DVec3, color: Color) {
         self.polygon(&corners, &[[0, 1, 2], [0, 2, 3]], normal, color);
