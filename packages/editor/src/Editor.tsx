@@ -8,6 +8,7 @@ import { Sidebar, Toolbar } from "./shell/Sidebar";
 import { StatusBar } from "./shell/StatusBar";
 import { useShortcuts } from "./shell/shortcuts";
 import { TopBar } from "./shell/TopBar";
+import { CompareDialog } from "./variants/CompareDialog";
 
 /** Каркас редактора: верхняя панель, инструменты, объекты, холст, инспектор, статус. */
 export function Editor() {
@@ -25,6 +26,7 @@ export function Editor() {
       <CommandPalette />
       <ShortcutsDialog />
       <ScanWizard />
+      <CompareDialog />
     </div>
   );
 }

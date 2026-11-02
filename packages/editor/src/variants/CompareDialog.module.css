@@ -1,0 +1,93 @@
+.root {
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.picks {
+  display: flex;
+  gap: var(--space-6);
+}
+
+.pick {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--text-3);
+}
+
+.pick select {
+  height: var(--control-h);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  padding: var(--space-3) var(--space-4);
+  text-align: right;
+  border-bottom: 1px solid var(--line);
+}
+
+.table th:first-child,
+.table td:first-child {
+  text-align: left;
+}
+
+.table thead th {
+  color: var(--text-3);
+  font-weight: 500;
+}
+
+.table tfoot th {
+  font-weight: 600;
+}
+
+.changes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-6);
+}
+
+.changeList h3 {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.changeList p,
+.changeList dl {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.changeList dl {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-2) var(--space-5);
+}
+
+.pair {
+  display: contents;
+}
+
+.changeList dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+}

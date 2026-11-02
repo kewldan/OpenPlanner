@@ -4,12 +4,13 @@ import { format, isMacPlatform } from "../actions/shortcut";
 import { t } from "../i18n";
 import { useProject } from "../project";
 import { type EditorMode, useEditor } from "../store/editor";
+import { enterReplan, enterSurvey } from "../variants/actions";
 import { Icon } from "./icons";
 import styles from "./TopBar.module.css";
 
 const modes: readonly { value: EditorMode; label: string; disabled: boolean }[] = [
   { value: "measure", label: t("mode.measure"), disabled: false },
-  { value: "replan", label: t("mode.replan"), disabled: true },
+  { value: "replan", label: t("mode.replan"), disabled: false },
   { value: "furniture", label: t("mode.furniture"), disabled: true },
   { value: "electric", label: t("mode.electric"), disabled: true },
   { value: "light", label: t("mode.light"), disabled: true },
@@ -42,7 +43,17 @@ export function TopBar() {
   const fileName = useProject((s) => s.name) ?? t("project.untitled");
   const dirty = useEditor((s) => s.dirty);
   const mode = useEditor((s) => s.mode);
-  const setMode = useEditor((s) => s.setMode);
+  const view = useEditor((s) => s.view);
+  const viewName = useEditor((s) => {
+    const v = s.view;
+    if (v.type === "compare") return t("compare.title");
+    const id = v.type === "variant" ? v.id : undefined;
+    return s.summaries.find((x) => x.variant === id)?.name ?? t("variants.survey");
+  });
+  const setMode = (next: EditorMode) => {
+    if (next === "replan") enterReplan();
+    else enterSurvey();
+  };
   // Подписка на историю, чтобы кнопки обновляли доступность.
   useEditor((s) => s.canUndo && s.canRedo);
 
@@ -60,7 +71,9 @@ export function TopBar() {
             title={t("project.unsaved")}
           />
         )}
-        <span className={styles.variant}>/ {t("project.untitledVariant")}</span>
+        <span className={styles.variant} data-testid="view-name" data-view={view.type}>
+          / {viewName}
+        </span>
       </div>
       <div className={styles.group}>
         <IconButton label={label(undo.id)} disabled={!isEnabled(undo)} onClick={undo.run}>

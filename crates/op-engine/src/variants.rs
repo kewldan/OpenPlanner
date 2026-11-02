@@ -336,9 +336,18 @@ pub fn view_name(doc: &Document, variant: Option<&str>) -> String {
 pub fn summary(doc: &Document, variant: Option<&str>) -> ViewSummary {
     let projected = project(doc, variant);
     let derived = Derived::new(&projected);
+    // Метки в одной области (снесли перегородку) — одно помещение: площадь у первой,
+    // остальные считаются слитыми и в список не входят.
+    let mut used = HashSet::new();
     let rooms: Vec<RoomArea> = projected
         .rooms
         .iter()
+        .filter(|r| {
+            derived
+                .room_regions
+                .get(&r.id)
+                .is_none_or(|&i| used.insert(i))
+        })
         .map(|r| RoomArea {
             id: r.id.clone(),
             name: r.name.clone(),

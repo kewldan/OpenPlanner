@@ -1,13 +1,15 @@
-import type { Document, Layer, OpeningKind } from "@openplanner/engine-client";
+import type { Document, Layer, OpeningKind, View } from "@openplanner/engine-client";
 import { IconButton } from "@openplanner/ui";
 import { type KeyboardEvent, type MouseEvent, useState } from "react";
-import { addUnderlay, toolActions } from "../actions";
+import { addUnderlay, isEnabled, toolActions } from "../actions";
 import { format, isMacPlatform } from "../actions/shortcut";
 import { sendToEngine } from "../engine";
 import { formatNumber, type MessageKey, t } from "../i18n";
 import { formatArea } from "../inspector/format";
 import { openScanWizard } from "../scan/store";
 import { type DerivedInfo, useEditor } from "../store/editor";
+import { demolishedIds, type Status, statusOf, viewVariant, visibleIn } from "../variants/status";
+import { Variants } from "../variants/Variants";
 import { Icon, type IconName } from "./icons";
 import styles from "./Sidebar.module.css";
 
@@ -21,12 +23,15 @@ const toolIcons: Record<string, IconName> = {
   "tool.dimension": "ruler",
   "tool.leader": "leader",
   "tool.calibrate": "calibrate",
+  "tool.demolish": "demolish",
 };
 
 /** Панель инструментов режима «Обмер». */
 export function Toolbar() {
   const current = useEditor((s) => s.tool);
   const ready = useEditor((s) => s.engine.state === "ready");
+  // Подписка на вид: доступность инструментов зависит от него.
+  useEditor((s) => s.view);
   return (
     <nav className={styles.toolbar} aria-label={t("tools.label")}>
       {toolActions.map((action) => {
@@ -38,7 +43,7 @@ export function Toolbar() {
             key={action.id}
             label={label}
             aria-pressed={`tool.${current}` === action.id}
-            disabled={!ready}
+            disabled={!ready || !isEnabled(action)}
             onClick={action.run}
             data-tool={action.id.slice(5)}
           >
@@ -57,7 +62,7 @@ export function Toolbar() {
   );
 }
 
-type Tab = "objects" | "layers";
+type Tab = "objects" | "layers" | "variants";
 
 /** Левая панель: дерево объектов и слои. */
 export function Sidebar() {
@@ -65,7 +70,7 @@ export function Sidebar() {
   return (
     <aside className={styles.panel} aria-label={t("sidebar.objects")}>
       <div className={styles.tabs} role="tablist" aria-label={t("sidebar.tabs")}>
-        {(["objects", "layers"] as const).map((value) => (
+        {(["objects", "layers", "variants"] as const).map((value) => (
           <button
             key={value}
             type="button"
@@ -74,12 +79,18 @@ export function Sidebar() {
             className={styles.tab}
             onClick={() => setTab(value)}
           >
-            {t(value === "objects" ? "sidebar.objects" : "sidebar.layers")}
+            {t(
+              value === "objects"
+                ? "sidebar.objects"
+                : value === "layers"
+                  ? "sidebar.layers"
+                  : "sidebar.variants",
+            )}
           </button>
         ))}
       </div>
       <div className={styles.body} role="tabpanel">
-        {tab === "objects" ? <ObjectTree /> : <Layers />}
+        {tab === "objects" ? <ObjectTree /> : tab === "layers" ? <Layers /> : <Variants />}
       </div>
     </aside>
   );
@@ -89,6 +100,7 @@ interface TreeItem {
   id: string;
   label: string;
   meta?: string;
+  status?: Status | null;
 }
 
 const openingKeys: Record<OpeningKind, MessageKey> = {
@@ -105,58 +117,72 @@ function mm(value: number | undefined): string {
 export function treeGroups(
   doc: Document,
   derived: DerivedInfo,
+  view: View = { type: "survey" },
 ): { key: MessageKey; items: TreeItem[] }[] {
-  return [
+  const demolished = demolishedIds(doc, viewVariant(view));
+  const visible = <T extends { id: string; variant?: string }>(list: T[]) =>
+    list.filter((e) => visibleIn(view, e.variant));
+  const status = (e: { id: string; variant?: string }) =>
+    statusOf(view, demolished, e.id, e.variant);
+  const groups = [
     {
       key: "group.rooms",
-      items: doc.rooms.map((r) => {
+      items: visible(doc.rooms).map((r) => {
         const info = derived.rooms[r.id];
         return {
           id: r.id,
           label: r.name,
           meta: info?.closed ? formatArea(info.area) : "—",
+          status: status(r),
         };
       }),
     },
     {
       key: "group.walls",
-      items: doc.walls.map((w) => ({
+      items: visible(doc.walls).map((w) => ({
         id: w.id,
         label: t("item.wall", { length: mm(derived.walls[w.id]) }),
         meta: formatNumber(w.thickness),
+        status: status(w),
       })),
     },
     {
       key: "group.openings",
-      items: doc.openings.map((o) => ({
+      items: visible(doc.openings).map((o) => ({
         id: o.id,
         label: t(openingKeys[o.kind], { width: formatNumber(o.width) }),
+        status: status(o),
       })),
     },
     {
       key: "group.dimensions",
-      items: doc.dimensions.map((d) => ({
+      items: visible(doc.dimensions).map((d) => ({
         id: d.id,
         label: t("item.dimension", { length: mm(derived.dimensions[d.id]) }),
       })),
     },
     {
       key: "group.leaders",
-      items: doc.leaders.map((l) => ({ id: l.id, label: l.text || "—" })),
+      items: visible(doc.leaders).map((l) => ({ id: l.id, label: l.text || "—" })),
     },
     {
       key: "group.underlays",
       items: doc.underlays.map((u) => ({ id: u.id, label: u.name })),
     },
-  ].filter((group) => group.items.length > 0) as { key: MessageKey; items: TreeItem[] }[];
+  ];
+  return groups.filter((group) => group.items.length > 0) as {
+    key: MessageKey;
+    items: TreeItem[];
+  }[];
 }
 
 function ObjectTree() {
   const doc = useEditor((s) => s.document);
   const derived = useEditor((s) => s.derived);
   const selection = useEditor((s) => s.selection);
+  const view = useEditor((s) => s.view);
   if (!doc) return null;
-  const groups = treeGroups(doc, derived);
+  const groups = treeGroups(doc, derived, view);
   if (groups.length === 0) return <p className={styles.empty}>{t("sidebar.empty")}</p>;
 
   const pick = (event: MouseEvent, id: string) => {
@@ -187,6 +213,11 @@ function ObjectTree() {
                   onClick={(event) => pick(event, item.id)}
                 >
                   <span className={styles.itemLabel}>{item.label}</span>
+                  {item.status && item.status !== "existing" && (
+                    <span className={styles.status} data-status={item.status}>
+                      {t(item.status === "new" ? "status.new" : "status.demolish")}
+                    </span>
+                  )}
                   {item.meta && <span className={styles.meta}>{item.meta}</span>}
                 </button>
               </li>

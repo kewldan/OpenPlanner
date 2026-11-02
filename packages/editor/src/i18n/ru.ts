@@ -27,6 +27,7 @@ export const ru = {
   "sidebar.layers": "Слои",
   "sidebar.empty": "Пусто. Нарисуйте стены инструментом «Стена» (W) или добавьте подложку.",
   "sidebar.tabs": "Панель объектов",
+  "sidebar.variants": "Варианты",
 
   "group.walls": "Стены",
   "group.openings": "Проёмы",
@@ -39,6 +40,47 @@ export const ru = {
   "item.window": "Окно {width}",
   "item.arch": "Арка {width}",
   "item.dimension": "Размер {length}",
+
+  "variants.survey": "Обмер (как есть)",
+  "variants.add": "Новый вариант",
+  "variants.newName": "Вариант {letter}",
+  "variants.copyName": "{name} (копия)",
+  "variants.copy": "Копировать вариант",
+  "variants.remove": "Удалить вариант",
+  "variants.rename": "Название варианта",
+  "variants.compare": "Сравнить варианты…",
+  "variants.hint":
+    "Обмер общий: его правка попадает во все варианты. В варианте — демонтаж и новые элементы.",
+  "variants.confirmRemove": "Удалить «{name}» вместе с его элементами?",
+  "variants.changes": "−{demolished} м · +{added} м стен",
+
+  "status.label": "Статус",
+  "status.existing": "Существующий",
+  "status.demolish": "Демонтаж",
+  "status.new": "Новый",
+
+  "material.label": "Материал",
+  "material.none": "Не указан",
+  "material.aeratedConcrete": "Газобетон",
+  "material.gypsum": "ГКЛ",
+  "material.brick": "Кирпич",
+
+  "compare.title": "Сравнение вариантов",
+  "compare.left": "Слева",
+  "compare.right": "Справа",
+  "compare.room": "Помещение",
+  "compare.delta": "Разница",
+  "compare.total": "Всего",
+  "compare.changes": "Изменения",
+  "compare.demolished": "Демонтаж стен",
+  "compare.newWalls": "Новые стены",
+  "compare.openingsAdded": "Новые проёмы",
+  "compare.openingsClosed": "Заложенные проёмы",
+  "compare.none": "без изменений",
+  "compare.show": "Показать рядом на плане",
+  "compare.exit": "Выйти из сравнения",
+  "compare.banner": "Сравнение: {left} ↔ {right}",
+  "compare.amount": "{length} м · {area} м²",
 
   "layers.add": "Добавить слой",
   "layers.newName": "Слой {n}",
@@ -61,6 +103,7 @@ export const ru = {
   "tool.dimension": "Размер",
   "tool.leader": "Выноска",
   "tool.calibrate": "Калибровка подложки",
+  "tool.demolish": "Демонтаж",
   "tool.underlay": "Добавить подложку",
 
   "step.idle": "Щелчок — выбрать, Shift — добавить, рамкой — несколько; ручки правят точки",
@@ -77,6 +120,9 @@ export const ru = {
   "step.calibrateFirst": "Первая точка отрезка известной длины на подложке",
   "step.calibrateSecond": "Вторая точка отрезка",
   "step.calibrateDistance": "Введите настоящую длину отрезка",
+  "step.demolishPick":
+    "Щёлкните стену, проём или помещение обмера — демонтаж; повторный щелчок отменяет",
+  "step.unavailable": "Сравнение вариантов: план только для просмотра · Esc — выйти",
 
   "snap.endpoint": "конец",
   "snap.midpoint": "середина",
