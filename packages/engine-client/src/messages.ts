@@ -18,12 +18,14 @@ export type {
   LayerKind,
   Leader,
   LengthInfo,
+  MaterialAmount,
   Node,
   Opening,
   OpeningKind,
   PointerPhase,
   ProjectMeta,
   Room,
+  RoomArea,
   RoomInfo,
   ScanAnswer,
   ScanFailure,
@@ -43,7 +45,11 @@ export type {
   ToolOptions,
   ToolStep,
   Underlay,
+  Variant,
+  View,
+  ViewSummary,
   Wall,
+  WallMaterial,
 } from "../wasm/op_engine";
 
 /** Вызов движка, на который приходит ответ. */

@@ -85,3 +85,14 @@
 .stack .control > * {
   flex: 1;
 }
+
+.badge {
+  margin: var(--space-5) var(--space-6) 0;
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--sel);
+  color: var(--accent-text);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}

@@ -56,6 +56,8 @@ pub struct EngineState {
     pub(crate) projected: Document,
     /// Обмер и его производные — в виде варианта (для показа демонтажа).
     pub(crate) survey: Option<(Document, Derived)>,
+    /// Камера до входа в сравнение: при выходе план возвращается туда же.
+    camera_before_compare: Option<Camera2D>,
     /// Документ с непримёненной правкой (во время перетаскивания).
     pub(crate) preview: Option<(Document, Derived)>,
     pub(crate) tool: Tool,
@@ -81,6 +83,7 @@ impl EngineState {
             projected: doc.clone(),
             view: View::Survey,
             survey: None,
+            camera_before_compare: None,
             history: History::new(doc),
             camera: Camera2D::new(),
             viewport,
@@ -192,6 +195,16 @@ impl EngineState {
             return vec![FromEngine::Error {
                 message: "Такого варианта нет".into(),
             }];
+        }
+        let comparing = matches!(self.view, View::Compare { .. });
+        match (comparing, matches!(view, View::Compare { .. })) {
+            (false, true) => self.camera_before_compare = Some(self.camera),
+            (true, false) => {
+                if let Some(camera) = self.camera_before_compare.take() {
+                    self.camera = camera;
+                }
+            }
+            _ => {}
         }
         self.view = view;
         self.reset_interaction();
@@ -849,7 +862,16 @@ impl EngineState {
     }
 
     pub(crate) fn derived_event(&self) -> FromEngine {
-        let (rooms, walls, dimensions, free_regions) = self.derived.infos(self.doc());
+        let (rooms, mut walls, dimensions, free_regions) = self.derived.infos(self.doc());
+        // Демонтированные стены обмера не входят в вид варианта, но их длина нужна инспектору.
+        if let Some((doc, derived)) = &self.survey {
+            let (_, survey_walls, _, _) = derived.infos(doc);
+            walls.extend(
+                survey_walls
+                    .into_iter()
+                    .filter(|w| self.doc().wall(&w.id).is_none()),
+            );
+        }
         FromEngine::DerivedChanged {
             rooms,
             walls,
