@@ -2542,6 +2542,7 @@ dependencies = [
  "op-scan",
  "serde",
  "serde-wasm-bindgen",
+ "serde_bytes",
  "serde_json",
  "tsify",
  "wasm-bindgen",

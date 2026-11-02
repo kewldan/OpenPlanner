@@ -5,6 +5,9 @@
 mod files;
 #[cfg(target_os = "linux")]
 mod linux;
+mod mcp;
+
+use tauri::Manager as _;
 
 /// Версия приложения для манифеста `.oplan` и окна «О программе».
 #[tauri::command]
@@ -68,9 +71,22 @@ fn selftest_report(app: tauri::AppHandle, ok: bool, details: String) -> Result<(
 /// Падает, если Tauri не смог создать окно или цикл событий.
 #[allow(clippy::expect_used)] // без окна приложению нечего делать
 pub fn run() {
+    // `openplanner-desktop mcp` — мост stdio для MCP-клиента, без окна.
+    if std::env::args().nth(1).as_deref() == Some("mcp") {
+        std::process::exit(mcp::bridge());
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            // Сервер MCP для агентов; без него приложение работает как обычно.
+            match mcp::serve(app.handle()) {
+                Ok(server) => {
+                    app.manage(server);
+                }
+                // Журнал запуска: приложение работает и без MCP.
+                #[allow(clippy::print_stderr)]
+                Err(err) => eprintln!("MCP недоступен: {err}"),
+            }
             // Главное окно создаётся здесь (в конфиге `create: false`), чтобы
             // можно было передать настройки WebView до его создания.
             let config = app
@@ -124,6 +140,8 @@ pub fn run() {
             files::journal_reset,
             files::journal_append,
             files::journal_remove,
+            mcp::mcp_ready,
+            mcp::mcp_reply,
         ])
         .run(tauri::generate_context!())
         .expect("не удалось запустить OpenPlanner");
