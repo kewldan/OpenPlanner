@@ -13,8 +13,8 @@ const modes: readonly { value: EditorMode; label: string; disabled: boolean }[] 
   { value: "measure", label: t("mode.measure"), disabled: false },
   { value: "replan", label: t("mode.replan"), disabled: false },
   { value: "furniture", label: t("mode.furniture"), disabled: false },
-  { value: "electric", label: t("mode.electric"), disabled: true },
-  { value: "light", label: t("mode.light"), disabled: true },
+  { value: "electric", label: t("mode.electric"), disabled: false },
+  { value: "light", label: t("mode.light"), disabled: false },
   { value: "plumbing", label: t("mode.plumbing"), disabled: true },
   { value: "finish", label: t("mode.finish"), disabled: true },
 ];
@@ -50,9 +50,9 @@ export function TopBar() {
     return s.summaries.find((x) => x.variant === id)?.name ?? t("variants.survey");
   });
   const setMode = (next: EditorMode) => {
-    // «Мебель» не меняет вид (обмер или вариант) — открывает каталог.
-    if (next === "furniture") {
-      useEditor.getState().setMode("furniture");
+    // «Мебель», «Электрика» и «Освещение» не меняют вид (обмер или вариант) — открывают каталог.
+    if (next === "furniture" || next === "electric" || next === "light") {
+      useEditor.getState().setMode(next);
       useEditor.getState().setSidebarTab("catalog");
     } else {
       useEditor.getState().setMode(next);

@@ -1,7 +1,9 @@
 import type {
   CameraInfo,
   CatalogEntry,
+  DeviceEntry,
   Document,
+  ElectricalReport,
   FromEngine,
   LengthInfo,
   Options3d,
@@ -28,7 +30,7 @@ export type EditorMode =
 export type EditorDialog = "palette" | "shortcuts" | "scan" | "compare" | "drawings" | null;
 
 /** Вкладка левой панели. */
-export type SidebarTab = "objects" | "layers" | "variants" | "catalog";
+export type SidebarTab = "objects" | "layers" | "variants" | "catalog" | "electrical";
 
 export type EngineStatus =
   | { state: "starting" }
@@ -87,6 +89,10 @@ export interface EditorState {
   three: { options: Options3d; camera: CameraInfo | null; sun: SunInfo | null };
   /** Каталог мебели из движка. */
   catalog: CatalogEntry[];
+  /** Каталог электроточек из движка. */
+  deviceCatalog: DeviceEntry[];
+  /** Расчёт электрики текущего вида. */
+  electrical: ElectricalReport | null;
   /** Открытая вкладка левой панели. */
   sidebarTab: SidebarTab;
   setSidebarTab: (tab: SidebarTab) => void;
@@ -134,6 +140,8 @@ export const useEditor = create<EditorState>()((set) => ({
     sun: null,
   },
   catalog: [],
+  deviceCatalog: [],
+  electrical: null,
   sidebarTab: "objects",
   setSidebarTab: (sidebarTab) => set({ sidebarTab }),
   setMode: (mode) => set({ mode }),
@@ -191,8 +199,8 @@ function reduce(acc: Partial<EditorState>, event: FromEngine): Partial<EditorSta
         view: event.view,
         // Режим «Мебель» работает в любом виде и сохраняется, пока его не сменят.
         mode:
-          acc.mode === "furniture"
-            ? "furniture"
+          acc.mode === "furniture" || acc.mode === "electric" || acc.mode === "light"
+            ? acc.mode
             : event.view.type === "survey"
               ? "measure"
               : "replan",
@@ -202,6 +210,10 @@ function reduce(acc: Partial<EditorState>, event: FromEngine): Partial<EditorSta
       return { ...acc, summaries: event.views };
     case "catalog":
       return { ...acc, catalog: event.items };
+    case "deviceCatalog":
+      return { ...acc, deviceCatalog: event.items };
+    case "electrical":
+      return { ...acc, electrical: event.report };
     case "view3dChanged":
       return {
         ...acc,

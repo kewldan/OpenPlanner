@@ -1,8 +1,9 @@
-import type { Document, Layer, OpeningKind, View } from "@openplanner/engine-client";
+import type { DeviceKind, Document, Layer, OpeningKind, View } from "@openplanner/engine-client";
 import { IconButton } from "@openplanner/ui";
 import { type KeyboardEvent, type MouseEvent, useState } from "react";
 import { addUnderlay, isEnabled, toolActions } from "../actions";
 import { format, isMacPlatform } from "../actions/shortcut";
+import { ElectricalPanel } from "../electric/ElectricalPanel";
 import { sendToEngine } from "../engine";
 import { Catalog } from "../furniture/Catalog";
 import { formatNumber, type MessageKey, t } from "../i18n";
@@ -69,16 +70,24 @@ const tabTitles: Record<SidebarTab, MessageKey> = {
   catalog: "sidebar.catalog",
   layers: "sidebar.layers",
   variants: "sidebar.variants",
+  electrical: "sidebar.electrical",
 };
 
 /** Левая панель: дерево объектов, каталог мебели, слои, варианты. */
 export function Sidebar() {
-  const tab = useEditor((s) => s.sidebarTab);
+  const selected = useEditor((s) => s.sidebarTab);
   const setTab = useEditor((s) => s.setSidebarTab);
+  const mode = useEditor((s) => s.mode);
+  // Вкладка щита нужна только в режимах «Электрика» и «Освещение».
+  const electric = mode === "electric" || mode === "light";
+  const tabs = (["objects", "catalog", "electrical", "layers", "variants"] as const).filter(
+    (value) => value !== "electrical" || electric,
+  );
+  const tab = selected === "electrical" && !electric ? "objects" : selected;
   return (
     <aside className={styles.panel} aria-label={t("sidebar.objects")}>
       <div className={styles.tabs} role="tablist" aria-label={t("sidebar.tabs")}>
-        {(["objects", "catalog", "layers", "variants"] as const).map((value) => (
+        {tabs.map((value) => (
           <button
             key={value}
             type="button"
@@ -96,6 +105,8 @@ export function Sidebar() {
           <ObjectTree />
         ) : tab === "catalog" ? (
           <Catalog />
+        ) : tab === "electrical" ? (
+          <ElectricalPanel />
         ) : tab === "layers" ? (
           <Layers />
         ) : (
@@ -105,6 +116,31 @@ export function Sidebar() {
     </aside>
   );
 }
+
+/** Короткие названия электроточек для дерева объектов. */
+const deviceNames: Record<DeviceKind, string> = {
+  socket: "Розетка",
+  socketDouble: "Розетка двойная",
+  socketWaterproof: "Розетка IP44",
+  socketPower: "Розетка 380 В",
+  socketData: "Розетка LAN",
+  socketTv: "Розетка ТВ",
+  cableOutlet: "Вывод кабеля",
+  floorOutlet: "Напольный лючок",
+  ceilingOutlet: "Вывод на потолке",
+  switch1: "Выключатель",
+  switch2: "Выключатель 2-кл.",
+  switch3: "Выключатель 3-кл.",
+  passSwitch: "Проходной выключатель",
+  crossSwitch: "Перекрёстный выключатель",
+  ceilingLight: "Светильник",
+  pendant: "Подвес",
+  spot: "Точечный светильник",
+  wallLight: "Бра",
+  ledStrip: "Светодиодная лента",
+  junctionBox: "Распредкоробка",
+  panel: "Электрощит",
+};
 
 interface TreeItem {
   id: string;
@@ -182,6 +218,15 @@ export function treeGroups(
         label: f.name,
         meta: `${formatNumber(f.width)}×${formatNumber(f.depth)}`,
         status: status(f),
+      })),
+    },
+    {
+      key: "group.devices",
+      items: visible(doc.devices ?? []).map((d) => ({
+        id: d.id,
+        label: d.label ? `${deviceNames[d.kind]} · ${d.label}` : deviceNames[d.kind],
+        meta: `H ${formatNumber(d.height)}`,
+        status: status(d),
       })),
     },
     {
@@ -264,6 +309,7 @@ function layerUsage(doc: Document, id: string): number {
     doc.leaders,
     doc.underlays,
     doc.furniture ?? [],
+    doc.devices ?? [],
   ].reduce((sum, list) => sum + list.filter((e) => e.layer === id).length, 0);
 }
 

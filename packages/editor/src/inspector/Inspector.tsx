@@ -1,4 +1,5 @@
 import type {
+  Device,
   Dimension,
   Document,
   Element,
@@ -15,6 +16,7 @@ import type {
 } from "@openplanner/engine-client";
 import { Button, Segmented } from "@openplanner/ui";
 import type { ReactNode } from "react";
+import { DeviceSection } from "../electric/DeviceSection";
 import { sendToEngine } from "../engine";
 import { formatNumber, type MessageKey, t } from "../i18n";
 import { useEditor } from "../store/editor";
@@ -103,7 +105,8 @@ type Selected =
   | { type: "dimension"; element: Dimension }
   | { type: "leader"; element: Leader }
   | { type: "underlay"; element: Underlay }
-  | { type: "furniture"; element: Furniture };
+  | { type: "furniture"; element: Furniture }
+  | { type: "device"; element: Device };
 
 /** Элемент документа по идентификатору. */
 export function findElement(doc: Document, id: string): Selected | null {
@@ -121,6 +124,8 @@ export function findElement(doc: Document, id: string): Selected | null {
   if (underlay) return { type: "underlay", element: underlay };
   const furniture = (doc.furniture ?? []).find((e) => e.id === id);
   if (furniture) return { type: "furniture", element: furniture };
+  const device = (doc.devices ?? []).find((e) => e.id === id);
+  if (device) return { type: "device", element: device };
   return null;
 }
 
@@ -360,6 +365,7 @@ const sectionTitles: Record<Selected["type"], () => string> = {
   leader: () => t("inspector.leader"),
   underlay: () => t("inspector.underlay"),
   furniture: () => t("inspector.furniture"),
+  device: () => t("devices.device"),
 };
 
 function StatusSection({ selected, demolished }: { selected: Selected; demolished: boolean }) {
@@ -377,7 +383,8 @@ function StatusSection({ selected, demolished }: { selected: Selected; demolishe
     selected.type === "wall" ||
     selected.type === "opening" ||
     selected.type === "room" ||
-    selected.type === "furniture";
+    selected.type === "furniture" ||
+    selected.type === "device";
   return (
     <Section title={title}>
       {selected.type === "wall" && length !== undefined && (
@@ -446,6 +453,20 @@ function ElementFields({ selected, document }: { selected: Selected; document: D
       return <UnderlaySection underlay={selected.element} document={document} />;
     case "furniture":
       return <FurnitureSection furniture={selected.element} document={document} />;
+    case "device":
+      return (
+        <>
+          <DeviceSection device={selected.element} document={document} />
+          <Section title="">
+            <LayerSelect
+              document={document}
+              value={selected.element.layer}
+              onChange={(layer) => put({ type: "device", ...selected.element, layer })}
+            />
+            <DeleteButton />
+          </Section>
+        </>
+      );
   }
 }
 

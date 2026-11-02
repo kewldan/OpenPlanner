@@ -1,5 +1,6 @@
 import { Button } from "@openplanner/ui";
 import { useState } from "react";
+import { DeviceCatalog } from "../electric/DeviceCatalog";
 import { formatNumber, t } from "../i18n";
 import { useEditor } from "../store/editor";
 import styles from "./Catalog.module.css";
@@ -7,6 +8,12 @@ import { byCategory, DRAG_TYPE, importModel, pickItem, searchCatalog } from "./i
 
 /** Каталог мебели: поиск, разделы, позиции с обозначениями; щелчок или перетаскивание на план. */
 export function Catalog() {
+  const mode = useEditor((s) => s.mode);
+  if (mode === "electric" || mode === "light") return <DeviceCatalog lighting={mode === "light"} />;
+  return <FurnitureCatalog />;
+}
+
+function FurnitureCatalog() {
   const catalog = useEditor((s) => s.catalog);
   const tool = useEditor((s) => s.tool);
   const [query, setQuery] = useState("");
