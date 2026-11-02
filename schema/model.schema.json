@@ -215,6 +215,31 @@
       ],
       "type": "object"
     },
+    "DeviceGroup": {
+      "description": "Группа электроточек для правила объёма.",
+      "oneOf": [
+        {
+          "const": "outlet",
+          "description": "Розетки и выводы.",
+          "type": "string"
+        },
+        {
+          "const": "switch",
+          "description": "Выключатели.",
+          "type": "string"
+        },
+        {
+          "const": "light",
+          "description": "Светильники.",
+          "type": "string"
+        },
+        {
+          "const": "panel",
+          "description": "Щит.",
+          "type": "string"
+        }
+      ]
+    },
     "DeviceKind": {
       "description": "Вид электроточки.",
       "oneOf": [
@@ -807,6 +832,297 @@
         }
       ]
     },
+    "Measure": {
+      "description": "Откуда берётся объём позиции сметы.",
+      "oneOf": [
+        {
+          "description": "Объём вводится вручную.",
+          "properties": {
+            "type": {
+              "const": "manual",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Площадь пола помещений, м².",
+          "properties": {
+            "type": {
+              "const": "floorArea",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Площадь потолка, м².",
+          "properties": {
+            "type": {
+              "const": "ceilingArea",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Площадь стен за вычетом проёмов, м².",
+          "properties": {
+            "type": {
+              "const": "wallArea",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Периметр помещений, м.",
+          "properties": {
+            "type": {
+              "const": "perimeter",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Демонтируемые стены, м².",
+          "properties": {
+            "type": {
+              "const": "demolition",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Новые перегородки, м² (без материала — все).",
+          "properties": {
+            "material": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/WallMaterial"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Материал."
+            },
+            "type": {
+              "const": "partitions",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Новые проёмы, шт.",
+          "properties": {
+            "type": {
+              "const": "newOpenings",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Электроточки, шт. (без группы — все).",
+          "properties": {
+            "group": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/DeviceGroup"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Группа."
+            },
+            "type": {
+              "const": "devices",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Кабель по трассам групп, м.",
+          "properties": {
+            "type": {
+              "const": "cable",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Выводы сантехники, шт. (без системы — все).",
+          "properties": {
+            "system": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PipeSystem"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Система."
+            },
+            "type": {
+              "const": "outlets",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Трубы, м (без системы — все).",
+          "properties": {
+            "system": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PipeSystem"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Система."
+            },
+            "type": {
+              "const": "pipes",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Сантехнические приборы, шт.",
+          "properties": {
+            "type": {
+              "const": "fixtures",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Предметы мебели, шт.",
+          "properties": {
+            "type": {
+              "const": "furniture",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Площадь отделки, м² (по поверхности и виду материала; без значения — любые).",
+          "properties": {
+            "kind": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MaterialKind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Вид материала."
+            },
+            "surface": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Surface"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Поверхность."
+            },
+            "type": {
+              "const": "finish",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Расход из расчёта отделки: «Плитка», «Клей», «Затирка», «Краска»…",
+          "properties": {
+            "material": {
+              "description": "Только этот материал.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "name": {
+              "description": "Название количества.",
+              "type": "string"
+            },
+            "type": {
+              "const": "consumption",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "name"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "Node": {
       "description": "Узел — точка, в которой начинаются и заканчиваются стены.",
       "properties": {
@@ -1145,6 +1461,108 @@
       ],
       "type": "object"
     },
+    "PriceItem": {
+      "description": "Позиция прайса: работа или материал, цена и правило объёма из модели.",
+      "properties": {
+        "code": {
+          "default": "",
+          "description": "Код (артикул) — по нему сопоставляется импорт.",
+          "type": "string"
+        },
+        "history": {
+          "description": "Прежние цены, от старых к новым.",
+          "items": {
+            "$ref": "#/$defs/PricePoint"
+          },
+          "type": "array"
+        },
+        "id": {
+          "description": "Идентификатор.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/PriceKind",
+          "description": "Работа или материал."
+        },
+        "measure": {
+          "$ref": "#/$defs/Measure",
+          "description": "Откуда объём."
+        },
+        "name": {
+          "description": "Наименование.",
+          "type": "string"
+        },
+        "price": {
+          "description": "Цена за единицу, ₽.",
+          "format": "double",
+          "type": "number"
+        },
+        "rate": {
+          "description": "Норма: единиц позиции на единицу объёма (расход материала).",
+          "format": "double",
+          "type": "number"
+        },
+        "reserve": {
+          "default": 0.0,
+          "description": "Запас: доля сверх нормы (0,1 — 10 %).",
+          "format": "double",
+          "type": "number"
+        },
+        "section": {
+          "description": "Раздел сметы: «Демонтаж», «Электрика»…",
+          "type": "string"
+        },
+        "unit": {
+          "description": "Единица: «м²», «шт.», «кг».",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "section",
+        "name",
+        "kind",
+        "unit",
+        "price",
+        "measure",
+        "rate"
+      ],
+      "type": "object"
+    },
+    "PriceKind": {
+      "description": "Вид позиции прайса.",
+      "oneOf": [
+        {
+          "const": "work",
+          "description": "Работа.",
+          "type": "string"
+        },
+        {
+          "const": "material",
+          "description": "Материал (попадает в список закупок).",
+          "type": "string"
+        }
+      ]
+    },
+    "PricePoint": {
+      "description": "Цена на дату.",
+      "properties": {
+        "date": {
+          "description": "Дата: «ДД.ММ.ГГГГ».",
+          "type": "string"
+        },
+        "price": {
+          "description": "Цена за единицу, ₽.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "date",
+        "price"
+      ],
+      "type": "object"
+    },
     "ProjectMeta": {
       "description": "Сведения о проекте, которые попадают в основную надпись чертежей.",
       "properties": {
@@ -1185,6 +1603,32 @@
       "required": [
         "title",
         "address"
+      ],
+      "type": "object"
+    },
+    "QuantityOverride": {
+      "description": "Объём строки сметы, заданный вручную вместо посчитанного по модели.",
+      "properties": {
+        "item": {
+          "description": "Позиция прайса.",
+          "type": "string"
+        },
+        "quantity": {
+          "description": "Объём.",
+          "format": "double",
+          "type": "number"
+        },
+        "room": {
+          "description": "Помещение строки (без значения — строка без помещения).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "item",
+        "quantity"
       ],
       "type": "object"
     },
@@ -1679,6 +2123,14 @@
       },
       "type": "array"
     },
+    "overrides": {
+      "default": [],
+      "description": "Объёмы строк сметы, заданные вручную.",
+      "items": {
+        "$ref": "#/$defs/QuantityOverride"
+      },
+      "type": "array"
+    },
     "pipes": {
       "default": [],
       "description": "Трубы.",
@@ -1692,6 +2144,14 @@
       "description": "Сантехнические точки: выводы, стояки, коллекторы.",
       "items": {
         "$ref": "#/$defs/PlumbingPoint"
+      },
+      "type": "array"
+    },
+    "prices": {
+      "default": [],
+      "description": "Прайс проекта: позиции сметы.",
+      "items": {
+        "$ref": "#/$defs/PriceItem"
       },
       "type": "array"
     },

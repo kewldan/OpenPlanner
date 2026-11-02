@@ -948,6 +948,169 @@ pub struct Finish {
     pub layout: TileLayout,
 }
 
+/// Вид позиции прайса.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub enum PriceKind {
+    /// Работа.
+    Work,
+    /// Материал (попадает в список закупок).
+    Material,
+}
+
+/// Группа электроточек для правила объёма.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub enum DeviceGroup {
+    /// Розетки и выводы.
+    Outlet,
+    /// Выключатели.
+    Switch,
+    /// Светильники.
+    Light,
+    /// Щит.
+    Panel,
+}
+
+/// Откуда берётся объём позиции сметы.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum Measure {
+    /// Объём вводится вручную.
+    Manual,
+    /// Площадь пола помещений, м².
+    FloorArea,
+    /// Площадь потолка, м².
+    CeilingArea,
+    /// Площадь стен за вычетом проёмов, м².
+    WallArea,
+    /// Периметр помещений, м.
+    Perimeter,
+    /// Демонтируемые стены, м².
+    Demolition,
+    /// Новые перегородки, м² (без материала — все).
+    Partitions {
+        /// Материал.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "wasm", tsify(optional))]
+        material: Option<WallMaterial>,
+    },
+    /// Новые проёмы, шт.
+    NewOpenings,
+    /// Электроточки, шт. (без группы — все).
+    Devices {
+        /// Группа.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "wasm", tsify(optional))]
+        group: Option<DeviceGroup>,
+    },
+    /// Кабель по трассам групп, м.
+    Cable,
+    /// Выводы сантехники, шт. (без системы — все).
+    Outlets {
+        /// Система.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "wasm", tsify(optional))]
+        system: Option<PipeSystem>,
+    },
+    /// Трубы, м (без системы — все).
+    Pipes {
+        /// Система.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "wasm", tsify(optional))]
+        system: Option<PipeSystem>,
+    },
+    /// Сантехнические приборы, шт.
+    Fixtures,
+    /// Предметы мебели, шт.
+    Furniture,
+    /// Площадь отделки, м² (по поверхности и виду материала; без значения — любые).
+    Finish {
+        /// Поверхность.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "wasm", tsify(optional))]
+        surface: Option<Surface>,
+        /// Вид материала.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "wasm", tsify(optional))]
+        kind: Option<MaterialKind>,
+    },
+    /// Расход из расчёта отделки: «Плитка», «Клей», «Затирка», «Краска»…
+    Consumption {
+        /// Название количества.
+        name: String,
+        /// Только этот материал.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "wasm", tsify(optional))]
+        material: Option<String>,
+    },
+}
+
+/// Цена на дату.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub struct PricePoint {
+    /// Дата: «ДД.ММ.ГГГГ».
+    pub date: String,
+    /// Цена за единицу, ₽.
+    pub price: f64,
+}
+
+/// Позиция прайса: работа или материал, цена и правило объёма из модели.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub struct PriceItem {
+    /// Идентификатор.
+    pub id: String,
+    /// Код (артикул) — по нему сопоставляется импорт.
+    #[serde(default)]
+    pub code: String,
+    /// Раздел сметы: «Демонтаж», «Электрика»…
+    pub section: String,
+    /// Наименование.
+    pub name: String,
+    /// Работа или материал.
+    pub kind: PriceKind,
+    /// Единица: «м²», «шт.», «кг».
+    pub unit: String,
+    /// Цена за единицу, ₽.
+    pub price: f64,
+    /// Откуда объём.
+    pub measure: Measure,
+    /// Норма: единиц позиции на единицу объёма (расход материала).
+    pub rate: f64,
+    /// Запас: доля сверх нормы (0,1 — 10 %).
+    #[serde(default)]
+    pub reserve: f64,
+    /// Прежние цены, от старых к новым.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub history: Vec<PricePoint>,
+}
+
+/// Объём строки сметы, заданный вручную вместо посчитанного по модели.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub struct QuantityOverride {
+    /// Позиция прайса.
+    pub item: String,
+    /// Помещение строки (без значения — строка без помещения).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub room: Option<String>,
+    /// Объём.
+    pub quantity: f64,
+}
+
 /// Выноска: стрелка к точке и текст.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
@@ -1052,6 +1215,12 @@ pub struct Document {
     /// Отделка поверхностей помещений.
     #[serde(default)]
     pub finishes: Vec<Finish>,
+    /// Прайс проекта: позиции сметы.
+    #[serde(default)]
+    pub prices: Vec<PriceItem>,
+    /// Объёмы строк сметы, заданные вручную.
+    #[serde(default)]
+    pub overrides: Vec<QuantityOverride>,
     /// Варианты перепланировки.
     #[serde(default)]
     pub variants: Vec<Variant>,
@@ -1107,6 +1276,8 @@ impl Document {
             pipes: Vec::new(),
             materials: Vec::new(),
             finishes: Vec::new(),
+            prices: Vec::new(),
+            overrides: Vec::new(),
             variants: Vec::new(),
             drawing: DrawingSettings::default(),
             site: Site::default(),

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     AssetData, Circuit, Document, DrawingSettings, Element, Finish, LightScene, Material,
-    ProjectMeta, SavedView, Site, Surface, element,
+    PriceItem, ProjectMeta, QuantityOverride, SavedView, Site, Surface, element,
 };
 
 /// Ошибка применения команды. Документ при ошибке не меняется.
@@ -102,6 +102,16 @@ pub enum Command {
     SetFinishes {
         /// Отделка.
         finishes: Vec<Finish>,
+    },
+    /// Заменить прайс проекта.
+    SetPrices {
+        /// Позиции.
+        prices: Vec<PriceItem>,
+    },
+    /// Заменить объёмы строк сметы, заданные вручную.
+    SetOverrides {
+        /// Объёмы.
+        overrides: Vec<QuantityOverride>,
     },
     /// Добавить элемент или заменить элемент с тем же идентификатором.
     Put {
@@ -285,6 +295,40 @@ impl Command {
                 }
                 let previous = std::mem::replace(&mut doc.finishes, finishes);
                 Ok(Self::SetFinishes { finishes: previous })
+            }
+            Self::SetPrices { prices } => {
+                for p in &prices {
+                    let numbers = [p.price, p.rate, p.reserve];
+                    if p.id.is_empty()
+                        || p.name.trim().is_empty()
+                        || numbers.iter().any(|v| !v.is_finite() || *v < 0.0)
+                        || p.history
+                            .iter()
+                            .any(|h| !h.price.is_finite() || h.price < 0.0)
+                    {
+                        return Err(CommandError::InvalidValue {
+                            field: "prices",
+                            reason: "у позиции: идентификатор, наименование, цена, норма и запас не меньше нуля",
+                        });
+                    }
+                }
+                let previous = std::mem::replace(&mut doc.prices, prices);
+                Ok(Self::SetPrices { prices: previous })
+            }
+            Self::SetOverrides { overrides } => {
+                if overrides
+                    .iter()
+                    .any(|o| o.item.is_empty() || !o.quantity.is_finite() || o.quantity < 0.0)
+                {
+                    return Err(CommandError::InvalidValue {
+                        field: "overrides",
+                        reason: "объём строки сметы — число не меньше нуля",
+                    });
+                }
+                let previous = std::mem::replace(&mut doc.overrides, overrides);
+                Ok(Self::SetOverrides {
+                    overrides: previous,
+                })
             }
             Self::Put { element, index } => {
                 let id = element.id().to_owned();

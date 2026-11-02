@@ -13,8 +13,19 @@ pub(crate) type Migration = fn(Value) -> Result<Value, String>;
 
 /// `MIGRATIONS[i]` переводит формат `i + 1` в `i + 2`.
 const MIGRATIONS: &[Migration] = &[
-    v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8, v8_to_v9,
+    v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8, v8_to_v9, v9_to_v10,
 ];
+
+/// Формат 10 (стадия 10): прайс проекта и объёмы сметы, заданные вручную.
+fn v9_to_v10(mut model: Value) -> Result<Value, String> {
+    let object = model.as_object_mut().ok_or("ожидался объект модели")?;
+    for key in ["prices", "overrides"] {
+        object
+            .entry(key)
+            .or_insert_with(|| Value::Array(Vec::new()));
+    }
+    Ok(model)
+}
 
 /// Формат 9 (стадии 8 и 9): сантехника (точки, трубы, слой «Сантехника»), материалы и отделка.
 fn v8_to_v9(mut model: Value) -> Result<Value, String> {
@@ -275,6 +286,14 @@ mod format5 {
         assert_eq!(model["meta"]["stage"], "Р");
         assert_eq!(model["meta"]["designation"], "");
         assert_eq!(model["drawing"]["paper"], "a3Landscape");
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)] // тест
+    fn v9_gets_prices_and_overrides() {
+        let model = v9_to_v10(serde_json::json!({ "layers": [] })).unwrap();
+        assert_eq!(model["prices"], serde_json::json!([]));
+        assert_eq!(model["overrides"], serde_json::json!([]));
     }
 
     #[test]
