@@ -48,6 +48,283 @@
         }
       ]
     },
+    "Circuit": {
+      "description": "Группа электрощита.",
+      "properties": {
+        "breaker": {
+          "description": "Номинальный ток автомата, А.",
+          "format": "double",
+          "type": "number"
+        },
+        "demand": {
+          "description": "Коэффициент спроса Кс.",
+          "format": "double",
+          "type": "number"
+        },
+        "id": {
+          "description": "Идентификатор.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/CircuitKind",
+          "description": "Вид нагрузки."
+        },
+        "name": {
+          "description": "Обозначение: «Гр.1».",
+          "type": "string"
+        },
+        "phases": {
+          "description": "Число фаз: 1 или 3.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "purpose": {
+          "default": "",
+          "description": "Назначение: «Розетки кухни».",
+          "type": "string"
+        },
+        "rcd": {
+          "default": false,
+          "description": "Дифференциальная защита 30 мА (дифавтомат).",
+          "type": "boolean"
+        },
+        "section": {
+          "description": "Сечение жилы, мм².",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "kind",
+        "phases",
+        "breaker",
+        "section",
+        "demand"
+      ],
+      "type": "object"
+    },
+    "CircuitKind": {
+      "description": "Назначение группы щита.",
+      "oneOf": [
+        {
+          "const": "lighting",
+          "description": "Освещение.",
+          "type": "string"
+        },
+        {
+          "const": "sockets",
+          "description": "Розетки.",
+          "type": "string"
+        },
+        {
+          "const": "power",
+          "description": "Силовой потребитель (плита, бойлер, кондиционер).",
+          "type": "string"
+        }
+      ]
+    },
+    "Device": {
+      "description": "Электроточка: розетка, вывод, выключатель, светильник, коробка или щит.\n\nКак и мебель, ставится по локальным осям: на стене — спинкой (−Y) к грани.",
+      "properties": {
+        "circuit": {
+          "description": "Группа щита.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "flux": {
+          "default": 0.0,
+          "description": "Световой поток светильника, лм.",
+          "format": "double",
+          "type": "number"
+        },
+        "height": {
+          "description": "Высота установки H от чистого пола, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "id": {
+          "description": "Идентификатор.",
+          "type": "string"
+        },
+        "keys": {
+          "description": "Выключатель: светильники, которые включает каждая клавиша.",
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "$ref": "#/$defs/DeviceKind",
+          "description": "Вид."
+        },
+        "label": {
+          "default": "",
+          "description": "Назначение: «плита», «телевизор».",
+          "type": "string"
+        },
+        "layer": {
+          "description": "Слой.",
+          "type": "string"
+        },
+        "power": {
+          "default": 0.0,
+          "description": "Мощность нагрузки, Вт.",
+          "format": "double",
+          "type": "number"
+        },
+        "rotation": {
+          "default": 0.0,
+          "description": "Поворот по часовой стрелке, градусы.",
+          "format": "double",
+          "type": "number"
+        },
+        "variant": {
+          "description": "Вариант, в котором точка новая (без значения — обмер).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "x": {
+          "description": "Центр, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "y": {
+          "description": "Центр, мм.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "layer",
+        "kind",
+        "x",
+        "y",
+        "height"
+      ],
+      "type": "object"
+    },
+    "DeviceKind": {
+      "description": "Вид электроточки.",
+      "oneOf": [
+        {
+          "const": "socket",
+          "description": "Розетка.",
+          "type": "string"
+        },
+        {
+          "const": "socketDouble",
+          "description": "Розетка двойная.",
+          "type": "string"
+        },
+        {
+          "const": "socketWaterproof",
+          "description": "Розетка влагозащищённая (IP44).",
+          "type": "string"
+        },
+        {
+          "const": "socketPower",
+          "description": "Силовая розетка 380 В.",
+          "type": "string"
+        },
+        {
+          "const": "socketData",
+          "description": "Компьютерная розетка (RJ-45).",
+          "type": "string"
+        },
+        {
+          "const": "socketTv",
+          "description": "Телевизионная розетка.",
+          "type": "string"
+        },
+        {
+          "const": "cableOutlet",
+          "description": "Вывод кабеля под прибор (плита, бойлер, кондиционер).",
+          "type": "string"
+        },
+        {
+          "const": "floorOutlet",
+          "description": "Напольный лючок.",
+          "type": "string"
+        },
+        {
+          "const": "ceilingOutlet",
+          "description": "Потолочный вывод под светильник.",
+          "type": "string"
+        },
+        {
+          "const": "switch1",
+          "description": "Выключатель одноклавишный.",
+          "type": "string"
+        },
+        {
+          "const": "switch2",
+          "description": "Выключатель двухклавишный.",
+          "type": "string"
+        },
+        {
+          "const": "switch3",
+          "description": "Выключатель трёхклавишный.",
+          "type": "string"
+        },
+        {
+          "const": "passSwitch",
+          "description": "Проходной выключатель.",
+          "type": "string"
+        },
+        {
+          "const": "crossSwitch",
+          "description": "Перекрёстный выключатель.",
+          "type": "string"
+        },
+        {
+          "const": "ceilingLight",
+          "description": "Потолочный светильник.",
+          "type": "string"
+        },
+        {
+          "const": "pendant",
+          "description": "Подвесной светильник.",
+          "type": "string"
+        },
+        {
+          "const": "spot",
+          "description": "Точечный светильник.",
+          "type": "string"
+        },
+        {
+          "const": "wallLight",
+          "description": "Настенный светильник (бра).",
+          "type": "string"
+        },
+        {
+          "const": "ledStrip",
+          "description": "Светодиодная лента.",
+          "type": "string"
+        },
+        {
+          "const": "junctionBox",
+          "description": "Распределительная коробка.",
+          "type": "string"
+        },
+        {
+          "const": "panel",
+          "description": "Электрощит.",
+          "type": "string"
+        }
+      ]
+    },
     "Dimension": {
       "description": "Линейный размер между двумя точками.",
       "properties": {
@@ -299,6 +576,11 @@
           "const": "furniture",
           "description": "Мебель.",
           "type": "string"
+        },
+        {
+          "const": "electrical",
+          "description": "Электрика и освещение.",
+          "type": "string"
         }
       ]
     },
@@ -353,6 +635,32 @@
         "textX",
         "textY",
         "text"
+      ],
+      "type": "object"
+    },
+    "LightScene": {
+      "description": "Сценарий освещения: светильники, включённые вместе.",
+      "properties": {
+        "id": {
+          "description": "Идентификатор.",
+          "type": "string"
+        },
+        "lights": {
+          "description": "Светильники.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Название: «Вечер», «Кино».",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "lights"
       ],
       "type": "object"
     },
@@ -869,10 +1177,26 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Документ проекта.",
   "properties": {
+    "circuits": {
+      "default": [],
+      "description": "Группы электрощита.",
+      "items": {
+        "$ref": "#/$defs/Circuit"
+      },
+      "type": "array"
+    },
     "defaultCeilingHeight": {
       "description": "Высота потолка по умолчанию, мм.",
       "format": "double",
       "type": "number"
+    },
+    "devices": {
+      "default": [],
+      "description": "Электроточки и светильники.",
+      "items": {
+        "$ref": "#/$defs/Device"
+      },
+      "type": "array"
     },
     "dimensions": {
       "description": "Размеры.",
@@ -932,6 +1256,14 @@
       "description": "Помещения.",
       "items": {
         "$ref": "#/$defs/Room"
+      },
+      "type": "array"
+    },
+    "scenes": {
+      "default": [],
+      "description": "Сценарии освещения.",
+      "items": {
+        "$ref": "#/$defs/LightScene"
       },
       "type": "array"
     },

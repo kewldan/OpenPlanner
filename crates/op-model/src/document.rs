@@ -146,17 +146,20 @@ pub enum LayerKind {
     Scan,
     /// Мебель.
     Furniture,
+    /// Электрика и освещение.
+    Electrical,
 }
 
 impl LayerKind {
     /// Все системные слои в порядке по умолчанию (первый — снизу).
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::Scan,
         Self::Underlays,
         Self::Rooms,
         Self::Furniture,
         Self::Walls,
         Self::Openings,
+        Self::Electrical,
         Self::Dimensions,
         Self::Leaders,
     ];
@@ -173,6 +176,7 @@ impl LayerKind {
             Self::Underlays => "layer-underlays",
             Self::Scan => "layer-scan",
             Self::Furniture => "layer-furniture",
+            Self::Electrical => "layer-electrical",
         }
     }
 
@@ -188,6 +192,7 @@ impl LayerKind {
             Self::Underlays => "Подложка",
             Self::Scan => "Скан",
             Self::Furniture => "Мебель",
+            Self::Electrical => "Электрика",
         }
     }
 }
@@ -526,6 +531,174 @@ pub struct Furniture {
     pub model: Option<String>,
 }
 
+/// Вид электроточки.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub enum DeviceKind {
+    /// Розетка.
+    Socket,
+    /// Розетка двойная.
+    SocketDouble,
+    /// Розетка влагозащищённая (IP44).
+    SocketWaterproof,
+    /// Силовая розетка 380 В.
+    SocketPower,
+    /// Компьютерная розетка (RJ-45).
+    SocketData,
+    /// Телевизионная розетка.
+    SocketTv,
+    /// Вывод кабеля под прибор (плита, бойлер, кондиционер).
+    CableOutlet,
+    /// Напольный лючок.
+    FloorOutlet,
+    /// Потолочный вывод под светильник.
+    CeilingOutlet,
+    /// Выключатель одноклавишный.
+    Switch1,
+    /// Выключатель двухклавишный.
+    Switch2,
+    /// Выключатель трёхклавишный.
+    Switch3,
+    /// Проходной выключатель.
+    PassSwitch,
+    /// Перекрёстный выключатель.
+    CrossSwitch,
+    /// Потолочный светильник.
+    CeilingLight,
+    /// Подвесной светильник.
+    Pendant,
+    /// Точечный светильник.
+    Spot,
+    /// Настенный светильник (бра).
+    WallLight,
+    /// Светодиодная лента.
+    LedStrip,
+    /// Распределительная коробка.
+    JunctionBox,
+    /// Электрощит.
+    Panel,
+}
+
+impl DeviceKind {
+    /// Светильник.
+    #[must_use]
+    pub fn is_light(self) -> bool {
+        matches!(
+            self,
+            Self::CeilingLight | Self::Pendant | Self::Spot | Self::WallLight | Self::LedStrip
+        )
+    }
+
+    /// Число клавиш выключателя (0 — не выключатель).
+    #[must_use]
+    pub fn keys(self) -> usize {
+        match self {
+            Self::Switch1 | Self::PassSwitch | Self::CrossSwitch => 1,
+            Self::Switch2 => 2,
+            Self::Switch3 => 3,
+            _ => 0,
+        }
+    }
+}
+
+/// Электроточка: розетка, вывод, выключатель, светильник, коробка или щит.
+///
+/// Как и мебель, ставится по локальным осям: на стене — спинкой (−Y) к грани.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub struct Device {
+    /// Идентификатор.
+    pub id: String,
+    /// Слой.
+    pub layer: String,
+    /// Вариант, в котором точка новая (без значения — обмер).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub variant: Option<String>,
+    /// Вид.
+    pub kind: DeviceKind,
+    /// Центр, мм.
+    pub x: f64,
+    /// Центр, мм.
+    pub y: f64,
+    /// Поворот по часовой стрелке, градусы.
+    #[serde(default)]
+    pub rotation: f64,
+    /// Высота установки H от чистого пола, мм.
+    pub height: f64,
+    /// Назначение: «плита», «телевизор».
+    #[serde(default)]
+    pub label: String,
+    /// Мощность нагрузки, Вт.
+    #[serde(default)]
+    pub power: f64,
+    /// Световой поток светильника, лм.
+    #[serde(default)]
+    pub flux: f64,
+    /// Группа щита.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub circuit: Option<String>,
+    /// Выключатель: светильники, которые включает каждая клавиша.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub keys: Vec<Vec<String>>,
+}
+
+/// Назначение группы щита.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub enum CircuitKind {
+    /// Освещение.
+    Lighting,
+    /// Розетки.
+    Sockets,
+    /// Силовой потребитель (плита, бойлер, кондиционер).
+    Power,
+}
+
+/// Группа электрощита.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub struct Circuit {
+    /// Идентификатор.
+    pub id: String,
+    /// Обозначение: «Гр.1».
+    pub name: String,
+    /// Назначение: «Розетки кухни».
+    #[serde(default)]
+    pub purpose: String,
+    /// Вид нагрузки.
+    pub kind: CircuitKind,
+    /// Число фаз: 1 или 3.
+    pub phases: u8,
+    /// Номинальный ток автомата, А.
+    pub breaker: f64,
+    /// Дифференциальная защита 30 мА (дифавтомат).
+    #[serde(default)]
+    pub rcd: bool,
+    /// Сечение жилы, мм².
+    pub section: f64,
+    /// Коэффициент спроса Кс.
+    pub demand: f64,
+}
+
+/// Сценарий освещения: светильники, включённые вместе.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub struct LightScene {
+    /// Идентификатор.
+    pub id: String,
+    /// Название: «Вечер», «Кино».
+    pub name: String,
+    /// Светильники.
+    pub lights: Vec<String>,
+}
+
 /// Выноска: стрелка к точке и текст.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
@@ -609,6 +782,15 @@ pub struct Document {
     /// Мебель и оборудование.
     #[serde(default)]
     pub furniture: Vec<Furniture>,
+    /// Электроточки и светильники.
+    #[serde(default)]
+    pub devices: Vec<Device>,
+    /// Группы электрощита.
+    #[serde(default)]
+    pub circuits: Vec<Circuit>,
+    /// Сценарии освещения.
+    #[serde(default)]
+    pub scenes: Vec<LightScene>,
     /// Варианты перепланировки.
     #[serde(default)]
     pub variants: Vec<Variant>,
@@ -657,6 +839,9 @@ impl Document {
             leaders: Vec::new(),
             underlays: Vec::new(),
             furniture: Vec::new(),
+            devices: Vec::new(),
+            circuits: Vec::new(),
+            scenes: Vec::new(),
             variants: Vec::new(),
             drawing: DrawingSettings::default(),
             site: Site::default(),
@@ -711,6 +896,12 @@ impl Document {
     #[must_use]
     pub fn furniture_item(&self, id: &str) -> Option<&Furniture> {
         self.furniture.iter().find(|f| f.id == id)
+    }
+
+    /// Электроточка по идентификатору.
+    #[must_use]
+    pub fn device(&self, id: &str) -> Option<&Device> {
+        self.devices.iter().find(|d| d.id == id)
     }
 
     /// Вариант по идентификатору.

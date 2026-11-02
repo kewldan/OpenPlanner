@@ -42,6 +42,7 @@ pub fn project(doc: &Document, variant: Option<&str>) -> Document {
     out.rooms.retain(|e| keep(&e.variant, &e.id));
     out.leaders.retain(|e| keep(&e.variant, &e.id));
     out.furniture.retain(|e| keep(&e.variant, &e.id));
+    out.devices.retain(|e| keep(&e.variant, &e.id));
     let nodes: HashSet<String> = out.nodes.iter().map(|n| n.id.clone()).collect();
     out.dimensions.retain(|e| {
         keep(&e.variant, &e.id)

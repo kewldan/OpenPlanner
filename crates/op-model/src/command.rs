@@ -3,7 +3,10 @@ use std::sync::Arc;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{AssetData, Document, DrawingSettings, Element, ProjectMeta, SavedView, Site, element};
+use crate::{
+    AssetData, Circuit, Document, DrawingSettings, Element, LightScene, ProjectMeta, SavedView,
+    Site, element,
+};
 
 /// Ошибка применения команды. Документ при ошибке не меняется.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -79,6 +82,16 @@ pub enum Command {
     SetViews {
         /// Ракурсы.
         views: Vec<SavedView>,
+    },
+    /// Заменить список групп электрощита.
+    SetCircuits {
+        /// Группы.
+        circuits: Vec<Circuit>,
+    },
+    /// Заменить список сценариев освещения.
+    SetScenes {
+        /// Сценарии.
+        scenes: Vec<LightScene>,
     },
     /// Добавить элемент или заменить элемент с тем же идентификатором.
     Put {
@@ -189,6 +202,34 @@ impl Command {
                 }
                 let previous = std::mem::replace(&mut doc.views, views);
                 Ok(Self::SetViews { views: previous })
+            }
+            Self::SetCircuits { circuits } => {
+                for c in &circuits {
+                    let ok = matches!(c.phases, 1 | 3)
+                        && c.breaker.is_finite()
+                        && c.breaker > 0.0
+                        && c.section.is_finite()
+                        && c.section > 0.0
+                        && (0.0..=1.0).contains(&c.demand);
+                    if !ok || c.id.is_empty() {
+                        return Err(CommandError::InvalidValue {
+                            field: "circuits",
+                            reason: "у группы: 1 или 3 фазы, ток автомата и сечение больше нуля, Кс от 0 до 1",
+                        });
+                    }
+                }
+                let previous = std::mem::replace(&mut doc.circuits, circuits);
+                Ok(Self::SetCircuits { circuits: previous })
+            }
+            Self::SetScenes { scenes } => {
+                if scenes.iter().any(|s| s.id.is_empty()) {
+                    return Err(CommandError::InvalidValue {
+                        field: "scenes",
+                        reason: "у сценария должен быть идентификатор",
+                    });
+                }
+                let previous = std::mem::replace(&mut doc.scenes, scenes);
+                Ok(Self::SetScenes { scenes: previous })
             }
             Self::Put { element, index } => {
                 let id = element.id().to_owned();
