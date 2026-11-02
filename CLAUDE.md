@@ -4,7 +4,7 @@ Guidance for AI coding agents working in this repository.
 
 ## Project
 
-OpenPlanner is an open-source **desktop apartment-renovation planner**. One model of an apartment produces themed working-drawing sheets (survey, demolition, partitions, furniture, electrical, plumbing, finishes), an estimate and a 3D view. Work proceeds in **stages** (no throwaway MVP); Stages 0 (foundation), 1 (survey: walls, openings, rooms, dimensions, leaders, layers, image underlay), 2 (LiDAR scan import with review) 3 (replanning variants: demolition, partitions with materials, comparison), 4 (drawings and export: sheet set with wall elevations, title block, PDF/DXF/SVG/PNG/XLSX) and 5 (3D: orbit, walkthrough, saved views, section cut, sun with shadow map) are done; Stage 6 (furniture) is next.
+OpenPlanner is an open-source **desktop apartment-renovation planner**. One model of an apartment produces themed working-drawing sheets (survey, demolition, partitions, furniture, electrical, plumbing, finishes), an estimate and a 3D view. Work proceeds in **stages** (no throwaway MVP); Stages 0 (foundation), 1 (survey: walls, openings, rooms, dimensions, leaders, layers, image underlay), 2 (LiDAR scan import with review), 3 (replanning variants: demolition, partitions with materials, comparison), 4 (drawings and export: sheet set with wall elevations, title block, PDF/DXF/SVG/PNG/XLSX) and 5 (3D: orbit, walkthrough, saved views, section cut, sun with shadow map) are done; Stage 6 (furniture) is next.
 
 Key documents (written in Russian — read them before larger changes):
 
@@ -22,7 +22,7 @@ Key documents (written in Russian — read them before larger changes):
 
 ```
 WebView ─ UI thread (React)  ⇄ postMessage ⇄  Web Worker: op-engine (WASM) = model + wgpu renderer → OffscreenCanvas
-        └ Tauri IPC → native Rust: file system, journals, dialogs (later: scan, export)
+        └ Tauri IPC → native Rust: file system (.oplan, journals, export files), dialogs
 ```
 
 - **The Rust core owns the document.** All edits are `op_model::Command`s applied through `History` (reversible, serialisable): generic `put` / `remove` / `putAsset` / `removeAsset` / `batch` plus project-property commands. One user action = one command (usually a `batch`) = one undo step = one journal line. The UI never mutates the model; it sends `ToEngine` messages and applies `FromEngine` events to Zustand stores (`packages/editor/src/store`). Simple property edits from the inspector send `put` with the modified element.
@@ -32,6 +32,7 @@ WebView ─ UI thread (React)  ⇄ postMessage ⇄  Web Worker: op-engine (WASM)
 - **Scenes are built on the CPU** (`op_render::scene::Scene`, `draw.rs`) and uploaded by the WASM wrapper; `EngineState` has no GPU dependency, so engine behaviour is tested natively (`crates/op-engine/src/tests.rs`).
 - **Protocol types are generated from Rust** with tsify (`crates/op-engine/src/protocol.rs` → `packages/engine-client/wasm/op_engine.d.ts`). Never hand-write duplicates of these types in TS.
 - **One renderer** (`crates/op-render`, wgpu) for 2D, point clouds and 3D. It runs in WASM on WebGPU, falling back to WebGL2. Anything relying on compute shaders needs a non-compute path. The 3D mesh is built on the CPU by the engine (`model3d.rs`); 3D coordinates are X right, Y up the plan (plan Y negated), Z up — so the model is not mirrored.
+- **3D view state is window state, not document**: `Options3d` and the camera live in `EngineState` (`view3d.rs`, `camera3d.rs`); only the site orientation (`site`) and saved views (`views`) are project properties (`setSite`, `setViews`). In 3D the plan tools are disabled; the UI maps mouse, wheel and WASD to `camera3d` messages.
 - **Platform differences live behind `Platform`** (`packages/editor/src/platform`): `desktop.ts` (Tauri) and `browser.ts` (web build / e2e). The editor code must not call Tauri APIs directly.
 - **Drawings are built by the engine** (`crates/op-engine/src/sheets.rs` → `op_export::Sheet`) and written by `op-export`'s own PDF/SVG/DXF/XLSX writers; the UI only rasterises PNG and saves files via `Platform.saveExport` (native `write_export` accepts export extensions only).
 - **`.oplan` bytes are produced and parsed by the engine** (`op-format` in WASM). The native side only reads/writes bytes (`apps/desktop/src-tauri/src/files.rs`) and only accepts `.oplan` / `.oplan.journal` paths.
@@ -104,6 +105,11 @@ OpenPlanner reimplements **behaviour** of existing planners, never their code, t
 - **In the browser a reopened file has no path**: its journal is not found after a reload. Recovery after reload is tested for untitled projects; file recovery is covered by the desktop tests.
 - **Synthetic scan holes must align with the mesh grid** — `synth` splits wall cells at opening edges; otherwise detected widths drift by a cell. Detection precision is ~50 mm horizontally and ~100 mm vertically, refined by fractional emptiness of boundary cells.
 - **Disk fills up**: `target/` grows past 20 GB with native, WASM and Tauri builds. Delete `target/*/incremental` when `No space left on device` appears.
+- **E2E shortcuts on a Mac:** `mod` is ⌘ there, so specs pressing `Control+…` fail locally (they pass on Linux CI). Write new specs with `ControlOrMeta+…`.
+- **Biome treats only `use` + an uppercase letter as a hook name** (`use3dKeys` trips `useHookAtTopLevel`).
+- **Send whole option objects from an up-to-date base**: `set3d` sends all 3D options at once, so the UI updates the store optimistically first — otherwise quick successive clicks overwrite each other with stale values.
+- **glam 0.34 has no `DMat4::look_at_rh` / `perspective_rh`**; `op_render::three` has its own f64 helpers with wgpu's 0–1 depth.
+- **DXF output is cp1251**: read it as bytes in tests, not as UTF-8.
 - **`pkill -f <pattern>` kills your own shell** when the pattern appears in the command line; kill by PID (`pgrep … | xargs kill`).
 - **Playwright in this container** needs `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-*/chrome-linux64/chrome` (the project pins a newer Playwright than the preinstalled browsers).
 - CI macOS VMs and GPU-less Windows runners have no hardware WebGPU adapter; Windows gets a software one via `--enable-unsafe-webgpu --ignore-gpu-blocklist`. The selftest reports `backend=`, `webgpu=` (worker) and `main_webgpu=` (main thread) — use them to tell environment limits from bugs.

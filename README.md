@@ -8,7 +8,7 @@
 ![License: AGPL-3.0](https://img.shields.io/badge/app-AGPL--3.0-blue)
 ![File format: MIT](https://img.shields.io/badge/.oplan%20format-MIT-green)
 ![Platforms](https://img.shields.io/badge/macOS%20·%20Windows%20·%20Linux-desktop-lightgrey)
-![Stage](https://img.shields.io/badge/stage%203%20replanning-done-brightgreen)
+![Stage](https://img.shields.io/badge/stage%205%203D-done-brightgreen)
 
 <img src="docs/images/survey.png" alt="OpenPlanner survey: walls, doors, windows, rooms with areas, dimensions and a leader" width="860">
 
@@ -18,7 +18,7 @@
 
 Most room planners stop at a pretty 3D picture. OpenPlanner is built around what a renovation crew actually needs: **one model of the apartment** that turns into themed drawing sheets — survey, demolition, new partitions, furniture, electrical, plumbing, finishes — plus an estimate whose quantities come straight from the model. Exporting your own project will never be paywalled. 🆓
 
-> 🚧 **Status: Stage 3 (replanning) is complete.** Keep the survey as the shared “as is” plan and sketch any number of design variants on top of it: demolish walls and openings, add partitions in aerated concrete, drywall or brick, and compare variants by room areas, a list of changes and side by side on the plan. Next up: drawing sheets and export (Stage 4). See the [roadmap](#-roadmap).
+> 🚧 **Status: Stages 0–5 are complete.** Measure the apartment by hand or import a LiDAR scan, sketch replanning variants on top of the survey, get the working drawings (survey, demolition, partitions, rooms, wall elevations) as PDF, DXF, SVG, PNG or XLSX, and walk through the result in 3D with real sunlight. Next up: furniture (Stage 6). See the [roadmap](#-roadmap).
 
 ## ✨ Highlights
 
@@ -42,6 +42,11 @@ Most room planners stop at a pretty 3D picture. OpenPlanner is built around what
 <p align="center">
   <img src="docs/images/replan-compare.png" alt="Survey and a replanning variant side by side: a demolished partition and a new drywall partition" width="760"><br>
   <sub>Survey and “Variant A” side by side: the demolished partition is dashed red, the new drywall partition is drawn in its material colour.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/3d-sun.png" alt="3D view of a three-room apartment: equinox noon sun through the south windows" width="760"><br>
+  <sub>3D view at noon on the equinox in Moscow: sunlight from the south windows falls on the floor, everything else is lit by the sky.</sub>
 </p>
 
 <p align="center">
@@ -76,11 +81,12 @@ Full details: [product spec](docs/product-spec.md) (in Russian).
 ┌──────────────────────────── WebView (WKWebView · WebView2 · WebKitGTK) ────────────────────────────┐
 │  UI thread: React + TypeScript              Web Worker: op-engine (Rust → WASM)                     │
 │  panels, inspector, ⌘K palette    ──cmds──▶ document model · commands · undo · autosave journal     │
-│  Zustand projections of the model ◀─events─ wgpu renderer (WebGPU | WebGL2) → OffscreenCanvas       │
+│  Zustand projections of the model ◀─events─ wgpu renderer: plan + 3D (WebGPU | WebGL2) → canvas     │
+│                                             drawing sheets → PDF · SVG · DXF · XLSX                 │
 └───────────────────────────────────────────────┬─────────────────────────────────────────────────────┘
                                                 │ Tauri IPC
 ┌───────────────────────────────────────────────┴─────────────────────────────────────────────────────┐
-│  Tauri 2 (native Rust): file system, atomic .oplan writes, journals, dialogs; later scan & export  │
+│  Tauri 2 (native Rust): file system, atomic .oplan and export writes, journals, native dialogs      │
 └─────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -137,6 +143,7 @@ bun run dev
 | 🦀 Rust: format, lints, tests               | `cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace` |
 | 🟦 TypeScript: lint, types, unit tests      | `bunx biome check . && bunx tsc -b && bun test`                                                                 |
 | 🦀 Engine scenarios (pointer + keyboard)    | `cargo test -p op-engine`                                                                                       |
+| 🖼️ GPU frames: plan and 3D sun shadows      | `OPENPLANNER_REQUIRE_GPU=1 cargo test -p op-render`                                                             |
 | 🌐 E2E on the web build (WebGL2 + WebGPU)   | `cd apps/desktop && bunx vite build && bunx playwright test`                                                    |
 | 🖥️ E2E on the real Linux desktop window     | `bash scripts/desktop-e2e.sh` (needs a built app, Xvfb, openbox, xdotool, `tauri-driver`)                       |
 | 🗂️ Native dialogs + crash recovery (any OS) | `bash scripts/desktop-dialogs.sh <path to app binary>`                                                          |
@@ -152,11 +159,11 @@ packages/editor/       the editor: shell, inspector, canvas, commands, project f
 packages/engine-client/  worker + typed client for the WASM engine
 crates/op-model/       document, commands, undo/redo, journal ops
 crates/op-geom/        geometry: wall joints, unions, room regions
-crates/op-render/      wgpu renderer (+ offscreen rendering for tests)
-crates/op-engine/      WASM engine: model + renderer in the worker
+crates/op-render/      wgpu renderer: plan, 3D with sun shadows (+ offscreen rendering for tests)
+crates/op-engine/      WASM engine: model, tools, drawing sheets, 3D mesh + renderer in the worker
 crates/op-format/      .oplan read/write, migrations, journal          (MIT)
 crates/op-scan/        LiDAR scan readers and recognition
-crates/op-export/      PDF, XLSX, DXF, IFC                             (stage 4+)
+crates/op-export/      drawing sheets: PDF, SVG, DXF, XLSX (IFC later)
 crates/op-calc/        engineering calculations and estimates          (stages 7–10)
 schema/                JSON Schema of the file format                  (MIT)
 scripts/               WASM build, desktop selftests and drivers
