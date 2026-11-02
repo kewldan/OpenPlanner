@@ -46,19 +46,38 @@ WIN_FOCUS='
 using System;
 using System.Runtime.InteropServices;
 public static class W {
+  public delegate bool EnumProc(IntPtr h, IntPtr l);
+  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc f, IntPtr l);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr h);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
   [DllImport("user32.dll")] public static extern void keybd_event(byte k, byte s, uint f, UIntPtr e);
+  // Видимое и не заблокированное окно процесса: при открытом модальном
+  // диалоге это сам диалог (главное окно в это время заблокировано).
+  public static IntPtr Interactive(uint target) {
+    IntPtr found = IntPtr.Zero;
+    EnumWindows((h, l) => {
+      uint pid;
+      GetWindowThreadProcessId(h, out pid);
+      if (pid == target && IsWindowVisible(h) && IsWindowEnabled(h)) { found = h; return false; }
+      return true;
+    }, IntPtr.Zero);
+    return found;
+  }
 }
 "@
   Get-Process | Where-Object {
     $_.MainWindowHandle -ne 0 -and $_.ProcessName -notin @("openplanner-desktop", "explorer")
   } | ForEach-Object { [void][W]::ShowWindow($_.MainWindowHandle, 6) }
-  $app = Get-Process openplanner-desktop -ErrorAction SilentlyContinue |
-    Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
-  [W]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero)
-  [W]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)
-  if ($app) { [void][W]::SetForegroundWindow($app.MainWindowHandle) }
+  $proc = Get-Process openplanner-desktop -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($proc) {
+    $window = [W]::Interactive([uint32]$proc.Id)
+    [W]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero)
+    [W]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)
+    if ($window -ne [IntPtr]::Zero) { [void][W]::SetForegroundWindow($window) }
+  }
   Start-Sleep -Milliseconds 500
   $ws = New-Object -ComObject WScript.Shell
 '
