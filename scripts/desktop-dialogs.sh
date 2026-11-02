@@ -96,7 +96,7 @@ pass_open_dialog() {
         -e 'delay 1.5' \
         -e 'key code 36'
       ;;
-    windows) win_send "$file" '' ;;
+    windows) win_send "$file" '^a' ;;
     linux)
       xdotool key --clearmodifiers ctrl+l
       xdotool type --delay 20 "$file"
@@ -126,7 +126,37 @@ wait_line() {
   return 1
 }
 
+screenshot() {
+  [[ -n "${SHOTS:-}" ]] || return 0
+  mkdir -p "$SHOTS"
+  case $os in
+    windows)
+      powershell -NoProfile -Command "
+        Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+        \$b = [System.Windows.Forms.SystemInformation]::VirtualScreen
+        \$img = New-Object System.Drawing.Bitmap \$b.Width, \$b.Height
+        [System.Drawing.Graphics]::FromImage(\$img).CopyFromScreen(\$b.Left, \$b.Top, 0, 0, \$img.Size)
+        \$img.Save('$(native_path "$SHOTS")\\$1.png')" || true ;;
+    mac) screencapture -x "$SHOTS/$1.png" || true ;;
+    linux) import -window root "$SHOTS/$1.png" || true ;;
+  esac
+}
+
+# Проходит диалог: ввод повторяется, пока приложение не подтвердит шаг
+# (первый ввод мог уйти раньше, чем диалог получил фокус).
+pass_dialog() {
+  local action="$1" expect="$2"
+  for attempt in 1 2 3 4; do
+    sleep $((attempt + 1))
+    screenshot "$action-$attempt"
+    "$action"
+    if wait_line "$expect" 8; then return 0; fi
+  done
+  return 1
+}
+
 fail() {
+  screenshot failure
   echo "диалоги: $1" >&2
   echo "--- отчёт приложения:" >&2
   cat "$report" >&2
@@ -134,15 +164,12 @@ fail() {
 }
 
 wait_line 'STEP dialog:save' || fail "приложение не дошло до сохранения"
-sleep 2
-pass_save_dialog
-wait_line 'STEP saved:' 30 || fail "файл не сохранён через диалог"
+pass_dialog pass_save_dialog 'STEP saved:' || fail "файл не сохранён через диалог"
 [[ -s "$target" ]] || fail "файла нет на диске: $target"
 echo "✓ системный диалог сохранения: $(grep 'STEP saved:' "$report" | sed 's/STEP saved://')"
 
 wait_line 'STEP dialog:open' 30 || fail "приложение не дошло до открытия"
-sleep 2
-pass_open_dialog
-wait_line '^OK ' 60 || fail "файл не открыт через диалог"
+pass_dialog pass_open_dialog 'STEP opened' || fail "файл не открыт через диалог"
+wait_line '^OK ' 30 || fail "приложение не завершило сценарий"
 echo "✓ системный диалог открытия: проект открыт, название из файла совпало"
 cat "$report"
