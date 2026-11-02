@@ -7,6 +7,12 @@ export interface OpenedFile {
   bytes: Uint8Array;
 }
 
+/** Изображение, выбранное пользователем (подложка). */
+export interface PickedImage {
+  name: string;
+  bytes: Uint8Array;
+}
+
 /** Куда сохранился проект. */
 export interface SavedFile {
   path: string | null;
@@ -37,6 +43,8 @@ export interface Platform {
   kind: "desktop" | "browser";
   /** Выбрать и прочитать проект. `null` — пользователь передумал. */
   openProject(): Promise<OpenedFile | null>;
+  /** Выбрать изображение PNG или JPEG. `null` — пользователь передумал. */
+  openImage(): Promise<PickedImage | null>;
   /** Спросить, куда сохранить проект. `null` — пользователь отменил выбор. */
   chooseSaveTarget(suggestedName: string): Promise<SavedFile | null>;
   /** Записать проект туда, куда выбрал пользователь. */
@@ -48,6 +56,14 @@ export interface Platform {
 }
 
 export const PROJECT_EXTENSION = "oplan";
+
+/** Расширения изображений для подложки. */
+export const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg"] as const;
+
+/** Имя файла без папок. */
+export function fileName(path: string): string {
+  return path.split(/[\\/]/).pop() ?? path;
+}
 
 /** Имя файла без папок и расширения `.oplan`. */
 export function baseName(path: string): string {

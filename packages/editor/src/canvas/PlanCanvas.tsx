@@ -1,14 +1,30 @@
+import type { PointerPhase } from "@openplanner/engine-client";
 import { type PointerEvent, useEffect, useRef, useState } from "react";
 import { sendToEngine, startEngine } from "../engine";
 import { t } from "../i18n";
 import { useEditor } from "../store/editor";
+import { NumericInput } from "./NumericInput";
 import styles from "./PlanCanvas.module.css";
 
-/** Холст плана. Рисует движок в воркере; здесь — только ввод и размеры. */
+/** Инструменты, которые рисуют: курсор — перекрестие. */
+const drawingTools = new Set([
+  "wall",
+  "door",
+  "window",
+  "arch",
+  "room",
+  "dimension",
+  "leader",
+  "calibrate",
+]);
+
+/** Холст плана. Рисует движок в воркере; здесь — ввод и размеры. */
 export function PlanCanvas() {
   const rootRef = useRef<HTMLDivElement>(null);
   const [panning, setPanning] = useState(false);
+  const space = useRef(false);
   const engine = useEditor((s) => s.engine);
+  const tool = useEditor((s) => s.tool);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -18,6 +34,7 @@ export function PlanCanvas() {
     // запуск эффекта позволяет перезапускать движок (в том числе в StrictMode).
     const canvas = document.createElement("canvas");
     canvas.className = styles.canvas ?? "";
+    canvas.dataset.testid = "plan-canvas";
     root.prepend(canvas);
     const stop = startEngine(canvas);
 
@@ -50,41 +67,107 @@ export function PlanCanvas() {
     };
     canvas.addEventListener("wheel", onWheel, { passive: false });
 
+    // Пробел — временное панорамирование левой кнопкой.
+    const isTyping = (target: EventTarget | null) =>
+      target instanceof HTMLElement && Boolean(target.closest("input, textarea, select"));
+    const onKey = (event: KeyboardEvent) => {
+      if (event.code !== "Space" || isTyping(event.target)) return;
+      space.current = event.type === "keydown";
+      if (event.type === "keydown") event.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKey);
+
     return () => {
       canvas.removeEventListener("wheel", onWheel);
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKey);
       observer.disconnect();
       stop();
       canvas.remove();
     };
   }, []);
 
+  const point = (event: PointerEvent<HTMLDivElement>, phase: PointerPhase) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    sendToEngine({
+      type: "pointer",
+      phase,
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+      shift: event.shiftKey,
+      alt: event.altKey,
+    });
+  };
+
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 1) return;
-    event.preventDefault();
+    if (event.target !== event.currentTarget.querySelector("canvas")) return;
+    // Фокус уходит с полей инспектора: правка в поле применяется до действия на холсте.
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    if (event.button === 1 || (event.button === 0 && space.current)) {
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      setPanning(true);
+      return;
+    }
+    if (event.button === 2) {
+      // Правая кнопка заканчивает цепочку или прерывает шаг инструмента.
+      sendToEngine({ type: useEditor.getState().step === "wallNext" ? "finish" : "cancel" });
+      return;
+    }
+    if (event.button !== 0) return;
     event.currentTarget.setPointerCapture(event.pointerId);
-    setPanning(true);
+    point(event, "down");
   };
 
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    if (!panning) return;
-    sendToEngine({ type: "pan", dx: event.movementX, dy: event.movementY });
+    if (panning) {
+      sendToEngine({ type: "pan", dx: event.movementX, dy: event.movementY });
+      return;
+    }
+    point(event, "move");
   };
 
   const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
-    if (!panning) return;
-    event.currentTarget.releasePointerCapture(event.pointerId);
-    setPanning(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (panning) {
+      setPanning(false);
+      return;
+    }
+    if (event.button === 0) point(event, "up");
   };
 
   return (
     <div
       ref={rootRef}
-      className={[styles.root, panning && styles.panning].filter(Boolean).join(" ")}
+      role="application"
+      aria-label={t("canvas.label")}
+      className={[styles.root, panning && styles.panning, drawingTools.has(tool) && styles.drawing]
+        .filter(Boolean)
+        .join(" ")}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
+      onPointerLeave={(event) => point(event, "leave")}
+      onDoubleClick={(event) => {
+        if (event.target === event.currentTarget.querySelector("canvas")) {
+          const rect = event.currentTarget.getBoundingClientRect();
+          sendToEngine({
+            type: "pointer",
+            phase: "doubleClick",
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top,
+            shift: event.shiftKey,
+            alt: event.altKey,
+          });
+        }
+      }}
+      onContextMenu={(event) => event.preventDefault()}
     >
+      <NumericInput />
       {engine.state === "starting" && <div className={styles.overlay}>{t("status.starting")}</div>}
       {engine.state === "failed" && (
         <div className={[styles.overlay, styles.error].join(" ")} role="alert">

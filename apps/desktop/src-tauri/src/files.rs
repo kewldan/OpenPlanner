@@ -39,6 +39,15 @@ fn is_journal(path: &Path) -> bool {
         })
 }
 
+/// Изображения, которые можно добавить подложкой.
+const IMAGE_EXTENSIONS: [&str; 3] = ["png", "jpg", "jpeg"];
+
+fn is_image(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| IMAGE_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+}
+
 fn check(path: &Path, ok: fn(&Path) -> bool) -> CmdResult<()> {
     if ok(path) {
         Ok(())
@@ -68,6 +77,15 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 #[tauri::command]
 pub fn read_project(path: PathBuf) -> CmdResult<Response> {
     check(&path, is_project)?;
+    fs::read(&path)
+        .map(Response::new)
+        .map_err(|err| io_error("прочитать", &path, &err))
+}
+
+/// Читает изображение для подложки (PNG или JPEG).
+#[tauri::command]
+pub fn read_image(path: PathBuf) -> CmdResult<Response> {
+    check(&path, is_image)?;
     fs::read(&path)
         .map(Response::new)
         .map_err(|err| io_error("прочитать", &path, &err))
@@ -167,6 +185,8 @@ mod tests {
     fn path_checks() {
         assert!(is_project(Path::new("/home/u/Ремонт/кв.oplan")));
         assert!(!is_project(Path::new("/etc/passwd")));
+        assert!(is_image(Path::new("/home/u/план.JPG")));
+        assert!(!is_image(Path::new("/home/u/план.svg")));
         assert!(is_journal(Path::new("/x/кв.oplan.journal")));
         assert!(!is_journal(Path::new("/x/кв.journal")));
         assert!(!is_journal(Path::new("/x/кв.oplan")));

@@ -19,6 +19,7 @@ function setup(
   let duringExport: FromEngine[] = [];
 
   const platform: Platform = {
+    openImage: async () => null,
     kind: "browser",
     openProject: async () => options.opened ?? null,
     chooseSaveTarget: async (name) =>

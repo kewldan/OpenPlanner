@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask, message, open, save } from "@tauri-apps/plugin-dialog";
-import { baseName, type Platform, PROJECT_EXTENSION } from "./types";
+import { baseName, fileName, IMAGE_EXTENSIONS, type Platform, PROJECT_EXTENSION } from "./types";
 
 const filters = [{ name: "Проект OpenPlanner", extensions: [PROJECT_EXTENSION] }];
 
@@ -25,6 +25,18 @@ export const desktopPlatform: Platform = {
     if (typeof path !== "string") return null;
     const buffer = await invoke<ArrayBuffer>("read_project", { path });
     return { path, name: baseName(path), bytes: new Uint8Array(buffer) };
+  },
+
+  async openImage() {
+    const path = await open({
+      title: "Добавить подложку",
+      multiple: false,
+      directory: false,
+      filters: [{ name: "Изображение", extensions: [...IMAGE_EXTENSIONS] }],
+    });
+    if (typeof path !== "string") return null;
+    const buffer = await invoke<ArrayBuffer>("read_image", { path });
+    return { name: fileName(path), bytes: new Uint8Array(buffer) };
   },
 
   async chooseSaveTarget(suggestedName) {
