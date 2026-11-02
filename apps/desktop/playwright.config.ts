@@ -30,6 +30,28 @@ export default defineConfig({
       name: "chromium",
       use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
     },
+    {
+      // Тот же движок на бэкенде WebGPU: программный адаптер SwiftShader (Vulkan на CPU).
+      name: "webgpu",
+      testMatch: "canvas.spec.ts",
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1440, height: 900 },
+        launchOptions: {
+          ...(process.env.PLAYWRIGHT_CHROMIUM_PATH
+            ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH }
+            : {}),
+          args: [
+            "--enable-unsafe-webgpu",
+            "--enable-features=Vulkan",
+            "--use-vulkan=swiftshader",
+            "--use-angle=swiftshader",
+            "--enable-unsafe-swiftshader",
+          ],
+          env: { ...process.env, LANG: "C.UTF-8", LC_ALL: "C.UTF-8" },
+        },
+      },
+    },
   ],
   webServer: {
     command: "bunx vite preview --port 4173 --strictPort",

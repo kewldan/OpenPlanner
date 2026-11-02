@@ -18,19 +18,45 @@ fn selftest_path() -> Option<std::path::PathBuf> {
     std::env::var_os("OPENPLANNER_SELFTEST").map(Into::into)
 }
 
+fn selftest_append(line: &str) -> Result<(), String> {
+    use std::io::Write as _;
+    let path = selftest_path().ok_or("самопроверка не включена")?;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|err| err.to_string())?;
+    writeln!(file, "{line}").map_err(|err| err.to_string())
+}
+
 /// Включён ли режим самопроверки.
 #[tauri::command]
 fn selftest_enabled() -> bool {
     selftest_path().is_some()
 }
 
+/// Сценарий самопроверки (`OPENPLANNER_SELFTEST_SCENARIO`), например `dialogs`.
+#[tauri::command]
+fn selftest_scenario() -> Option<String> {
+    std::env::var("OPENPLANNER_SELFTEST_SCENARIO")
+        .ok()
+        .filter(|s| !s.is_empty())
+}
+
+/// Отмечает шаг сценария в отчёте: внешний драйвер ждёт этих строк, чтобы
+/// пройти нативный диалог.
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)] // команды Tauri получают аргументы по значению
+fn selftest_step(step: String) -> Result<(), String> {
+    selftest_append(&format!("STEP {step}"))
+}
+
 /// Записывает результат самопроверки и завершает приложение.
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)] // команды Tauri получают аргументы по значению
 fn selftest_report(app: tauri::AppHandle, ok: bool, details: String) -> Result<(), String> {
-    let path = selftest_path().ok_or("самопроверка не включена")?;
     let status = if ok { "OK" } else { "FAIL" };
-    std::fs::write(&path, format!("{status} {details}\n")).map_err(|err| err.to_string())?;
+    selftest_append(&format!("{status} {details}"))?;
     app.exit(i32::from(!ok));
     Ok(())
 }
@@ -63,6 +89,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             app_version,
             selftest_enabled,
+            selftest_scenario,
+            selftest_step,
             selftest_report,
             files::read_project,
             files::write_project,

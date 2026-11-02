@@ -72,7 +72,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
+          - os: macos-26
             binary: target/release/openplanner-desktop
           - os: windows-latest
             binary: target/release/openplanner-desktop.exe
@@ -105,6 +105,22 @@ jobs:
       - name: Самопроверка (запуск окна и движка)
         if: runner.os == 'Linux'
         run: xvfb-run -a bash scripts/desktop-selftest.sh "${{ matrix.binary }}"
+      - name: Версия ОС
+        if: runner.os == 'macOS'
+        run: sw_vers
+      - name: Системные диалоги сохранения и открытия
+        if: runner.os != 'Linux'
+        shell: bash
+        run: bash scripts/desktop-dialogs.sh "${{ matrix.binary }}"
+      - name: Самопроверка на WebGPU (WebView2 + программный адаптер)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: bash scripts/desktop-selftest.sh "${{ matrix.binary }}"
+        env:
+          EXPECT_BACKEND: BrowserWebGpu
+          WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: >-
+            --enable-unsafe-webgpu --enable-features=Vulkan --use-webgpu-adapter=swiftshader
+            --use-vulkan=swiftshader --use-angle=swiftshader --enable-unsafe-swiftshader
       - name: tauri-driver
         if: runner.os == 'Linux'
         run: cargo install tauri-driver --locked

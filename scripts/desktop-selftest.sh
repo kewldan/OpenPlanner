@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Самопроверка собранного десктопного приложения: запуск, старт движка, бэкенд GPU.
-# Использование: scripts/desktop-selftest.sh <путь к бинарнику>
+# Использование: [EXPECT_BACKEND=BrowserWebGpu] scripts/desktop-selftest.sh <путь к бинарнику>
 set -euo pipefail
 
 app="$1"
@@ -22,3 +22,8 @@ if [[ ! -s "$report" ]]; then
 fi
 cat "$report"
 grep -q '^OK ' "$report"
+# EXPECT_BACKEND — какой бэкенд обязан выбрать движок (например, BrowserWebGpu).
+if [[ -n "${EXPECT_BACKEND:-}" ]] && ! grep -q "backend=$EXPECT_BACKEND " "$report"; then
+  echo "самопроверка: ожидался бэкенд $EXPECT_BACKEND" >&2
+  exit 1
+fi
