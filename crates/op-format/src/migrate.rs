@@ -12,7 +12,17 @@ use crate::{FORMAT_VERSION, FormatError};
 pub(crate) type Migration = fn(Value) -> Result<Value, String>;
 
 /// `MIGRATIONS[i]` переводит формат `i + 1` в `i + 2`.
-const MIGRATIONS: &[Migration] = &[v1_to_v2, v2_to_v3];
+const MIGRATIONS: &[Migration] = &[v1_to_v2, v2_to_v3, v3_to_v4];
+
+/// Формат 4 (стадия 3): варианты перепланировки. Элементы без поля
+/// `variant` остаются элементами обмера.
+fn v3_to_v4(mut model: Value) -> Result<Value, String> {
+    let object = model.as_object_mut().ok_or("ожидался объект модели")?;
+    object
+        .entry("variants")
+        .or_insert_with(|| Value::Array(Vec::new()));
+    Ok(model)
+}
 
 /// Формат 3 (стадия 2): системный слой «Скан» в самом низу.
 fn v2_to_v3(mut model: Value) -> Result<Value, String> {
@@ -131,6 +141,7 @@ mod tests {
         assert_eq!(migrated["layers"].as_array().map(Vec::len), Some(7));
         assert_eq!(migrated["layers"][0]["id"], json!("layer-scan"));
         assert_eq!(migrated["walls"], json!([]));
+        assert_eq!(migrated["variants"], json!([]));
         assert_eq!(migrated["meta"]["title"], json!("Кв."));
     }
 

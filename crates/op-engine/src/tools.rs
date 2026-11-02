@@ -83,6 +83,7 @@ impl ToolData {
             (Tool::Calibrate, Self::Calibrate { .. }) => ToolStep::CalibrateSecond,
             (Tool::Calibrate, _) => ToolStep::CalibrateFirst,
             (Tool::Select, _) => ToolStep::Idle,
+            (Tool::Demolish, _) => ToolStep::DemolishPick,
         }
     }
 }
@@ -150,7 +151,7 @@ impl EngineState {
         exclude: &[String],
     ) -> Snap {
         snap::snap(
-            self.history.document(),
+            self.doc(),
             &self.derived,
             SnapInput {
                 cursor: p,
@@ -171,6 +172,16 @@ impl EngineState {
     }
 
     pub(crate) fn set_tool(&mut self, tool: Tool) -> Vec<FromEngine> {
+        if matches!(self.view, crate::protocol::View::Compare { .. }) && tool != Tool::Select {
+            return vec![FromEngine::Error {
+                message: "В сравнении вариантов план не редактируется".into(),
+            }];
+        }
+        if tool == Tool::Demolish && self.variant().is_none() {
+            return vec![FromEngine::Error {
+                message: "Демонтаж отмечается в режиме «Перепланировка»".into(),
+            }];
+        }
         self.tool = tool;
         self.reset_interaction();
         self.hover = None;
@@ -183,7 +194,7 @@ impl EngineState {
     }
 
     fn start_calibration_hint(&self) -> Vec<FromEngine> {
-        if self.history.document().underlays.is_empty() {
+        if self.doc().underlays.is_empty() {
             vec![FromEngine::Error {
                 message: "Сначала добавьте подложку".into(),
             }]
@@ -265,7 +276,11 @@ impl EngineState {
             self.overlay_dirty = true;
             return vec![];
         }
+        if matches!(self.view, crate::protocol::View::Compare { .. }) {
+            return vec![];
+        }
         match self.tool {
+            Tool::Demolish => self.demolish_pointer(phase, p),
             Tool::Select => self.select_pointer(phase, screen, p, shift, alt),
             Tool::Wall => self.wall_pointer(phase, p, shift, alt),
             Tool::Door | Tool::Window | Tool::Arch => self.opening_pointer(phase, p, alt),
@@ -312,9 +327,10 @@ impl EngineState {
         }];
         match phase {
             PointerPhase::Down => {
-                let doc = self.history.document();
+                let doc = self.doc();
                 let handle = hit::handles(doc, &self.derived, &self.selection)
                     .into_iter()
+                    .filter(|h| self.owns(h.kind.target()))
                     .filter(|h| h.pos.distance(p) * self.px() <= HANDLE_RADIUS_PX)
                     .min_by(|a, b| a.pos.distance(p).total_cmp(&b.pos.distance(p)));
                 let kind = if let Some(h) = handle {
@@ -371,8 +387,9 @@ impl EngineState {
                     }
                     self.drag = Some(drag);
                 } else {
-                    let doc = self.history.document();
-                    let hover = hit::hit(doc, &self.derived, font, p, HIT_RADIUS_PX / self.px());
+                    let doc = self.doc();
+                    let hover = hit::hit(doc, &self.derived, font, p, HIT_RADIUS_PX / self.px())
+                        .or_else(|| self.demolished_hit(p));
                     if hover != self.hover {
                         self.hover = hover;
                         self.overlay_dirty = true;
@@ -390,7 +407,7 @@ impl EngineState {
                             } else {
                                 Vec::new()
                             };
-                            for id in hit::in_rect(self.history.document(), &self.derived, lo, hi) {
+                            for id in hit::in_rect(self.doc(), &self.derived, lo, hi) {
                                 if !ids.contains(&id) {
                                     ids.push(id);
                                 }
@@ -416,7 +433,7 @@ impl EngineState {
     }
 
     fn single_opening(&self) -> Option<String> {
-        let doc = self.history.document();
+        let doc = self.doc();
         match self.selection.as_slice() {
             [id] if doc.opening(id).is_some() => Some(id.clone()),
             _ => None,
@@ -425,7 +442,7 @@ impl EngineState {
 
     /// Опорная точка элемента для переноса с привязкой.
     fn grab_point(&self, id: &str) -> Option<DVec2> {
-        let doc = self.history.document();
+        let doc = self.doc();
         if let Some(w) = doc.wall(id) {
             return self.derived.nodes.get(&w.a).copied();
         }
@@ -445,7 +462,7 @@ impl EngineState {
     }
 
     fn drag_commands(&self, drag: &Drag, shift: bool, alt: bool) -> Vec<Command> {
-        let doc = self.history.document();
+        let doc = self.doc();
         let p = drag.current;
         match &drag.kind {
             DragKind::Marquee { .. } => Vec::new(),
@@ -536,6 +553,83 @@ impl EngineState {
                 vec![put(Element::Room(r))]
             }
         }
+    }
+
+    // ---------- Демонтаж ----------
+
+    /// Демонтированный элемент обмера под точкой (в виде варианта).
+    pub(crate) fn demolished_hit(&self, p: DVec2) -> Option<String> {
+        let (Some(v), Some((survey, derived))) = (self.variant(), &self.survey) else {
+            return None;
+        };
+        let ids = op_model::view::demolished(self.history.document(), v);
+        let mut doc = survey.clone();
+        doc.walls.retain(|e| ids.contains(&e.id));
+        doc.openings.retain(|e| ids.contains(&e.id));
+        doc.rooms.retain(|e| ids.contains(&e.id));
+        doc.dimensions.clear();
+        doc.leaders.clear();
+        doc.underlays.clear();
+        hit::hit(&doc, derived, Font::shared(), p, HIT_RADIUS_PX / self.px())
+    }
+
+    /// Элемент обмера под точкой, который можно демонтировать.
+    pub(crate) fn demolish_candidate(&self, p: DVec2) -> Option<String> {
+        let doc = self.doc();
+        let id = hit::hit(
+            doc,
+            &self.derived,
+            Font::shared(),
+            p,
+            HIT_RADIUS_PX / self.px(),
+        )?;
+        let survey = |v: &Option<String>| v.is_none();
+        let ok = doc.wall(&id).is_some_and(|e| survey(&e.variant))
+            || doc.opening(&id).is_some_and(|e| survey(&e.variant))
+            || doc.room(&id).is_some_and(|e| survey(&e.variant));
+        ok.then_some(id)
+    }
+
+    fn demolish_pointer(&mut self, phase: PointerPhase, p: DVec2) -> Vec<FromEngine> {
+        let mut events = vec![FromEngine::Cursor {
+            x: p.x,
+            y: p.y,
+            snap: None,
+            length: None,
+            angle: None,
+        }];
+        let restore = self.demolished_hit(p);
+        let target = restore.clone().or_else(|| self.demolish_candidate(p));
+        match phase {
+            PointerPhase::Move => {
+                if target != self.hover {
+                    self.hover = target;
+                    self.overlay_dirty = true;
+                }
+            }
+            PointerPhase::Down => {
+                let Some(v) = self.variant().map(str::to_owned) else {
+                    return events;
+                };
+                let Some(id) = target else {
+                    events.push(FromEngine::Error {
+                        message: "Демонтируются стены, проёмы и помещения обмера; новые элементы удаляются клавишей Delete".into(),
+                    });
+                    return events;
+                };
+                let commands = crate::variants::set_demolished(
+                    self.history.document(),
+                    &v,
+                    &[id],
+                    restore.is_none(),
+                );
+                events.extend(self.execute_all(commands));
+                self.hover = None;
+                self.overlay_dirty = true;
+            }
+            _ => {}
+        }
+        events
     }
 
     // ---------- Стены ----------
@@ -630,7 +724,7 @@ impl EngineState {
 
     /// Проём, который появится под курсором.
     pub(crate) fn opening_candidate(&self, p: DVec2, alt: bool) -> Option<Opening> {
-        let doc = self.history.document();
+        let doc = self.doc();
         let radius = HIT_RADIUS_PX / self.px();
         let (wall, a, b) = doc
             .walls
@@ -660,6 +754,7 @@ impl EngineState {
             Side::Right
         };
         Some(Opening {
+            variant: None,
             id: String::new(),
             layer: LayerKind::Openings.id().into(),
             wall: wall.id.clone(),
@@ -698,7 +793,7 @@ impl EngineState {
             });
             return events;
         };
-        let doc = self.history.document();
+        let doc = self.doc();
         let overlaps = doc.openings.iter().any(|o| {
             o.wall == opening.wall
                 && (o.offset - opening.offset).abs() < (o.width + opening.width) / 2.0
@@ -754,8 +849,9 @@ impl EngineState {
             return events;
         }
         let id = self.ids.generate();
-        let number = self.history.document().rooms.len() + 1;
+        let number = self.doc().rooms.len() + 1;
         events.extend(self.execute_all(vec![put(Element::Room(Room {
+            variant: None,
             id: id.clone(),
             layer: LayerKind::Rooms.id().into(),
             name: format!("Помещение {number}"),
@@ -815,6 +911,7 @@ impl EngineState {
                 let offset = self.dimension_offset(start.0, end.0, p, alt);
                 self.data = ToolData::None;
                 events.extend(self.execute_all(vec![put(Element::Dimension(Dimension {
+                    variant: None,
                     id: id.clone(),
                     layer: LayerKind::Dimensions.id().into(),
                     start: start.1,
@@ -866,6 +963,7 @@ impl EngineState {
                 let id = self.ids.generate();
                 self.data = ToolData::None;
                 events.extend(self.execute_all(vec![put(Element::Leader(Leader {
+                    variant: None,
                     id: id.clone(),
                     layer: LayerKind::Leaders.id().into(),
                     x: target.x,
@@ -888,7 +986,7 @@ impl EngineState {
     // ---------- Калибровка подложки ----------
 
     fn calibration_target(&self, p: DVec2) -> Option<String> {
-        let doc = self.history.document();
+        let doc = self.doc();
         let selected = doc
             .underlays
             .iter()
@@ -959,7 +1057,7 @@ impl EngineState {
     }
 
     fn calibrate(&mut self, id: &str, first: DVec2, second: DVec2, real: f64) -> Vec<FromEngine> {
-        let Some(u) = self.history.document().underlay(id).cloned() else {
+        let Some(u) = self.doc().underlay(id).cloned() else {
             self.data = ToolData::None;
             return vec![self.tool_event()];
         };

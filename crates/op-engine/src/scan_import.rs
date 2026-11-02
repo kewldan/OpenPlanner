@@ -83,6 +83,7 @@ pub fn commands(
         .map(|p| {
             let id = ids.generate();
             out.push(put(Element::Node(Node {
+                variant: None,
                 id: id.clone(),
                 x: p.x,
                 y: p.y,
@@ -96,6 +97,8 @@ pub fn commands(
         .map(|w| {
             let id = ids.generate();
             out.push(put(Element::Wall(Wall {
+                material: None,
+                variant: None,
                 id: id.clone(),
                 layer: LayerKind::Walls.id().into(),
                 a: node_ids[w.a].clone(),
@@ -109,6 +112,7 @@ pub fn commands(
         .collect();
     for o in &plan.openings {
         out.push(put(Element::Opening(Opening {
+            variant: None,
             id: ids.generate(),
             layer: LayerKind::Openings.id().into(),
             wall: wall_ids[o.wall].clone(),
@@ -143,6 +147,7 @@ pub fn commands(
                 };
                 number += 1;
                 out.push(put(Element::Room(Room {
+                    variant: None,
                     id: ids.generate(),
                     layer: LayerKind::Rooms.id().into(),
                     name: format!("Помещение {number}"),

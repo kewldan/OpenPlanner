@@ -1,6 +1,6 @@
 //! Протокол UI ↔ воркер. TS-типы генерируются через tsify.
 
-use op_model::{Command, Document, Justification};
+use op_model::{Command, Document, Justification, WallMaterial};
 use op_scan::{ScanAnswer, ScanParams, ScanResult};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
@@ -28,6 +28,8 @@ pub enum Tool {
     Leader,
     /// Калибровка масштаба подложки.
     Calibrate,
+    /// Демонтаж: щелчок по элементу обмера отмечает или снимает демонтаж.
+    Demolish,
 }
 
 /// Шаг инструмента — по нему UI показывает подсказку.
@@ -60,6 +62,10 @@ pub enum ToolStep {
     CalibrateSecond,
     /// Калибровка: настоящее расстояние с клавиатуры.
     CalibrateDistance,
+    /// Демонтаж: щелчок по стене, проёму или помещению обмера.
+    DemolishPick,
+    /// Перепланировка недоступна в этом виде (сравнение, обмер).
+    Unavailable,
 }
 
 /// Фаза ввода указателя (левая кнопка).
@@ -104,6 +110,10 @@ pub struct ToolOptions {
     pub wall_thickness: f64,
     /// Линия привязки новых стен.
     pub justification: Justification,
+    /// Материал новых перегородок в варианте.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub material: Option<WallMaterial>,
 }
 
 impl Default for ToolOptions {
@@ -111,8 +121,90 @@ impl Default for ToolOptions {
         Self {
             wall_thickness: 120.0,
             justification: Justification::Center,
+            material: None,
         }
     }
+}
+
+/// Что показывает холст.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, Tsify)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum View {
+    /// Обмер «как есть» — общий для всех вариантов.
+    #[default]
+    Survey,
+    /// Вариант перепланировки.
+    Variant {
+        /// Вариант.
+        id: String,
+    },
+    /// Два вида рядом (синхронный просмотр); `None` — обмер.
+    Compare {
+        /// Слева.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        left: Option<String>,
+        /// Справа.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        right: Option<String>,
+    },
+}
+
+/// Длина и площадь стен одного материала.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct MaterialAmount {
+    /// Материал (без значения — не указан).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub material: Option<WallMaterial>,
+    /// Длина по оси, м.
+    pub length: f64,
+    /// Площадь (длина × высота), м².
+    pub area: f64,
+}
+
+/// Площадь помещения в виде.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct RoomArea {
+    /// Помещение.
+    pub id: String,
+    /// Название.
+    pub name: String,
+    /// Площадь, м² (0 — контур не замкнут).
+    pub area: f64,
+}
+
+/// Сводка вида: площади и изменения относительно обмера.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct ViewSummary {
+    /// Вариант (`None` — обмер).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub variant: Option<String>,
+    /// Название.
+    pub name: String,
+    /// Помещения.
+    pub rooms: Vec<RoomArea>,
+    /// Общая площадь помещений, м².
+    pub total_area: f64,
+    /// Демонтируемые стены: длина по оси, м.
+    pub demolished_length: f64,
+    /// Демонтируемые стены: площадь, м².
+    pub demolished_area: f64,
+    /// Новые стены по материалам.
+    pub new_walls: Vec<MaterialAmount>,
+    /// Новые проёмы.
+    pub openings_added: u32,
+    /// Заложенные проёмы.
+    pub openings_closed: u32,
 }
 
 /// Сообщение от UI движку.
@@ -222,6 +314,32 @@ pub enum ToEngine {
     },
     /// Создать помещения во всех замкнутых контурах без помещения.
     FindRooms,
+    /// Показать обмер, вариант или сравнение.
+    SetView {
+        /// Вид.
+        view: View,
+    },
+    /// Новый вариант (копия другого или пустой) — становится текущим.
+    CreateVariant {
+        /// Название.
+        name: String,
+        /// Скопировать вариант.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        copy_of: Option<String>,
+    },
+    /// Удалить вариант вместе с его элементами.
+    DeleteVariant {
+        /// Вариант.
+        id: String,
+    },
+    /// Отметить или снять демонтаж элементов обмера в текущем варианте.
+    SetDemolished {
+        /// Элементы.
+        ids: Vec<String>,
+        /// Демонтировать.
+        demolished: bool,
+    },
 }
 
 /// Помещение с вычисленными величинами.
@@ -259,7 +377,7 @@ pub enum FromEngine {
     /// Документ изменился. Передаётся целиком (без двоичных файлов).
     DocumentChanged {
         /// Текущий документ.
-        document: Document,
+        document: Box<Document>,
     },
     /// Вычисленные величины: площади помещений, длины стен и размеров.
     DerivedChanged {
@@ -327,6 +445,16 @@ pub enum FromEngine {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[tsify(optional)]
         angle: Option<f64>,
+    },
+    /// Изменился вид холста (обмер, вариант, сравнение).
+    ViewModeChanged {
+        /// Вид.
+        view: View,
+    },
+    /// Сводка обмера и всех вариантов: площади и изменения.
+    VariantsSummary {
+        /// Обмер первым, затем варианты по порядку.
+        views: Vec<ViewSummary>,
     },
     /// Новый элемент ждёт ввода текста (выноска): UI ставит фокус в поле.
     EditText {

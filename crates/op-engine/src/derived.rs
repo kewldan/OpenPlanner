@@ -10,7 +10,7 @@ use op_geom::{
     shapes::{self, Region, Shape},
     walls::{WallInput, opening_rect, wall_outlines},
 };
-use op_model::{Anchor, Document, Opening, Wall};
+use op_model::{Anchor, Document, Opening, Wall, WallMaterial};
 
 use crate::protocol::{LengthInfo, RoomInfo};
 
@@ -23,6 +23,8 @@ pub struct Derived {
     pub wall_outlines: HashMap<String, Vec<DVec2>>,
     /// Стены видимых слоёв для отрисовки: объединение минус проёмы.
     pub wall_shapes: Vec<Shape>,
+    /// Новые стены варианта по материалам: объединение минус проёмы.
+    pub new_wall_shapes: Vec<(Option<WallMaterial>, Vec<Shape>)>,
     /// Замкнутые области стен (все слои).
     pub regions: Vec<Region>,
     /// Область каждого помещения.
@@ -80,13 +82,25 @@ impl Derived {
         let all: Vec<Vec<DVec2>> = outlines.iter().filter(|o| !o.is_empty()).cloned().collect();
         let regions = shapes::regions(&shapes::union(&all));
 
-        let shown: Vec<Vec<DVec2>> = doc
+        // Стены обмера и новые стены варианта рисуются отдельно (новые — цветом материала).
+        let group = |filter: &dyn Fn(&Wall) -> bool| -> Vec<Vec<DVec2>> {
+            doc.walls
+                .iter()
+                .zip(&outlines)
+                .filter(|(w, o)| visible.contains(&w.layer) && !o.is_empty() && filter(w))
+                .map(|(_, o)| o.clone())
+                .collect()
+        };
+        let shown = group(&|w| w.variant.is_none());
+        let mut materials: Vec<Option<WallMaterial>> = doc
             .walls
             .iter()
-            .zip(&outlines)
-            .filter(|(w, o)| visible.contains(&w.layer) && !o.is_empty())
-            .map(|(_, o)| o.clone())
+            .filter(|w| w.variant.is_some())
+            .map(|w| w.material)
             .collect();
+        materials.dedup();
+        materials.sort_by_key(|m| m.map(|m| m as u8));
+        materials.dedup();
         let cuts: Vec<Vec<DVec2>> = doc
             .openings
             .iter()
@@ -99,6 +113,13 @@ impl Derived {
             })
             .collect();
         let wall_shapes = shapes::difference(&shown, &cuts);
+        let new_wall_shapes = materials
+            .into_iter()
+            .map(|m| {
+                let walls = group(&|w| w.variant.is_some() && w.material == m);
+                (m, shapes::difference(&walls, &cuts))
+            })
+            .collect();
 
         let room_regions = doc
             .rooms
@@ -117,6 +138,7 @@ impl Derived {
                 .collect(),
             nodes,
             wall_shapes,
+            new_wall_shapes,
             regions,
             room_regions,
             visible,

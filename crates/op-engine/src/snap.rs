@@ -272,16 +272,20 @@ mod tests {
         Command::Batch {
             commands: vec![
                 put(Element::Node(Node {
+                    variant: None,
                     id: "a".into(),
                     x: 0.0,
                     y: 0.0,
                 })),
                 put(Element::Node(Node {
+                    variant: None,
                     id: "b".into(),
                     x: 3000.0,
                     y: 0.0,
                 })),
                 put(Element::Wall(Wall {
+                    material: None,
+                    variant: None,
                     id: "w".into(),
                     layer: LayerKind::Walls.id().into(),
                     a: "a".into(),
