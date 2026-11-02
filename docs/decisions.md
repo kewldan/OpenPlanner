@@ -186,6 +186,6 @@ WebKitGTK по умолчанию не даёт WebGL2 в `OffscreenCanvas` вн
 ## 2026-11-02 · Проверка WebGPU и системных диалогов
 
 - WebGPU-путь движка проверяется в e2e (Playwright, проект `webgpu`): Chromium с программным адаптером SwiftShader, бэкенд обязан быть `BrowserWebGpu`, а на холсте должна быть видна сетка. Тот же пиксельный тест — для WebGL2.
-- Windows: настоящее окно (WebView2) запускается с флагами Chromium для программного WebGPU-адаптера, самопроверка обязана получить `BrowserWebGpu`.
+- Windows: настоящее окно (WebView2) запускается с флагами `--enable-unsafe-webgpu --ignore-gpu-blocklist` (программный адаптер D3D12 WARP на раннере без GPU), самопроверка обязана получить `BrowserWebGpu`. Флаги передаются через `additional_browser_args` при создании окна (`OPENPLANNER_WEBVIEW2_ARGS`): переменную `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` WebView2 под Tauri не применяет. Поэтому главное окно создаётся в коде (`create: false` в `tauri.conf.json`).
 - Системные диалоги «Сохранить» и «Открыть» проверяются на macOS (AppleScript), Windows (SendKeys) и Linux (xdotool): приложение в сценарии `dialogs` само вызывает команды, драйвер `scripts/desktop-dialogs.sh` проходит диалоги с клавиатуры, итог сверяется с файлом на диске.
-- CI на macOS — `macos-26` (основная ОС проекта, WebGPU в WKWebView включён по умолчанию).
+- CI на macOS — `macos-26` (основная ОС проекта). На виртуальной машине раннера WKWebView не выдаёт WebGPU-адаптер, а программного адаптера у WebKit нет, поэтому на macOS в CI движок работает на WebGL2. Сам WebGPU-путь движка проверен в настоящем окне Windows и в Chromium (пиксельная проверка сетки).
