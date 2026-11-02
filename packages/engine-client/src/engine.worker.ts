@@ -75,6 +75,17 @@ function call(current: Engine, request: EngineCall): { value: unknown; transfer:
       const bytes = current.exportDrawings(request.request, request.format);
       return { value: bytes, transfer: [bytes.buffer] };
     }
+    case "exportEstimate": {
+      const bytes = current.exportEstimate(request.format);
+      return { value: bytes, transfer: [bytes.buffer] };
+    }
+    case "exportPrices": {
+      const bytes = current.exportPrices(request.format);
+      return { value: bytes, transfer: [bytes.buffer] };
+    }
+    case "importPrices":
+      post({ kind: "events", events: current.importPrices(request.bytes, request.date).events });
+      return { value: undefined, transfer: [] };
     case "zipFiles": {
       const bytes = Engine.zipFiles(request.names, request.files);
       return { value: bytes, transfer: [bytes.buffer] };

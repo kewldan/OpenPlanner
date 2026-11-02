@@ -6,6 +6,7 @@ import {
   type Platform,
   PROJECT_EXTENSION,
   SCAN_EXTENSIONS,
+  TABLE_EXTENSIONS,
 } from "./types";
 
 const JOURNAL_PREFIX = "openplanner.journal:";
@@ -73,6 +74,12 @@ export const browserPlatform: Platform = {
 
   async openModel() {
     const file = await pickFile(".glb");
+    if (!file) return null;
+    return { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) };
+  },
+
+  async openTable() {
+    const file = await pickFile(TABLE_EXTENSIONS.map((ext) => `.${ext}`).join(","));
     if (!file) return null;
     return { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) };
   },

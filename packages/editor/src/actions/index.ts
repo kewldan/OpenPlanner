@@ -222,6 +222,16 @@ export const actions: readonly Action[] = [
     run: () => useEditor.getState().setDialog("drawings"),
   },
   {
+    id: "file.estimate",
+    title: "Смета…",
+    group: "file",
+    keywords: "смета стоимость прайс цены закупки материалы работы xlsx csv",
+    keys: [{ code: "KeyE", mod: true, shift: true }],
+    inInputs: true,
+    enabled: notBusy,
+    run: () => useEditor.getState().setDialog("estimate"),
+  },
+  {
     id: "file.addUnderlay",
     title: "Добавить подложку…",
     group: "file",

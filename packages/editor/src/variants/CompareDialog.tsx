@@ -1,6 +1,7 @@
 import type { ViewSummary, WallMaterial } from "@openplanner/engine-client";
 import { Button, Dialog } from "@openplanner/ui";
 import { useState } from "react";
+import { formatMoney } from "../estimate/prices";
 import { type MessageKey, t } from "../i18n";
 import { formatArea, formatDecimal } from "../inspector/format";
 import { useEditor } from "../store/editor";
@@ -94,6 +95,17 @@ export function CompareDialog() {
                   <th>{formatArea(b.totalArea)}</th>
                   <th>{delta(a.totalArea, b.totalArea)}</th>
                 </tr>
+                {(a.cost > 0 || b.cost > 0) && (
+                  <tr data-testid="compare-cost">
+                    <th>{t("compare.cost")}</th>
+                    <th>{formatMoney(a.cost)}</th>
+                    <th>{formatMoney(b.cost)}</th>
+                    <th>
+                      {b.cost >= a.cost ? "+" : "−"}
+                      {formatMoney(Math.abs(b.cost - a.cost))}
+                    </th>
+                  </tr>
+                )}
               </tfoot>
             </table>
             <div className={styles.changes}>

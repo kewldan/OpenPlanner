@@ -2,6 +2,7 @@ import type { Variant } from "@openplanner/engine-client";
 import { Button, IconButton } from "@openplanner/ui";
 import { type KeyboardEvent, useEffect, useState } from "react";
 import { sendToEngine } from "../engine";
+import { formatMoney } from "../estimate/prices";
 import { t } from "../i18n";
 import { formatDecimal } from "../inspector/format";
 import { Icon } from "../shell/icons";
@@ -102,6 +103,7 @@ function VariantRow({ variant, active }: { variant: Variant; active: boolean }) 
             demolished: formatDecimal(summary?.demolishedLength ?? 0),
             added: formatDecimal(added),
           })}
+          {summary && summary.cost > 0 && ` · ${formatMoney(summary.cost)}`}
         </span>
       </div>
       <IconButton label={t("variants.copy")} onClick={() => createVariant(variant.id)}>

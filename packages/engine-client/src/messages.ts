@@ -8,6 +8,7 @@ import type {
   FromEngine,
   ScanImport,
   ScanResult,
+  TableFormat,
   ToEngine,
 } from "../wasm/op_engine";
 
@@ -24,6 +25,7 @@ export type {
   Command,
   Device,
   DeviceEntry,
+  DeviceGroup,
   DeviceKind,
   Dimension,
   Document,
@@ -34,6 +36,9 @@ export type {
   ElectricalReport,
   Element,
   EngineEvents,
+  EstimateGroup,
+  EstimateLine,
+  EstimateReport,
   ExportNames,
   FaceInfo,
   Finish,
@@ -53,6 +58,7 @@ export type {
   MaterialAmount,
   MaterialKind,
   MaterialTotal,
+  Measure,
   Node,
   Opening,
   OpeningKind,
@@ -68,8 +74,13 @@ export type {
   PlumbingPoint,
   PlumbingReport,
   PointerPhase,
+  PriceItem,
+  PriceKind,
+  PricePoint,
   ProjectMeta,
+  Purchase,
   Quantity,
+  QuantityOverride,
   Room,
   RoomArea,
   RoomInfo,
@@ -94,6 +105,7 @@ export type {
   SunInfo,
   SunTime,
   Surface,
+  TableFormat,
   TileLayout,
   TilePattern,
   ToEngine,
@@ -120,7 +132,10 @@ export type EngineCall =
   | { type: "drawingSet"; request: DrawingRequest }
   | { type: "exportDrawings"; request: DrawingRequest; format: DrawingFormat }
   | { type: "zipFiles"; names: string[]; files: Uint8Array[] }
-  | { type: "importFurniture"; bytes: Uint8Array; name: string };
+  | { type: "importFurniture"; bytes: Uint8Array; name: string }
+  | { type: "exportEstimate"; format: TableFormat }
+  | { type: "exportPrices"; format: TableFormat }
+  | { type: "importPrices"; bytes: Uint8Array; date: string };
 
 /** Тип результата вызова. */
 export interface EngineCallResult {
@@ -135,6 +150,9 @@ export interface EngineCallResult {
   exportDrawings: Uint8Array;
   zipFiles: Uint8Array;
   importFurniture: undefined;
+  exportEstimate: Uint8Array;
+  exportPrices: Uint8Array;
+  importPrices: undefined;
 }
 
 /** UI → воркер. */

@@ -32,6 +32,7 @@ const undo = action("edit.undo");
 const redo = action("edit.redo");
 const palette = action("help.palette");
 const drawings = action("file.drawings");
+const estimate = action("file.estimate");
 
 function label(id: string): string {
   const found = action(id);
@@ -118,7 +119,9 @@ export function TopBar() {
         <Button onClick={drawings.run} aria-label={label(drawings.id)}>
           {t("action.drawings")}
         </Button>
-        <Button disabled>{t("action.estimate")}</Button>
+        <Button onClick={estimate.run} aria-label={label(estimate.id)}>
+          {t("action.estimate")}
+        </Button>
         <Button variant="primary" onClick={drawings.run}>
           {t("action.export")}
         </Button>

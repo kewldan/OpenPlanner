@@ -1,6 +1,7 @@
 import { PlanCanvas } from "./canvas/PlanCanvas";
 import { DrawingsDialog } from "./drawings/DrawingsDialog";
 import styles from "./Editor.module.css";
+import { EstimateDialog } from "./estimate/EstimateDialog";
 import { Inspector } from "./inspector/Inspector";
 import { CommandPalette } from "./palette/CommandPalette";
 import { ShortcutsDialog } from "./palette/ShortcutsDialog";
@@ -29,6 +30,7 @@ export function Editor() {
       <ScanWizard />
       <CompareDialog />
       <DrawingsDialog />
+      <EstimateDialog />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import type {
   DeviceEntry,
   Document,
   ElectricalReport,
+  EstimateReport,
   FinishReport,
   FromEngine,
   LengthInfo,
@@ -31,7 +32,14 @@ export type EditorMode =
   | "plumbing"
   | "finish";
 
-export type EditorDialog = "palette" | "shortcuts" | "scan" | "compare" | "drawings" | null;
+export type EditorDialog =
+  | "palette"
+  | "shortcuts"
+  | "scan"
+  | "compare"
+  | "drawings"
+  | "estimate"
+  | null;
 
 /** Вкладка левой панели. */
 export type SidebarTab =
@@ -121,6 +129,8 @@ export interface EditorState {
   materialLibrary: Material[];
   /** Поверхности и расчёт отделки текущего вида. */
   finishes: FinishReport | null;
+  /** Смета текущего вида. */
+  estimate: EstimateReport | null;
   /** Открытая вкладка левой панели. */
   sidebarTab: SidebarTab;
   setSidebarTab: (tab: SidebarTab) => void;
@@ -174,6 +184,7 @@ export const useEditor = create<EditorState>()((set) => ({
   plumbing: null,
   materialLibrary: [],
   finishes: null,
+  estimate: null,
   sidebarTab: "objects",
   setSidebarTab: (sidebarTab) => set({ sidebarTab }),
   setMode: (mode) => set({ mode }),
@@ -254,6 +265,8 @@ function reduce(acc: Partial<EditorState>, event: FromEngine): Partial<EditorSta
       return { ...acc, materialLibrary: event.items };
     case "finishes":
       return { ...acc, finishes: event.report };
+    case "estimate":
+      return { ...acc, estimate: event.report };
     case "view3dChanged":
       return {
         ...acc,

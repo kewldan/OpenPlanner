@@ -10,6 +10,7 @@ import {
   type Platform,
   PROJECT_EXTENSION,
   SCAN_EXTENSIONS,
+  TABLE_EXTENSIONS,
 } from "./types";
 
 const filters = [{ name: "Проект OpenPlanner", extensions: [PROJECT_EXTENSION] }];
@@ -70,6 +71,18 @@ export const desktopPlatform: Platform = {
     if (typeof path !== "string") return null;
     // GLB читается той же командой, что и сканы (проверка расширения и размера).
     const buffer = await invoke<ArrayBuffer>("read_scan", { path });
+    return { name: fileName(path), bytes: new Uint8Array(buffer) };
+  },
+
+  async openTable() {
+    const path = await open({
+      title: "Прайс",
+      multiple: false,
+      directory: false,
+      filters: [{ name: "Таблица CSV или Excel", extensions: [...TABLE_EXTENSIONS] }],
+    });
+    if (typeof path !== "string") return null;
+    const buffer = await invoke<ArrayBuffer>("read_table", { path });
     return { name: fileName(path), bytes: new Uint8Array(buffer) };
   },
 

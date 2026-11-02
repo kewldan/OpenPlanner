@@ -1,0 +1,150 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  max-height: calc(100vh - 120px);
+  min-height: 0;
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.view {
+  color: var(--text-3);
+  font-size: var(--text-sm);
+}
+
+.total {
+  margin-left: auto;
+  font-size: var(--text-md, 15px);
+  font-variant-numeric: tabular-nums;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 0;
+  overflow: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.table th,
+.table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  color: var(--text-3);
+  font-weight: 500;
+}
+
+.table tfoot th {
+  font-weight: 600;
+}
+
+.table .group th {
+  padding-top: var(--space-4);
+  background: var(--field);
+  font-weight: 600;
+}
+
+.table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.input {
+  height: 24px;
+  max-width: 100%;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+}
+
+.table .num .input {
+  width: 72px;
+  text-align: right;
+}
+
+.input[data-overridden="true"] {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.reset {
+  margin-left: var(--space-1);
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  cursor: pointer;
+}
+
+.reset:hover {
+  color: var(--text);
+}
+
+.tag {
+  margin-left: var(--space-2);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--field);
+  color: var(--text-3);
+  font-size: var(--text-xs);
+}
+
+.history {
+  display: block;
+  color: var(--text-3);
+  font-size: var(--text-xs);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.hint,
+.status,
+.warning {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-3);
+}
+
+.status {
+  color: var(--accent-text);
+}
+
+.warning {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--danger-bg);
+  color: var(--danger);
+}

@@ -49,6 +49,8 @@ export interface Platform {
   openScan(): Promise<PickedImage | null>;
   /** Выбрать свою модель мебели (GLB). `null` — пользователь передумал. */
   openModel(): Promise<PickedImage | null>;
+  /** Выбрать таблицу прайса (CSV или XLSX). `null` — пользователь передумал. */
+  openTable(): Promise<PickedImage | null>;
   /** Спросить, куда сохранить проект. `null` — пользователь отменил выбор. */
   chooseSaveTarget(suggestedName: string): Promise<SavedFile | null>;
   /** Записать проект туда, куда выбрал пользователь. */
@@ -73,7 +75,10 @@ export const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg"] as const;
 export const SCAN_EXTENSIONS = ["glb", "zip", "ply", "obj", "json"] as const;
 
 /** Расширения файлов экспорта; десктоп пишет только их. */
-export const EXPORT_EXTENSIONS = ["pdf", "svg", "dxf", "png", "xlsx", "zip"] as const;
+export const EXPORT_EXTENSIONS = ["pdf", "svg", "dxf", "png", "xlsx", "csv", "zip"] as const;
+
+/** Расширения таблиц прайса для импорта. */
+export const TABLE_EXTENSIONS = ["csv", "xlsx"] as const;
 
 export type ExportExtension = (typeof EXPORT_EXTENSIONS)[number];
 
@@ -93,6 +98,7 @@ export const exportFormats: Record<ExportExtension, { mime: string; label: strin
     mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     label: "Таблица Excel",
   },
+  csv: { mime: "text/csv", label: "Таблица CSV" },
   zip: { mime: "application/zip", label: "Архив ZIP" },
 };
 
