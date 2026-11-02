@@ -91,6 +91,7 @@ export type {
   Purchase,
   Quantity,
   QuantityOverride,
+  RenderShot,
   Room,
   RoomArea,
   RoomClimate,
@@ -148,7 +149,10 @@ export type EngineCall =
   | { type: "exportPrices"; format: TableFormat }
   | { type: "importPrices"; bytes: Uint8Array; date: string }
   | { type: "dxfInfo"; bytes: Uint8Array }
-  | { type: "importDxf"; bytes: Uint8Array; name: string; options: DxfImport };
+  | { type: "importDxf"; bytes: Uint8Array; name: string; options: DxfImport }
+  | { type: "renderInput"; view?: string }
+  | { type: "addRender"; bytes: Uint8Array; name: string; passes: number; date: string }
+  | { type: "assetBytes"; path: string };
 
 /** Тип результата вызова. */
 export interface EngineCallResult {
@@ -168,6 +172,9 @@ export interface EngineCallResult {
   importPrices: undefined;
   dxfInfo: DxfInfo;
   importDxf: undefined;
+  renderInput: Uint8Array;
+  addRender: undefined;
+  assetBytes: Uint8Array | undefined;
 }
 
 /** UI → воркер. */
@@ -199,4 +206,18 @@ export interface ScanWorkerRequest {
 export type ScanWorkerResponse =
   | { kind: "progress"; stage: number; count: number }
   | { kind: "result"; result: ScanResult }
+  | { kind: "error"; message: string };
+
+/** UI → воркер рендера. */
+export interface RenderWorkerRequest {
+  input: Uint8Array;
+  width: number;
+  height: number;
+  passes: number;
+}
+
+/** Воркер рендера → UI. */
+export type RenderWorkerResponse =
+  | { kind: "progress"; pass: number }
+  | { kind: "result"; png: Uint8Array }
   | { kind: "error"; message: string };

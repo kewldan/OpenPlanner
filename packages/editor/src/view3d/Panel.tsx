@@ -93,6 +93,9 @@ export function View3dPanel({ document }: { document: Document }) {
         <Button variant="outline" onClick={() => sendToEngine({ type: "resetCamera3d" })}>
           {t("view3d.reset")}
         </Button>
+        <Button variant="outline" onClick={() => useEditor.getState().setDialog("render")}>
+          {t("view3d.render")}
+        </Button>
         <Check
           label={t("view3d.ceiling")}
           checked={options.ceiling}

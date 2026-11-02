@@ -21,6 +21,7 @@ pub mod model3d;
 mod overlay;
 pub mod plumbing;
 pub mod protocol;
+pub mod render;
 pub mod scan_import;
 pub mod sheets;
 pub mod snap;

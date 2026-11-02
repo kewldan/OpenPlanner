@@ -107,6 +107,27 @@ impl Default for Site {
     }
 }
 
+/// Готовый фотореалистичный кадр, сохранённый в проекте.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub struct RenderShot {
+    /// Идентификатор.
+    pub id: String,
+    /// Название: ракурс или «Камера».
+    pub name: String,
+    /// Путь PNG внутри `.oplan`.
+    pub asset: String,
+    /// Ширина, пиксели.
+    pub width: u32,
+    /// Высота, пиксели.
+    pub height: u32,
+    /// Проходов трассировки.
+    pub passes: u32,
+    /// Дата: «ДД.ММ.ГГГГ».
+    pub date: String,
+}
+
 /// Сохранённый ракурс 3D-вида. Точки — в координатах плана (мм, Y вниз) и высота от пола.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
@@ -1323,6 +1344,9 @@ pub struct Document {
     /// Зоны тёплого пола.
     #[serde(default)]
     pub heating: Vec<HeatingZone>,
+    /// Готовые фотореалистичные кадры.
+    #[serde(default)]
+    pub renders: Vec<RenderShot>,
     /// Этажи выше первого (первый — неявный).
     #[serde(default)]
     pub levels: Vec<Level>,
@@ -1384,6 +1408,7 @@ impl Document {
             prices: Vec::new(),
             overrides: Vec::new(),
             heating: Vec::new(),
+            renders: Vec::new(),
             levels: Vec::new(),
             variants: Vec::new(),
             drawing: DrawingSettings::default(),

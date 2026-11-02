@@ -1790,6 +1790,55 @@
       ],
       "type": "object"
     },
+    "RenderShot": {
+      "description": "Готовый фотореалистичный кадр, сохранённый в проекте.",
+      "properties": {
+        "asset": {
+          "description": "Путь PNG внутри `.oplan`.",
+          "type": "string"
+        },
+        "date": {
+          "description": "Дата: «ДД.ММ.ГГГГ».",
+          "type": "string"
+        },
+        "height": {
+          "description": "Высота, пиксели.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "description": "Идентификатор.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Название: ракурс или «Камера».",
+          "type": "string"
+        },
+        "passes": {
+          "description": "Проходов трассировки.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "width": {
+          "description": "Ширина, пиксели.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "asset",
+        "width",
+        "height",
+        "passes",
+        "date"
+      ],
+      "type": "object"
+    },
     "Room": {
       "description": "Помещение. Контур и площадь вычисляются: это замкнутая область стен,\nв которой лежит точка подписи.",
       "properties": {
@@ -2340,6 +2389,14 @@
       "description": "Прайс проекта: позиции сметы.",
       "items": {
         "$ref": "#/$defs/PriceItem"
+      },
+      "type": "array"
+    },
+    "renders": {
+      "default": [],
+      "description": "Готовые фотореалистичные кадры.",
+      "items": {
+        "$ref": "#/$defs/RenderShot"
       },
       "type": "array"
     },

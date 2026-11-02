@@ -17,10 +17,10 @@ const MIGRATIONS: &[Migration] = &[
     v10_to_v11,
 ];
 
-/// Формат 11 (стадия 11): этажи и зоны тёплого пола.
+/// Формат 11 (стадия 11): этажи, зоны тёплого пола, готовые кадры рендера.
 fn v10_to_v11(mut model: Value) -> Result<Value, String> {
     let object = model.as_object_mut().ok_or("ожидался объект модели")?;
-    for key in ["levels", "heating"] {
+    for key in ["levels", "heating", "renders"] {
         object
             .entry(key)
             .or_insert_with(|| Value::Array(Vec::new()));

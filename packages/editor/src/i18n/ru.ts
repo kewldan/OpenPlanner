@@ -195,6 +195,30 @@ export const ru = {
   "climate.air": "Воздухообмен и охлаждение",
   "climate.airCalc": "{provided} из {required} м³/ч · сплит {cooling} кВт · блоков {units}",
 
+  "render.title": "Фотореалистичный рендер",
+  "render.view": "Ракурс",
+  "render.camera": "Текущая камера",
+  "render.size": "Размер",
+  "render.quality": "Качество",
+  "render.draft": "Черновик (8 проходов)",
+  "render.good": "Хорошо (32 прохода)",
+  "render.best": "Отлично (128 проходов)",
+  "render.enqueue": "В очередь",
+  "render.hint":
+    "Кадр считается трассировкой путей в отдельном потоке: солнце из настроек 3D (или летний полдень), небо, отражённый свет. Готовые кадры сохраняются в проекте.",
+  "render.queue": "Очередь",
+  "render.empty": "Очередь пуста",
+  "render.status.waiting": "ждёт",
+  "render.status.running": "проход {pass} из {passes}",
+  "render.status.done": "готово",
+  "render.status.failed": "ошибка",
+  "render.status.cancelled": "отменено",
+  "render.cancel": "Отменить",
+  "render.clear": "Убрать завершённые",
+  "render.noShots": "Готовых кадров пока нет.",
+  "render.save": "Сохранить PNG",
+  "render.delete": "Удалить",
+
   "circuit.lighting": "Освещение",
   "circuit.sockets": "Розетки",
   "circuit.power": "Силовая",
@@ -319,6 +343,7 @@ export const ru = {
 
   "view3d.title": "3D-вид",
   "view3d.mode": "Камера",
+  "view3d.render": "Фотореалистичный рендер…",
   "view3d.orbit": "Орбита",
   "view3d.walk": "Прогулка",
   "view3d.hintOrbit":

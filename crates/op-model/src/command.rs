@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     AssetData, Circuit, Document, DrawingSettings, Element, Finish, HeatingZone, Level, LightScene,
-    Material, PriceItem, ProjectMeta, QuantityOverride, SavedView, Site, Surface, element,
+    Material, PriceItem, ProjectMeta, QuantityOverride, RenderShot, SavedView, Site, Surface,
+    element,
 };
 
 /// Ошибка применения команды. Документ при ошибке не меняется.
@@ -102,6 +103,11 @@ pub enum Command {
     SetFinishes {
         /// Отделка.
         finishes: Vec<Finish>,
+    },
+    /// Заменить список готовых кадров (файлы — отдельными командами).
+    SetRenders {
+        /// Кадры.
+        renders: Vec<RenderShot>,
     },
     /// Заменить зоны тёплого пола.
     SetHeating {
@@ -305,6 +311,19 @@ impl Command {
                 }
                 let previous = std::mem::replace(&mut doc.finishes, finishes);
                 Ok(Self::SetFinishes { finishes: previous })
+            }
+            Self::SetRenders { renders } => {
+                if renders
+                    .iter()
+                    .any(|r| r.id.is_empty() || !doc.assets.contains_key(&r.asset))
+                {
+                    return Err(CommandError::InvalidValue {
+                        field: "renders",
+                        reason: "у кадра должен быть файл в проекте",
+                    });
+                }
+                let previous = std::mem::replace(&mut doc.renders, renders);
+                Ok(Self::SetRenders { renders: previous })
             }
             Self::SetHeating { heating } => {
                 if heating.iter().any(|z| {

@@ -24,12 +24,13 @@ impl EngineState {
     /// 3D-сцена текущего вида (обмер или вариант).
     #[must_use]
     pub fn scene_3d(&self) -> Scene3D {
-        let mut scene = model3d::build(
-            &self.projected,
-            &self.derived,
-            &self.options_3d,
-            &self.models,
-        );
+        self.scene_3d_with(&self.options_3d)
+    }
+
+    /// 3D-сцена текущего вида с заданными настройками.
+    #[must_use]
+    pub fn scene_3d_with(&self, options: &Options3d) -> Scene3D {
+        let mut scene = model3d::build(&self.projected, &self.derived, options, &self.models);
         // Этажи ниже текущего — под ним на своих отметках.
         let full = self.history.document();
         let here = op_model::view::elevation(full, self.level.as_deref());
@@ -43,7 +44,7 @@ impl EngineState {
             // Срез относится к текущему этажу: нижние показываются целиком.
             let options = Options3d {
                 cut: None,
-                ..self.options_3d
+                ..*options
             };
             let lower = model3d::build(&doc, &derived, &options, &self.models);
             let dz = elevation - here;

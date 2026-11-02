@@ -2931,3 +2931,41 @@ fn floor_heating_ventilation_and_air_conditioning() {
     s.handle(ToEngine::DeleteSelection);
     assert!(s.document().heating.is_empty());
 }
+
+// ---------------------------------------------------------------- рендер
+
+#[test]
+fn render_queue_input_and_shots_in_the_project() {
+    let mut s = state();
+    assert!(s.render_input(None).is_err());
+    two_rooms(&mut s);
+    let input = s.render_input(None).unwrap();
+    let png = crate::render::trace_png(&input, 32, 24, 2, |_| true).unwrap();
+    assert!(png.starts_with(b"\x89PNG"));
+    // Ракурс из проекта.
+    enable_3d(&mut s);
+    s.handle(ToEngine::SaveView3d {
+        name: "Гостиная".into(),
+    });
+    let view = s.document().views[0].id.clone();
+    assert!(s.render_input(Some(&view)).is_ok());
+    assert!(s.render_input(Some("нет")).is_err());
+    // Кадр сохраняется в проекте и удаляется вместе с файлом, одним шагом каждый.
+    s.add_render(png.clone(), "Гостиная", 2, "02.11.2026")
+        .unwrap();
+    let shot = s.document().renders[0].clone();
+    assert_eq!((shot.width, shot.height), (32, 24));
+    assert_eq!(s.asset_bytes(&shot.asset).unwrap(), png);
+    s.handle(ToEngine::DeleteRender {
+        id: shot.id.clone(),
+    });
+    assert!(s.document().renders.is_empty() && s.asset_bytes(&shot.asset).is_none());
+    s.handle(ToEngine::Undo);
+    assert_eq!(s.document().renders.len(), 1);
+    // Файл проекта уносит кадр с собой.
+    let bytes = s.export_file("test").unwrap();
+    let mut other = state();
+    other.import_file(&bytes).unwrap();
+    assert!(other.asset_bytes(&shot.asset).is_some());
+    assert!(s.add_render(b"not png".to_vec(), "x", 1, "").is_err());
+}

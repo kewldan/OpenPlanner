@@ -327,6 +327,66 @@ impl Engine {
         Ok(events.into_ts()?)
     }
 
+    /// Сцена и камера для трассировки: ракурс или текущая камера 3D-вида.
+    ///
+    /// # Errors
+    ///
+    /// Ракурса нет или сцена пуста.
+    #[wasm_bindgen(js_name = renderInput)]
+    #[allow(clippy::needless_pass_by_value)] // wasm-bindgen принимает аргументы только по значению
+    pub fn render_input(&self, view: Option<String>) -> Result<Vec<u8>, JsError> {
+        self.state
+            .render_input(view.as_deref())
+            .map_err(|err| JsError::new(&err))
+    }
+
+    /// Трассирует сцену в PNG; `progress(pass)` — после каждого прохода.
+    ///
+    /// # Errors
+    ///
+    /// Повреждённые входные данные.
+    #[wasm_bindgen(js_name = traceImage)]
+    pub fn trace_image(
+        input: &[u8],
+        width: u32,
+        height: u32,
+        passes: u32,
+        progress: &js_sys::Function,
+    ) -> Result<Vec<u8>, JsError> {
+        crate::render::trace_png(input, width, height, passes, |pass| {
+            let _ = progress.call1(&JsValue::NULL, &JsValue::from(pass));
+            true
+        })
+        .map_err(|err| JsError::new(&err))
+    }
+
+    /// Сохраняет готовый кадр в проекте.
+    ///
+    /// # Errors
+    ///
+    /// Байты — не PNG.
+    #[wasm_bindgen(js_name = addRender)]
+    pub fn add_render(
+        &mut self,
+        bytes: Vec<u8>,
+        name: &str,
+        passes: u32,
+        date: &str,
+    ) -> Result<Ts<EngineEvents>, JsError> {
+        let events = self
+            .state
+            .add_render(bytes, name, passes, date)
+            .map_err(|err| JsError::new(&err))?;
+        Ok(events.into_ts()?)
+    }
+
+    /// Байты файла проекта (картинка кадра).
+    #[wasm_bindgen(js_name = assetBytes)]
+    #[must_use]
+    pub fn asset_bytes(&self, path: &str) -> Option<Vec<u8>> {
+        self.state.asset_bytes(path)
+    }
+
     /// ZIP-архив из файлов (PNG листов, растеризованных в UI).
     ///
     /// # Errors

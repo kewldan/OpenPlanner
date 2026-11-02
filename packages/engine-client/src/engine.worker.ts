@@ -61,6 +61,18 @@ function call(current: Engine, request: EngineCall): { value: unknown; transfer:
     case "importScan":
       post({ kind: "events", events: current.importScan(request.request, request.source).events });
       return { value: undefined, transfer: [] };
+    case "renderInput": {
+      const bytes = current.renderInput(request.view);
+      return { value: bytes, transfer: [bytes.buffer] };
+    }
+    case "addRender":
+      post({
+        kind: "events",
+        events: current.addRender(request.bytes, request.name, request.passes, request.date).events,
+      });
+      return { value: undefined, transfer: [] };
+    case "assetBytes":
+      return { value: current.assetBytes(request.path), transfer: [] };
     case "dxfInfo":
       return { value: Engine.dxfInfo(request.bytes), transfer: [] };
     case "importDxf":

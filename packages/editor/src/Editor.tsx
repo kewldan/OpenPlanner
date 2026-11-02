@@ -6,6 +6,7 @@ import { EstimateDialog } from "./estimate/EstimateDialog";
 import { Inspector } from "./inspector/Inspector";
 import { CommandPalette } from "./palette/CommandPalette";
 import { ShortcutsDialog } from "./palette/ShortcutsDialog";
+import { RenderDialog } from "./render/RenderDialog";
 import { ScanWizard } from "./scan/ScanWizard";
 import { Sidebar, Toolbar } from "./shell/Sidebar";
 import { StatusBar } from "./shell/StatusBar";
@@ -33,6 +34,7 @@ export function Editor() {
       <DrawingsDialog />
       <EstimateDialog />
       <DxfDialog />
+      <RenderDialog />
     </div>
   );
 }

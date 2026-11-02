@@ -41,6 +41,7 @@ export type EditorDialog =
   | "compare"
   | "drawings"
   | "estimate"
+  | "render"
   | null;
 
 /** Вкладка левой панели. */

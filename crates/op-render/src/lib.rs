@@ -17,6 +17,7 @@ mod renderer;
 pub mod scene;
 pub mod text;
 pub mod three;
+pub mod trace;
 
 pub use camera::Camera2D;
 #[cfg(not(target_arch = "wasm32"))]

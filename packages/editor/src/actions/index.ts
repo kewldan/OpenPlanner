@@ -241,6 +241,14 @@ export const actions: readonly Action[] = [
     run: () => void addUnderlay(),
   },
   {
+    id: "view.render",
+    title: "Фотореалистичный рендер…",
+    group: "view",
+    keywords: "рендер визуализация фото кадр картинка png трассировка",
+    enabled: notBusy,
+    run: () => useEditor.getState().setDialog("render"),
+  },
+  {
     id: "file.importDxf",
     title: "Импорт DXF…",
     group: "file",

@@ -550,6 +550,7 @@ impl EngineState {
                     }],
                 }
             }
+            ToEngine::DeleteRender { id } => self.delete_render(&id),
             ToEngine::SetLevel { level } => self.set_level(level),
             ToEngine::AddLevel { name } => self.add_level(name),
             ToEngine::DeleteLevel { id } => self.delete_level(&id),
