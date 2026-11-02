@@ -144,14 +144,17 @@ pub enum LayerKind {
     Underlays,
     /// Скан: вид сверху импортированного скана.
     Scan,
+    /// Мебель.
+    Furniture,
 }
 
 impl LayerKind {
     /// Все системные слои в порядке по умолчанию (первый — снизу).
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::Scan,
         Self::Underlays,
         Self::Rooms,
+        Self::Furniture,
         Self::Walls,
         Self::Openings,
         Self::Dimensions,
@@ -169,6 +172,7 @@ impl LayerKind {
             Self::Leaders => "layer-leaders",
             Self::Underlays => "layer-underlays",
             Self::Scan => "layer-scan",
+            Self::Furniture => "layer-furniture",
         }
     }
 
@@ -183,6 +187,7 @@ impl LayerKind {
             Self::Leaders => "Выноски",
             Self::Underlays => "Подложка",
             Self::Scan => "Скан",
+            Self::Furniture => "Мебель",
         }
     }
 }
@@ -476,6 +481,51 @@ pub struct Dimension {
     pub offset: f64,
 }
 
+/// Предмет мебели или оборудования: позиция каталога или своя модель GLB.
+///
+/// Локальные оси: ширина — вдоль X, глубина — вдоль Y; спинка (сторона к стене)
+/// — на −Y, лицевая сторона — на +Y. Поворот — по часовой стрелке на плане.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub struct Furniture {
+    /// Идентификатор.
+    pub id: String,
+    /// Слой.
+    pub layer: String,
+    /// Вариант, в котором предмет новый (без значения — обмер).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub variant: Option<String>,
+    /// Позиция каталога (`bed-double`) или `custom` для своей модели.
+    pub item: String,
+    /// Название.
+    pub name: String,
+    /// Центр, мм.
+    pub x: f64,
+    /// Центр, мм.
+    pub y: f64,
+    /// Поворот по часовой стрелке, градусы.
+    #[serde(default)]
+    pub rotation: f64,
+    /// Отражён по ширине.
+    #[serde(default)]
+    pub mirrored: bool,
+    /// Ширина, мм.
+    pub width: f64,
+    /// Глубина, мм.
+    pub depth: f64,
+    /// Высота, мм.
+    pub height: f64,
+    /// Низ над полом, мм (навесные шкафы, полки).
+    #[serde(default)]
+    pub elevation: f64,
+    /// Своя модель: путь файла GLB внутри `.oplan`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub model: Option<String>,
+}
+
 /// Выноска: стрелка к точке и текст.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
@@ -556,6 +606,9 @@ pub struct Document {
     pub leaders: Vec<Leader>,
     /// Подложки.
     pub underlays: Vec<Underlay>,
+    /// Мебель и оборудование.
+    #[serde(default)]
+    pub furniture: Vec<Furniture>,
     /// Варианты перепланировки.
     #[serde(default)]
     pub variants: Vec<Variant>,
@@ -603,6 +656,7 @@ impl Document {
             dimensions: Vec::new(),
             leaders: Vec::new(),
             underlays: Vec::new(),
+            furniture: Vec::new(),
             variants: Vec::new(),
             drawing: DrawingSettings::default(),
             site: Site::default(),
@@ -651,6 +705,12 @@ impl Document {
     #[must_use]
     pub fn leader(&self, id: &str) -> Option<&Leader> {
         self.leaders.iter().find(|l| l.id == id)
+    }
+
+    /// Предмет мебели по идентификатору.
+    #[must_use]
+    pub fn furniture_item(&self, id: &str) -> Option<&Furniture> {
+        self.furniture.iter().find(|f| f.id == id)
     }
 
     /// Вариант по идентификатору.

@@ -9,6 +9,9 @@ use crate::{Command, CommandError, Document};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 #[serde(tag = "op", rename_all = "camelCase", rename_all_fields = "camelCase")]
+// Операции короткоживущие и по одной на действие: упаковка команды в Box
+// не окупает лишнего выделения памяти.
+#[allow(clippy::large_enum_variant)]
 pub enum HistoryOp {
     /// Выполнить команду.
     Execute {

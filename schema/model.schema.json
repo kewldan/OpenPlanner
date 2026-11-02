@@ -109,6 +109,95 @@
       },
       "type": "object"
     },
+    "Furniture": {
+      "description": "Предмет мебели или оборудования: позиция каталога или своя модель GLB.\n\nЛокальные оси: ширина — вдоль X, глубина — вдоль Y; спинка (сторона к стене)\n— на −Y, лицевая сторона — на +Y. Поворот — по часовой стрелке на плане.",
+      "properties": {
+        "depth": {
+          "description": "Глубина, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "elevation": {
+          "default": 0.0,
+          "description": "Низ над полом, мм (навесные шкафы, полки).",
+          "format": "double",
+          "type": "number"
+        },
+        "height": {
+          "description": "Высота, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "id": {
+          "description": "Идентификатор.",
+          "type": "string"
+        },
+        "item": {
+          "description": "Позиция каталога (`bed-double`) или `custom` для своей модели.",
+          "type": "string"
+        },
+        "layer": {
+          "description": "Слой.",
+          "type": "string"
+        },
+        "mirrored": {
+          "default": false,
+          "description": "Отражён по ширине.",
+          "type": "boolean"
+        },
+        "model": {
+          "description": "Своя модель: путь файла GLB внутри `.oplan`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Название.",
+          "type": "string"
+        },
+        "rotation": {
+          "default": 0.0,
+          "description": "Поворот по часовой стрелке, градусы.",
+          "format": "double",
+          "type": "number"
+        },
+        "variant": {
+          "description": "Вариант, в котором предмет новый (без значения — обмер).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "width": {
+          "description": "Ширина, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "x": {
+          "description": "Центр, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "y": {
+          "description": "Центр, мм.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "layer",
+        "item",
+        "name",
+        "x",
+        "y",
+        "width",
+        "depth",
+        "height"
+      ],
+      "type": "object"
+    },
     "Justification": {
       "description": "Линия привязки стены: где лежат узлы относительно толщины.",
       "oneOf": [
@@ -204,6 +293,11 @@
         {
           "const": "scan",
           "description": "Скан: вид сверху импортированного скана.",
+          "type": "string"
+        },
+        {
+          "const": "furniture",
+          "description": "Мебель.",
           "type": "string"
         }
       ]
@@ -793,6 +887,14 @@
         "paper": "a3Landscape"
       },
       "description": "Настройки чертежей."
+    },
+    "furniture": {
+      "default": [],
+      "description": "Мебель и оборудование.",
+      "items": {
+        "$ref": "#/$defs/Furniture"
+      },
+      "type": "array"
     },
     "layers": {
       "description": "Слои в порядке отрисовки (первый — снизу).",

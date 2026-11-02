@@ -4,7 +4,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Dimension, Document, Layer, Leader, Node, Opening, Room, Underlay, Variant, Wall,
+    Dimension, Document, Furniture, Layer, Leader, Node, Opening, Room, Underlay, Variant, Wall,
     command::CommandError,
 };
 
@@ -29,6 +29,8 @@ pub enum Element {
     Leader(Leader),
     /// Подложка.
     Underlay(Underlay),
+    /// Мебель.
+    Furniture(Furniture),
     /// Вариант перепланировки.
     Variant(Variant),
 }
@@ -93,6 +95,13 @@ macro_rules! each_kind {
         if r.is_some() {
             return r;
         }
+        let r = {
+            let $list = &mut doc.furniture;
+            $body
+        };
+        if r.is_some() {
+            return r;
+        }
         let $list = &mut doc.variants;
         $body
     }};
@@ -118,7 +127,7 @@ macro_rules! stored {
     )*};
 }
 stored!(
-    Layer, Node, Wall, Opening, Room, Dimension, Leader, Underlay, Variant
+    Layer, Node, Wall, Opening, Room, Dimension, Leader, Underlay, Furniture, Variant
 );
 
 fn take<T: Stored>(list: &mut Vec<T>, id: &str) -> Option<(Element, usize)> {
@@ -143,6 +152,7 @@ impl Element {
             Self::Dimension(e) => &e.id,
             Self::Leader(e) => &e.id,
             Self::Underlay(e) => &e.id,
+            Self::Furniture(e) => &e.id,
             Self::Variant(e) => &e.id,
         }
     }
@@ -157,6 +167,7 @@ impl Element {
             Self::Room(e) => e.variant.as_deref(),
             Self::Dimension(e) => e.variant.as_deref(),
             Self::Leader(e) => e.variant.as_deref(),
+            Self::Furniture(e) => e.variant.as_deref(),
             Self::Layer(_) | Self::Underlay(_) | Self::Variant(_) => None,
         }
     }
@@ -170,6 +181,7 @@ impl Element {
             Self::Room(e) => e.variant = variant,
             Self::Dimension(e) => e.variant = variant,
             Self::Leader(e) => e.variant = variant,
+            Self::Furniture(e) => e.variant = variant,
             Self::Layer(_) | Self::Underlay(_) | Self::Variant(_) => {}
         }
     }
@@ -185,6 +197,7 @@ impl Element {
             Self::Dimension(e) => Some(&e.layer),
             Self::Leader(e) => Some(&e.layer),
             Self::Underlay(e) => Some(&e.layer),
+            Self::Furniture(e) => Some(&e.layer),
         }
     }
 
@@ -242,6 +255,7 @@ pub(crate) fn put(
         Element::Dimension(e) => put_into!(doc.dimensions, e),
         Element::Leader(e) => put_into!(doc.leaders, e),
         Element::Underlay(e) => put_into!(doc.underlays, e),
+        Element::Furniture(e) => put_into!(doc.furniture, e),
         Element::Variant(e) => put_into!(doc.variants, e),
     }
     Ok(previous)
@@ -369,6 +383,23 @@ fn validate(doc: &Document, element: &Element) -> Result<(), CommandError> {
                 return Err(missing(&u.asset));
             }
         }
+        Element::Furniture(f) => {
+            finite("x", &[f.x, f.y, f.rotation])?;
+            positive("width", f.width, "ширина должна быть больше нуля")?;
+            positive("depth", f.depth, "глубина должна быть больше нуля")?;
+            positive("height", f.height, "высота должна быть больше нуля")?;
+            if !f.elevation.is_finite() || f.elevation < 0.0 {
+                return Err(invalid(
+                    "elevation",
+                    "высота над полом не может быть отрицательной",
+                ));
+            }
+            if let Some(model) = &f.model
+                && !doc.assets.contains_key(model)
+            {
+                return Err(missing(model));
+            }
+        }
         Element::Variant(v) => {
             if v.name.trim().is_empty() {
                 return Err(invalid("name", "у варианта должно быть название"));
@@ -392,6 +423,7 @@ pub(crate) fn ensure_unreferenced(doc: &Document, element: &Element) -> Result<(
                 || doc.dimensions.iter().any(|e| e.layer == id)
                 || doc.leaders.iter().any(|e| e.layer == id)
                 || doc.underlays.iter().any(|e| e.layer == id)
+                || doc.furniture.iter().any(|e| e.layer == id)
         }
         Element::Node(_) => {
             doc.walls.iter().any(|w| w.a == id || w.b == id)
@@ -410,6 +442,7 @@ pub(crate) fn ensure_unreferenced(doc: &Document, element: &Element) -> Result<(
                 || doc.rooms.iter().any(|e| own(&e.variant))
                 || doc.dimensions.iter().any(|e| own(&e.variant))
                 || doc.leaders.iter().any(|e| own(&e.variant))
+                || doc.furniture.iter().any(|e| own(&e.variant))
         }
         _ => false,
     };
@@ -440,6 +473,7 @@ impl Document {
             dimensions => Dimension,
             leaders => Leader,
             underlays => Underlay,
+            furniture => Furniture,
             variants => Variant
         );
         None

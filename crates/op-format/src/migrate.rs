@@ -12,7 +12,31 @@ use crate::{FORMAT_VERSION, FormatError};
 pub(crate) type Migration = fn(Value) -> Result<Value, String>;
 
 /// `MIGRATIONS[i]` переводит формат `i + 1` в `i + 2`.
-const MIGRATIONS: &[Migration] = &[v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6];
+const MIGRATIONS: &[Migration] = &[v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7];
+
+/// Формат 7 (стадия 6): мебель и системный слой «Мебель» над помещениями.
+fn v6_to_v7(mut model: Value) -> Result<Value, String> {
+    let object = model.as_object_mut().ok_or("ожидался объект модели")?;
+    object
+        .entry("furniture")
+        .or_insert_with(|| Value::Array(Vec::new()));
+    // Списка слоёв нет только в обрезанных моделях (тесты миграций) — тогда слои
+    // возьмутся из документа по умолчанию.
+    let Some(layers) = object.get_mut("layers").and_then(Value::as_array_mut) else {
+        return Ok(model);
+    };
+    if !layers.iter().any(|l| l["id"] == "layer-furniture") {
+        let at = layers
+            .iter()
+            .position(|l| l["id"] == "layer-rooms")
+            .map_or(layers.len(), |i| i + 1);
+        layers.insert(
+            at,
+            serde_json::json!({ "id": "layer-furniture", "name": "Мебель", "visible": true, "locked": false, "system": "furniture" }),
+        );
+    }
+    Ok(model)
+}
 
 /// Формат 6 (стадия 5): привязка к местности для солнца и сохранённые ракурсы 3D.
 fn v5_to_v6(mut model: Value) -> Result<Value, String> {
@@ -169,7 +193,7 @@ mod tests {
         let model =
             json!({ "meta": { "title": "Кв.", "address": "" }, "defaultCeilingHeight": 2700.0 });
         let migrated = migrate(model, 1).unwrap();
-        assert_eq!(migrated["layers"].as_array().map(Vec::len), Some(7));
+        assert_eq!(migrated["layers"].as_array().map(Vec::len), Some(8));
         assert_eq!(migrated["layers"][0]["id"], json!("layer-scan"));
         assert_eq!(migrated["walls"], json!([]));
         assert_eq!(migrated["variants"], json!([]));
@@ -201,6 +225,18 @@ mod format5 {
         assert_eq!(model["meta"]["stage"], "Р");
         assert_eq!(model["meta"]["designation"], "");
         assert_eq!(model["drawing"]["paper"], "a3Landscape");
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)] // тест
+    fn v6_gets_furniture_layer_above_rooms() {
+        let model = serde_json::json!({
+            "layers": [{ "id": "layer-rooms" }, { "id": "layer-walls" }],
+        });
+        let model = migrate(model, 6).unwrap();
+        assert_eq!(model["furniture"], serde_json::json!([]));
+        assert_eq!(model["layers"][1]["id"], "layer-furniture");
+        assert_eq!(model["layers"][2]["id"], "layer-walls");
     }
 
     #[test]

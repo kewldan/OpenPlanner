@@ -13,9 +13,9 @@ pub mod view;
 
 pub use command::{Command, CommandError};
 pub use document::{
-    Anchor, AssetData, Dimension, Document, DrawingSettings, Justification, Layer, LayerKind,
-    Leader, Node, Opening, OpeningKind, PaperFormat, ProjectMeta, Room, SavedView, Side, Site,
-    Underlay, Variant, Wall, WallMaterial,
+    Anchor, AssetData, Dimension, Document, DrawingSettings, Furniture, Justification, Layer,
+    LayerKind, Leader, Node, Opening, OpeningKind, PaperFormat, ProjectMeta, Room, SavedView, Side,
+    Site, Underlay, Variant, Wall, WallMaterial,
 };
 pub use element::Element;
 pub use history::{History, HistoryOp};
