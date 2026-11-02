@@ -18,6 +18,7 @@ const exports: readonly { kind: ExportKind; label: MessageKey }[] = [
   { kind: "svg", label: "drawings.svg" },
   { kind: "png", label: "drawings.png" },
   { kind: "xlsx", label: "drawings.xlsx" },
+  { kind: "ifc", label: "drawings.ifc" },
 ];
 
 /** Вариант, с которого открывается окно: текущий, последний открытый или обмер. */

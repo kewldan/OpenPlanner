@@ -1154,6 +1154,8 @@ pub enum DrawingFormat {
     Xlsx,
     /// «Пакет для бригады»: PDF чертежей и XLSX ведомостей в ZIP.
     Bundle,
+    /// Модель здания в IFC 4 (для BIM-программ).
+    Ifc,
 }
 
 /// Запрос комплекта чертежей.
@@ -1214,6 +1216,8 @@ pub struct ExportNames {
     pub xlsx: String,
     /// «Пакет для бригады».
     pub bundle: String,
+    /// IFC 4.
+    pub ifc: String,
 }
 
 /// Что импортировать из скана.

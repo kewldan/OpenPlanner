@@ -268,6 +268,7 @@ export const ru = {
   "drawings.svg": "SVG",
   "drawings.png": "PNG",
   "drawings.xlsx": "Ведомости XLSX",
+  "drawings.ifc": "IFC",
   "drawings.bundle": "Пакет для бригады",
   "drawings.bundleHint": "PDF чертежей и XLSX ведомостей одним ZIP",
   "drawings.exporting": "Экспорт…",

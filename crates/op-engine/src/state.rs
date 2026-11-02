@@ -717,6 +717,28 @@ impl EngineState {
         )
     }
 
+    /// Файл экспорта чертежей или модели (IFC).
+    ///
+    /// # Errors
+    ///
+    /// Ошибка записи файла.
+    pub fn export_drawings(
+        &self,
+        request: &DrawingRequest,
+        format: crate::protocol::DrawingFormat,
+    ) -> Result<Vec<u8>, op_export::ExportError> {
+        let set = self.drawings(request);
+        if format == crate::protocol::DrawingFormat::Ifc {
+            return Ok(crate::ifc::export(
+                self.history.document(),
+                request.variant.as_deref(),
+                &request.date,
+                &set.file_name(format),
+            ));
+        }
+        set.export(format)
+    }
+
     /// Открывает проект из контейнера `.oplan`. История начинается заново.
     ///
     /// # Errors

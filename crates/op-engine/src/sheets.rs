@@ -383,6 +383,7 @@ impl SheetSet {
                 dxf: self.file_name(DrawingFormat::Dxf),
                 xlsx: self.file_name(DrawingFormat::Xlsx),
                 bundle: self.file_name(DrawingFormat::Bundle),
+                ifc: self.file_name(DrawingFormat::Ifc),
             },
         }
     }
@@ -393,6 +394,7 @@ impl SheetSet {
         match format {
             DrawingFormat::Pdf => "pdf",
             DrawingFormat::Xlsx => "xlsx",
+            DrawingFormat::Ifc => "ifc",
             DrawingFormat::Svg if self.sheets.len() == 1 => "svg",
             DrawingFormat::Dxf if self.sheets.len() == 1 => "dxf",
             DrawingFormat::Svg | DrawingFormat::Dxf | DrawingFormat::Bundle => "zip",
@@ -404,6 +406,7 @@ impl SheetSet {
     pub fn file_name(&self, format: DrawingFormat) -> String {
         let suffix = match format {
             DrawingFormat::Xlsx => " — ведомости",
+            DrawingFormat::Ifc => " — модель",
             DrawingFormat::Bundle => " — пакет для бригады",
             _ => "",
         };
@@ -434,6 +437,10 @@ impl SheetSet {
             }
         };
         match format {
+            // IFC пишется из модели, а не из листов (`EngineState::export_drawings`).
+            DrawingFormat::Ifc => Err(ExportError::Format(
+                "IFC собирается из модели, а не из листов".into(),
+            )),
             DrawingFormat::Pdf => self.pdf(),
             DrawingFormat::Xlsx => xlsx::write(&self.worksheets),
             DrawingFormat::Svg => per_sheet("svg", &|s| {

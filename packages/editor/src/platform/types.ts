@@ -75,7 +75,7 @@ export const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg"] as const;
 export const SCAN_EXTENSIONS = ["glb", "zip", "ply", "obj", "json"] as const;
 
 /** Расширения файлов экспорта; десктоп пишет только их. */
-export const EXPORT_EXTENSIONS = ["pdf", "svg", "dxf", "png", "xlsx", "csv", "zip"] as const;
+export const EXPORT_EXTENSIONS = ["pdf", "svg", "dxf", "png", "xlsx", "csv", "ifc", "zip"] as const;
 
 /** Расширения таблиц прайса для импорта. */
 export const TABLE_EXTENSIONS = ["csv", "xlsx"] as const;
@@ -99,6 +99,7 @@ export const exportFormats: Record<ExportExtension, { mime: string; label: strin
     label: "Таблица Excel",
   },
   csv: { mime: "text/csv", label: "Таблица CSV" },
+  ifc: { mime: "application/x-step", label: "Модель IFC" },
   zip: { mime: "application/zip", label: "Архив ZIP" },
 };
 

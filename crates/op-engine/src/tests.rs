@@ -2680,3 +2680,38 @@ fn estimate_and_prices_files_round_trip() {
     assert_eq!(first.history[0].date, "03.11.2026");
     assert!(other.import_prices(b"nothing here", "").is_err());
 }
+
+// ---------------------------------------------------------------- IFC
+
+#[test]
+fn ifc_export_has_walls_openings_spaces_and_furniture() {
+    use crate::protocol::DrawingFormat;
+    let mut s = state();
+    let variant = replanned(&mut s);
+    furniture_tool(&mut s, "sofa");
+    click(&mut s, 2000.0, 4000.0);
+    let survey = String::from_utf8(
+        s.export_drawings(&request(None), DrawingFormat::Ifc)
+            .unwrap(),
+    )
+    .unwrap();
+    let count = |text: &str, entity: &str| text.matches(entity).count();
+    // Обмер: 5 стен, дверь, окно, два помещения; мебель варианта сюда не входит.
+    assert_eq!(count(&survey, "IFCWALL("), 5);
+    assert_eq!(count(&survey, "IFCDOOR("), 1);
+    assert_eq!(count(&survey, "IFCWINDOW("), 1);
+    assert_eq!(count(&survey, "IFCSPACE("), 2);
+    assert_eq!(count(&survey, "IFCFURNITURE("), 0);
+    let replan = String::from_utf8(
+        s.export_drawings(&request(Some(&variant)), DrawingFormat::Ifc)
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(replan.contains("IFCFURNITURE("));
+    assert!(
+        replan.contains("\\X2\\"),
+        "кириллица кодируется по ISO 10303-21"
+    );
+    let info = s.drawings(&request(Some(&variant))).preview();
+    assert!(info.file_names.ifc.ends_with(" — модель.ifc"));
+}

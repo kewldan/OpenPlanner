@@ -250,8 +250,7 @@ impl Engine {
         let request = request.to_rust()?;
         let format = format.to_rust()?;
         self.state
-            .drawings(&request)
-            .export(format)
+            .export_drawings(&request, format)
             .map_err(|err| JsError::new(&err.to_string()))
     }
 

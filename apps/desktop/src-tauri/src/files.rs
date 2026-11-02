@@ -61,7 +61,7 @@ fn is_scan(path: &Path) -> bool {
 }
 
 /// Файлы экспорта: чертежи, изображения листов, ведомости, смета, архивы.
-const EXPORT_EXTENSIONS: [&str; 7] = ["pdf", "svg", "dxf", "png", "xlsx", "csv", "zip"];
+const EXPORT_EXTENSIONS: [&str; 8] = ["pdf", "svg", "dxf", "png", "xlsx", "csv", "ifc", "zip"];
 
 /// Таблицы прайса для импорта.
 const TABLE_EXTENSIONS: [&str; 2] = ["csv", "xlsx"];
@@ -180,7 +180,7 @@ pub fn write_project(request: Request<'_>) -> CmdResult<()> {
     write_atomic(&path, bytes).map_err(|err| io_error("сохранить", &path, &err))
 }
 
-/// Записывает файл экспорта (PDF, SVG, DXF, PNG, XLSX, CSV, ZIP).
+/// Записывает файл экспорта (PDF, SVG, DXF, PNG, XLSX, CSV, IFC, ZIP).
 #[tauri::command]
 pub fn write_export(request: Request<'_>) -> CmdResult<()> {
     let (path, bytes) = binary_write(&request)?;
