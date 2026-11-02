@@ -8,7 +8,7 @@
 ![License: AGPL-3.0](https://img.shields.io/badge/app-AGPL--3.0-blue)
 ![File format: MIT](https://img.shields.io/badge/.oplan%20format-MIT-green)
 ![Platforms](https://img.shields.io/badge/macOS%20·%20Windows%20·%20Linux-desktop-lightgrey)
-![Stage](https://img.shields.io/badge/stage%202%20scan-done-brightgreen)
+![Stage](https://img.shields.io/badge/stage%203%20replanning-done-brightgreen)
 
 <img src="docs/images/survey.png" alt="OpenPlanner survey: walls, doors, windows, rooms with areas, dimensions and a leader" width="860">
 
@@ -18,13 +18,14 @@
 
 Most room planners stop at a pretty 3D picture. OpenPlanner is built around what a renovation crew actually needs: **one model of the apartment** that turns into themed drawing sheets — survey, demolition, new partitions, furniture, electrical, plumbing, finishes — plus an estimate whose quantities come straight from the model. Exporting your own project will never be paywalled. 🆓
 
-> 🚧 **Status: Stage 2 (scan) is complete.** Import a LiDAR scan (Polycam GLB/OBJ/PLY/ZIP or Apple RoomPlan data), review the doubtful spots and get walls, openings and rooms with areas in one step — on top of the Stage 1 survey tools. Next up: replanning and design variants (Stage 3). See the [roadmap](#-roadmap).
+> 🚧 **Status: Stage 3 (replanning) is complete.** Keep the survey as the shared “as is” plan and sketch any number of design variants on top of it: demolish walls and openings, add partitions in aerated concrete, drywall or brick, and compare variants by room areas, a list of changes and side by side on the plan. Next up: drawing sheets and export (Stage 4). See the [roadmap](#-roadmap).
 
 ## ✨ Highlights
 
 |                                      |                                                                                                                                                                                                                                                                                                                                                                             |
 | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 📡 **Scan to plan**                  | Drop in a LiDAR scan — Polycam GLB, OBJ, PLY, ZIP or Apple RoomPlan room data. OpenPlanner finds the floor, ceiling, walls (with measured thickness where both faces were scanned), doors and windows, asks about doubtful spots with a confidence score, and imports the plan with room areas as a single undoable step. Recognition runs locally, in a background worker. |
+| 🧱 **Replanning variants**           | The survey stays the single “as is” plan; each variant marks what to demolish and adds new partitions with a material (aerated concrete, drywall, brick). A survey edit shows up in every variant at once. Compare two variants by room areas, demolished and new wall lengths and areas, or side by side on the plan.                                                      |
 | 📏 **Survey tools**                  | Wall chains with snapping (ends, midpoints, perpendicular, axes, grid) or exact lengths and angles from the keyboard, mitered corners and T-junctions, doors / windows / arches, node-anchored dimensions, leaders, layers you can hide or lock, and an image underlay you calibrate with one known distance.                                                               |
 | 📐 **Rooms that compute themselves** | Click inside a closed contour (or let _Find rooms_ do it): area and perimeter are measured along the wall faces and stay correct when you move, split or extend walls.                                                                                                                                                                                                      |
 | 🦀 **Rust core, GPU canvas**         | The document model and the renderer are Rust compiled to WebAssembly and run in a Web Worker. The plan is drawn with **wgpu** — WebGPU where the platform provides it, WebGL2 otherwise — so the UI thread stays responsive.                                                                                                                                                |
@@ -35,6 +36,11 @@ Most room planners stop at a pretty 3D picture. OpenPlanner is built around what
 | ↩️ **Real undo**                     | Every change is a reversible command in the Rust core. The “unsaved” marker is tracked precisely — undo back to the saved state and it clears.                                                                                                                                                                                                                              |
 | 🌗 **Dense, calm UI**                | A compact Figma/Linear-style interface with light and dark themes. The drawing canvas always stays paper-white.                                                                                                                                                                                                                                                             |
 | 🧪 **Tested on real windows**        | CI launches the actual desktop app on macOS, Windows and Linux, drives the **native** Save/Open dialogs, kills the process and verifies recovery, and checks rendered pixels on Metal, D3D12 and Vulkan.                                                                                                                                                                    |
+
+<p align="center">
+  <img src="docs/images/replan-compare.png" alt="Survey and a replanning variant side by side: a demolished partition and a new drywall partition" width="760"><br>
+  <sub>Survey and “Variant A” side by side: the demolished partition is dashed red, the new drywall partition is drawn in its material colour.</sub>
+</p>
 
 <p align="center">
   <img src="docs/images/crash-recovery.png" alt="Native recovery prompt after the app was killed" width="760"><br>
@@ -50,8 +56,8 @@ Development goes in stages. Each stage ships fully working; there is no throwawa
 | 0 · Foundation            | App shell, engine, `.oplan` files, autosave and recovery, command palette, CI on 3 OSes               | ✅ Done    |
 | 1 · Survey                | Walls with snapping and numeric input, openings, rooms with areas, dimensions, layers, image underlay | ✅ Done    |
 | 2 · Scan                  | Import a Polycam LiDAR scan → walls, openings and rooms, with a review step                           | ✅ Done    |
-| 3 · Replanning            | Existing / demolish / new status, partitions, design variants and comparison                          | 🔜 Next    |
-| 4 · Drawings              | Sheet set with title block, vector PDF, DXF by layers                                                 | 📋 Planned |
+| 3 · Replanning            | Existing / demolish / new status, partitions, design variants and comparison                          | ✅ Done    |
+| 4 · Drawings              | Sheet set with title block, vector PDF, DXF by layers                                                 | 🔜 Next    |
 | 5 · 3D                    | Orbit, walkthrough, section cut, sun                                                                  | 📋 Planned |
 | 6 · Furniture             | Catalog, drag and drop, GLB import                                                                    | 📋 Planned |
 | 7 · Electrical & lighting | Outlets, switches, panel groups, cable runs, illuminance                                              | 📋 Planned |

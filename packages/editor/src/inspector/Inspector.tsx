@@ -9,12 +9,14 @@ import type {
   Room,
   Underlay,
   Wall,
+  WallMaterial,
 } from "@openplanner/engine-client";
 import { Button, Segmented } from "@openplanner/ui";
 import type { ReactNode } from "react";
 import { sendToEngine } from "../engine";
 import { formatNumber, t } from "../i18n";
 import { useEditor } from "../store/editor";
+import { demolishedIds, statusOf, viewVariant } from "../variants/status";
 import { CommitField } from "./CommitField";
 import { formatArea, formatDecimal, parseNumber } from "./format";
 import styles from "./Inspector.module.css";
@@ -40,6 +42,50 @@ const justifications: readonly { value: Justification; label: string }[] = [
   { value: "left", label: t("just.left") },
   { value: "right", label: t("just.right") },
 ];
+
+type MaterialChoice = WallMaterial | "none";
+
+const materials: readonly { value: MaterialChoice; label: string }[] = [
+  { value: "none", label: t("material.none") },
+  { value: "aeratedConcrete", label: t("material.aeratedConcrete") },
+  { value: "gypsum", label: t("material.gypsum") },
+  { value: "brick", label: t("material.brick") },
+];
+
+/** Толщина перегородки по умолчанию для материала, мм. */
+const materialThickness: Record<WallMaterial, number> = {
+  aeratedConcrete: 100,
+  gypsum: 100,
+  brick: 120,
+};
+
+function MaterialSelect({
+  value,
+  onChange,
+}: {
+  value: WallMaterial | undefined;
+  onChange: (m: WallMaterial | undefined) => void;
+}) {
+  return (
+    <Row label={t("material.label")}>
+      <select
+        className={styles.select}
+        aria-label={t("material.label")}
+        value={value ?? "none"}
+        onChange={(event) => {
+          const next = event.target.value as MaterialChoice;
+          onChange(next === "none" ? undefined : next);
+        }}
+      >
+        {materials.map((m) => (
+          <option key={m.value} value={m.value}>
+            {m.label}
+          </option>
+        ))}
+      </select>
+    </Row>
+  );
+}
 
 const openingKinds: readonly { value: OpeningKind; label: string }[] = [
   { value: "door", label: t("opening.door") },
@@ -157,8 +203,25 @@ function DeleteButton() {
 
 function WallToolSection() {
   const options = useEditor((s) => s.toolOptions);
+  const replan = useEditor((s) => s.view.type === "variant");
   return (
     <Section title={t("inspector.newWalls")}>
+      {replan && (
+        <MaterialSelect
+          value={options.material}
+          onChange={(material) =>
+            sendToEngine({
+              type: "setToolOptions",
+              options: material
+                ? { ...options, material, wallThickness: materialThickness[material] }
+                : {
+                    wallThickness: options.wallThickness,
+                    justification: options.justification,
+                  },
+            })
+          }
+        />
+      )}
       <CommitField
         label={t("inspector.thickness")}
         unit={t("unit.mm")}
@@ -219,6 +282,101 @@ function LayerSelect({
 }
 
 function ElementSection({ selected, document }: { selected: Selected; document: Document }) {
+  const view = useEditor((s) => s.view);
+  const variant = viewVariant(view);
+  const element = selected.element as { id: string; variant?: string };
+  const status = statusOf(view, demolishedIds(document, variant), element.id, element.variant);
+  // В варианте элементы обмера не правятся — только статус.
+  if (status === "existing" || status === "demolish") {
+    return <StatusSection selected={selected} demolished={status === "demolish"} />;
+  }
+  return (
+    <>
+      {status === "new" && (
+        <p className={styles.badge} data-testid="status-new">
+          {t("status.new")}
+        </p>
+      )}
+      <ElementFields selected={selected} document={document} />
+    </>
+  );
+}
+
+const sectionTitles: Record<Selected["type"], () => string> = {
+  wall: () => t("inspector.wall"),
+  opening: () => t("inspector.kind"),
+  room: () => t("inspector.room"),
+  dimension: () => t("inspector.dimension"),
+  leader: () => t("inspector.leader"),
+  underlay: () => t("inspector.underlay"),
+};
+
+function StatusSection({ selected, demolished }: { selected: Selected; demolished: boolean }) {
+  const length = useEditor((s) =>
+    selected.type === "wall" ? s.derived.walls[selected.element.id] : undefined,
+  );
+  const area = useEditor((s) =>
+    selected.type === "room" ? s.derived.rooms[selected.element.id] : undefined,
+  );
+  const title =
+    selected.type === "opening"
+      ? t(`opening.${selected.element.kind}`)
+      : sectionTitles[selected.type]();
+  const demolishable =
+    selected.type === "wall" || selected.type === "opening" || selected.type === "room";
+  return (
+    <Section title={title}>
+      {selected.type === "wall" && length !== undefined && (
+        <CommitField
+          label={t("inspector.length")}
+          readOnly
+          numeric
+          unit={t("unit.mm")}
+          value={String(Math.round(length))}
+          onCommit={() => {}}
+        />
+      )}
+      {selected.type === "room" && (
+        <CommitField
+          label={t("inspector.name")}
+          readOnly
+          value={selected.element.name}
+          onCommit={() => {}}
+        />
+      )}
+      {selected.type === "room" && area?.closed && !demolished && (
+        <CommitField
+          label={t("inspector.area")}
+          readOnly
+          numeric
+          value={formatArea(area.area)}
+          onCommit={() => {}}
+        />
+      )}
+      {demolishable && (
+        <Row label={t("status.label")} stack>
+          <Segmented
+            label={t("status.label")}
+            value={demolished ? "demolish" : "existing"}
+            options={[
+              { value: "existing", label: t("status.existing") },
+              { value: "demolish", label: t("status.demolish") },
+            ]}
+            onChange={(next) =>
+              sendToEngine({
+                type: "setDemolished",
+                ids: [selected.element.id],
+                demolished: next === "demolish",
+              })
+            }
+          />
+        </Row>
+      )}
+    </Section>
+  );
+}
+
+function ElementFields({ selected, document }: { selected: Selected; document: Document }) {
   switch (selected.type) {
     case "wall":
       return <WallSection wall={selected.element} document={document} />;
@@ -256,6 +414,19 @@ function WallSection({ wall, document }: { wall: Wall; document: Document }) {
         value={String(wall.thickness)}
         onCommit={numberCommit((thickness) => put({ type: "wall", ...wall, thickness }))}
       />
+      {wall.variant !== undefined && (
+        <MaterialSelect
+          value={wall.material}
+          onChange={(material) => {
+            const { material: _old, ...rest } = wall;
+            put(
+              material
+                ? { type: "wall", ...rest, material, thickness: materialThickness[material] }
+                : { type: "wall", ...rest },
+            );
+          }}
+        />
+      )}
       <Row label={t("inspector.justification")} stack>
         <Segmented
           label={t("inspector.justification")}

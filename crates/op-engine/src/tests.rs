@@ -700,7 +700,13 @@ fn variant_demolishes_and_adds_partitions() {
         "{:?}",
         views[1].rooms
     );
-    assert!(total > 10.0);
+    // Две подписи обмера в одной области — одно помещение, площадь не задваивается.
+    let survey_total = views[0].total_area;
+    assert!(
+        (total - views[1].total_area).abs() < 1e-9 && (total - survey_total).abs() < 0.2,
+        "{total} vs {survey_total}: {:?}",
+        views[1].rooms
+    );
 
     // В обмере новой стены нет, перегородка на месте.
     s.handle(ToEngine::SetView {
@@ -842,12 +848,14 @@ fn compare_view_shows_both_and_is_read_only() {
         demolished: true,
     });
     s.take_scenes();
+    let camera = s.camera;
     s.handle(ToEngine::SetView {
         view: crate::protocol::View::Compare {
             left: None,
-            right: Some(a),
+            right: Some(a.clone()),
         },
     });
+    assert_ne!(s.camera, camera, "оба вида целиком");
     let (doc, _) = s.take_scenes();
     let doc = doc.unwrap();
     assert!(doc.glyphs.len() > 20, "подписи видов и помещений");
@@ -855,6 +863,12 @@ fn compare_view_shows_both_and_is_read_only() {
     let before = s.document().clone();
     click(&mut s, 2000.0, 2000.0);
     assert_eq!(s.document(), &before);
+
+    // Выход из сравнения возвращает камеру.
+    s.handle(ToEngine::SetView {
+        view: crate::protocol::View::Variant { id: a },
+    });
+    assert_eq!(s.camera, camera);
 }
 
 #[test]
