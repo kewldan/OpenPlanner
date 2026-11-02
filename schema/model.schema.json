@@ -173,6 +173,11 @@
           "const": "underlays",
           "description": "Подложки.",
           "type": "string"
+        },
+        {
+          "const": "scan",
+          "description": "Скан: вид сверху импортированного скана.",
+          "type": "string"
         }
       ]
     },

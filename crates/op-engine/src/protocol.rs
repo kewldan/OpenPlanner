@@ -1,6 +1,7 @@
 //! Протокол UI ↔ воркер. TS-типы генерируются через tsify.
 
 use op_model::{Command, Document, Justification};
+use op_scan::{ScanAnswer, ScanParams, ScanResult};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
@@ -344,4 +345,30 @@ pub enum FromEngine {
 pub struct EngineEvents {
     /// События в порядке возникновения.
     pub events: Vec<FromEngine>,
+}
+
+/// Что импортировать из скана.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub enum ScanImportMode {
+    /// Стены, проёмы, помещения и подложка.
+    Plan,
+    /// Только вид сверху подложкой — обвести вручную.
+    UnderlayOnly,
+}
+
+/// Импорт распознанного скана в проект.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanImport {
+    /// Результат распознавания.
+    pub result: ScanResult,
+    /// Ответы на вопросы проверки.
+    pub answers: Vec<ScanAnswer>,
+    /// Параметры.
+    pub params: ScanParams,
+    /// Что импортировать.
+    pub mode: ScanImportMode,
+    /// Имя исходного файла.
+    pub name: String,
 }

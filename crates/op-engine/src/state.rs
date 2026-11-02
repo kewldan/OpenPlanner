@@ -355,6 +355,23 @@ impl EngineState {
         Ok(EngineEvents { events })
     }
 
+    /// Импортирует распознанный скан одной правкой и показывает план целиком.
+    pub fn import_scan(
+        &mut self,
+        request: &crate::protocol::ScanImport,
+        source: Option<Vec<u8>>,
+    ) -> EngineEvents {
+        let commands =
+            crate::scan_import::commands(self.history.document(), &mut self.ids, request, source);
+        let mut events = self.execute_all(commands);
+        if !events.iter().any(|e| matches!(e, FromEngine::Error { .. })) {
+            events.extend(self.select(Vec::new()));
+            self.zoom_to_fit();
+            events.push(self.view_event());
+        }
+        EngineEvents { events }
+    }
+
     fn reset(&mut self, document: Document) {
         self.history = History::new(document);
         self.camera = Camera2D::new();

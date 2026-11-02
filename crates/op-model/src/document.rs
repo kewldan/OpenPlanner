@@ -31,11 +31,14 @@ pub enum LayerKind {
     Leaders,
     /// Подложки.
     Underlays,
+    /// Скан: вид сверху импортированного скана.
+    Scan,
 }
 
 impl LayerKind {
-    /// Все системные слои в порядке по умолчанию.
-    pub const ALL: [Self; 6] = [
+    /// Все системные слои в порядке по умолчанию (первый — снизу).
+    pub const ALL: [Self; 7] = [
+        Self::Scan,
         Self::Underlays,
         Self::Rooms,
         Self::Walls,
@@ -54,6 +57,7 @@ impl LayerKind {
             Self::Dimensions => "layer-dimensions",
             Self::Leaders => "layer-leaders",
             Self::Underlays => "layer-underlays",
+            Self::Scan => "layer-scan",
         }
     }
 
@@ -67,6 +71,7 @@ impl LayerKind {
             Self::Dimensions => "Размеры",
             Self::Leaders => "Выноски",
             Self::Underlays => "Подложка",
+            Self::Scan => "Скан",
         }
     }
 }
