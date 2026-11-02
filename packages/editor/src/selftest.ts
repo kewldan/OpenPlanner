@@ -28,7 +28,7 @@ export async function installSelftest(): Promise<void> {
   };
 
   const onReady = async (backend: string, webgpu: string) => {
-    const summary = `backend=${backend} webgpu=${webgpu}`;
+    const summary = `backend=${backend} webgpu=${webgpu} main_webgpu=${await probeMainThreadWebGpu()}`;
     const run = scenarios[scenario ?? ""];
     if (scenario && !run) {
       report(false, `${summary} неизвестный сценарий ${scenario}`);
@@ -63,6 +63,23 @@ export async function installSelftest(): Promise<void> {
 }
 
 const step = (name: string) => invoke("selftest_step", { step: name });
+
+type GpuNavigator = Navigator & {
+  gpu?: { requestAdapter(): Promise<{ info?: { vendor?: string; architecture?: string } } | null> };
+};
+
+/** WebGPU в главном потоке — чтобы отличать ограничение воркера от ограничения системы. */
+async function probeMainThreadWebGpu(): Promise<string> {
+  const gpu = (navigator as GpuNavigator).gpu;
+  if (!gpu) return "нет_navigator.gpu";
+  try {
+    const adapter = await gpu.requestAdapter();
+    if (!adapter) return "адаптер_не_выдан";
+    return `адаптер(${adapter.info?.vendor ?? "?"}/${adapter.info?.architecture ?? "?"})`;
+  } catch (error) {
+    return `ошибка(${error instanceof Error ? error.message : String(error)})`;
+  }
+}
 
 async function waitFor(what: string, condition: () => boolean, timeout = 30_000) {
   const start = Date.now();
