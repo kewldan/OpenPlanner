@@ -22,6 +22,10 @@ serde_json.workspace = true
 tauri = { workspace = true, features = [] }
 tauri-plugin-dialog.workspace = true
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# Та же версия, что у Tauri/wry: нужен доступ к настройкам WebKitGTK.
+webkit2gtk = "2"
+
 [dev-dependencies]
 tempfile.workspace = true
 

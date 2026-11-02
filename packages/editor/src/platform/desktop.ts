@@ -16,14 +16,19 @@ export const desktopPlatform: Platform = {
   kind: "desktop",
 
   async openProject() {
-    const path = await open({ multiple: false, directory: false, filters });
+    const path = await open({
+      title: "Открыть проект",
+      multiple: false,
+      directory: false,
+      filters,
+    });
     if (typeof path !== "string") return null;
     const buffer = await invoke<ArrayBuffer>("read_project", { path });
     return { path, name: baseName(path), bytes: new Uint8Array(buffer) };
   },
 
   async chooseSaveTarget(suggestedName) {
-    const chosen = await save({ defaultPath: suggestedName, filters });
+    const chosen = await save({ title: "Сохранить проект", defaultPath: suggestedName, filters });
     if (!chosen) return null;
     const path = withExtension(chosen);
     return { path, name: baseName(path) };
