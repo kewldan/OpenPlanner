@@ -71,6 +71,13 @@
         "start": {
           "$ref": "#/$defs/Anchor",
           "description": "Начало."
+        },
+        "variant": {
+          "description": "Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -206,6 +213,13 @@
           "format": "double",
           "type": "number"
         },
+        "variant": {
+          "description": "Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "x": {
           "description": "X точки, на которую указывает выноска, мм.",
           "format": "double",
@@ -234,6 +248,13 @@
         "id": {
           "description": "Идентификатор.",
           "type": "string"
+        },
+        "variant": {
+          "description": "Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "x": {
           "description": "X, мм.",
@@ -292,6 +313,13 @@
           "$ref": "#/$defs/Side",
           "default": "left",
           "description": "Сторона стены, в которую открывается дверь."
+        },
+        "variant": {
+          "description": "Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "wall": {
           "description": "Стена.",
@@ -375,6 +403,13 @@
         "name": {
           "description": "Название.",
           "type": "string"
+        },
+        "variant": {
+          "description": "Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "x": {
           "description": "X точки подписи, мм.",
@@ -477,6 +512,32 @@
       ],
       "type": "object"
     },
+    "Variant": {
+      "description": "Вариант перепланировки: новые элементы (с полем `variant`) и демонтаж\nэлементов обмера. Обмер общий: его правка попадает во все варианты.",
+      "properties": {
+        "demolished": {
+          "default": [],
+          "description": "Элементы обмера, которые в этом варианте демонтируются.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "description": "Идентификатор.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Название, например «Вариант А».",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "type": "object"
+    },
     "Wall": {
       "description": "Стена между двумя узлами.",
       "properties": {
@@ -508,10 +569,28 @@
           "description": "Слой.",
           "type": "string"
         },
+        "material": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WallMaterial"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Материал (для новых перегородок)."
+        },
         "thickness": {
           "description": "Толщина, мм.",
           "format": "double",
           "type": "number"
+        },
+        "variant": {
+          "description": "Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -523,6 +602,26 @@
         "justification"
       ],
       "type": "object"
+    },
+    "WallMaterial": {
+      "description": "Материал стены.",
+      "oneOf": [
+        {
+          "const": "aeratedConcrete",
+          "description": "Газобетон.",
+          "type": "string"
+        },
+        {
+          "const": "gypsum",
+          "description": "Гипсокартон на каркасе.",
+          "type": "string"
+        },
+        {
+          "const": "brick",
+          "description": "Кирпич.",
+          "type": "string"
+        }
+      ]
     }
   },
   "$id": "https://github.com/kewldan/OpenPlanner/schema/model.schema.json",
@@ -584,6 +683,14 @@
       "description": "Подложки.",
       "items": {
         "$ref": "#/$defs/Underlay"
+      },
+      "type": "array"
+    },
+    "variants": {
+      "default": [],
+      "description": "Варианты перепланировки.",
+      "items": {
+        "$ref": "#/$defs/Variant"
       },
       "type": "array"
     },

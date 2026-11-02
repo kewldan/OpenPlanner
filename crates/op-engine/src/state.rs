@@ -12,7 +12,7 @@ use crate::{
     derived::Derived,
     draw, geometry,
     ids::IdGen,
-    protocol::{EngineEvents, FromEngine, ToEngine, Tool, ToolOptions, ToolStep},
+    protocol::{EngineEvents, FromEngine, ToEngine, Tool, ToolOptions, ToolStep, View},
     snap::Snap,
     tools::{Drag, ToolData},
 };
@@ -50,6 +50,12 @@ pub struct EngineState {
     pub(crate) device_pixel_ratio: f64,
     pub(crate) ids: IdGen,
     pub(crate) derived: Derived,
+    /// Что показывает холст.
+    pub(crate) view: View,
+    /// Документ в текущем виде (обмер или вариант); инструменты работают с ним.
+    pub(crate) projected: Document,
+    /// Обмер и его производные — в виде варианта (для показа демонтажа).
+    pub(crate) survey: Option<(Document, Derived)>,
     /// Документ с непримёненной правкой (во время перетаскивания).
     pub(crate) preview: Option<(Document, Derived)>,
     pub(crate) tool: Tool,
@@ -72,6 +78,9 @@ impl EngineState {
         let doc = Document::new(UNTITLED);
         Self {
             derived: Derived::new(&doc),
+            projected: doc.clone(),
+            view: View::Survey,
+            survey: None,
             history: History::new(doc),
             camera: Camera2D::new(),
             viewport,
@@ -122,11 +131,34 @@ impl EngineState {
         &self.selection
     }
 
+    /// Документ в текущем виде (обмер или вариант).
+    pub(crate) fn doc(&self) -> &Document {
+        &self.projected
+    }
+
+    /// Вариант текущего вида.
+    pub(crate) fn variant(&self) -> Option<&str> {
+        match &self.view {
+            View::Variant { id } => Some(id),
+            _ => None,
+        }
+    }
+
     /// Документ и производные данные для отображения (с учётом превью правки).
     pub(crate) fn shown(&self) -> (&Document, &Derived) {
         match &self.preview {
             Some((doc, derived)) => (doc, derived),
-            None => (self.history.document(), &self.derived),
+            None => (&self.projected, &self.derived),
+        }
+    }
+
+    /// Правки с учётом вида: в варианте — новые элементы варианта и демонтаж,
+    /// в обмере — каскад по элементам вариантов.
+    pub(crate) fn adapt(&self, commands: Vec<Command>) -> Vec<Command> {
+        let full = self.history.document();
+        match self.variant() {
+            Some(v) => crate::variants::adapt_variant(full, v, self.options.material, commands),
+            None => crate::variants::adapt_survey(full, commands),
         }
     }
 
@@ -141,8 +173,62 @@ impl EngineState {
                 self.view_event(),
                 self.selection_event(),
                 self.tool_event(),
+                self.summary_event(),
+                self.view_mode_event(),
             ],
         }
+    }
+
+    /// Переключает вид: обмер, вариант или сравнение.
+    pub(crate) fn set_view(&mut self, view: View) -> Vec<FromEngine> {
+        let full = self.history.document();
+        let exists = |v: &Option<String>| v.as_ref().is_none_or(|id| full.variant(id).is_some());
+        let valid = match &view {
+            View::Survey => true,
+            View::Variant { id } => full.variant(id).is_some(),
+            View::Compare { left, right } => exists(left) && exists(right),
+        };
+        if !valid {
+            return vec![FromEngine::Error {
+                message: "Такого варианта нет".into(),
+            }];
+        }
+        self.view = view;
+        self.reset_interaction();
+        self.selection.clear();
+        self.hover = None;
+        self.cursor = None;
+        if matches!(self.view, View::Compare { .. }) {
+            self.tool = Tool::Select;
+        }
+        self.document_changed();
+        if matches!(self.view, View::Compare { .. }) {
+            self.zoom_to_fit();
+        }
+        vec![
+            self.view_mode_event(),
+            self.derived_event(),
+            self.selection_event(),
+            self.tool_event(),
+            self.view_event(),
+        ]
+    }
+
+    pub(crate) fn view_mode_event(&self) -> FromEngine {
+        FromEngine::ViewModeChanged {
+            view: self.view.clone(),
+        }
+    }
+
+    pub(crate) fn summary_event(&self) -> FromEngine {
+        let full = self.history.document();
+        let mut views = vec![crate::variants::summary(full, None)];
+        views.extend(
+            full.variants
+                .iter()
+                .map(|v| crate::variants::summary(full, Some(&v.id))),
+        );
+        FromEngine::VariantsSummary { views }
     }
 
     /// Обрабатывает сообщение UI.
@@ -195,6 +281,47 @@ impl EngineState {
                 self.history.mark_saved();
                 vec![self.history_event()]
             }
+            ToEngine::SetView { view } => self.set_view(view),
+            ToEngine::CreateVariant { name, copy_of } => {
+                let (commands, id) = crate::variants::create(
+                    self.history.document(),
+                    &mut self.ids,
+                    &name,
+                    copy_of.as_deref(),
+                );
+                let mut events = self.apply(HistoryOp::Execute {
+                    command: Command::batch(commands),
+                });
+                events.extend(self.set_view(View::Variant { id }));
+                events
+            }
+            ToEngine::DeleteVariant { id } => {
+                let commands = crate::variants::delete(self.history.document(), &id);
+                if self.variant() == Some(id.as_str()) {
+                    self.view = View::Survey;
+                }
+                let mut events = self.apply(HistoryOp::Execute {
+                    command: Command::batch(commands),
+                });
+                events.push(self.view_mode_event());
+                events
+            }
+            ToEngine::SetDemolished { ids, demolished } => match self.variant() {
+                Some(v) => {
+                    let commands = crate::variants::set_demolished(
+                        self.history.document(),
+                        v,
+                        &ids,
+                        demolished,
+                    );
+                    self.apply(HistoryOp::Execute {
+                        command: Command::batch(commands),
+                    })
+                }
+                None => vec![FromEngine::Error {
+                    message: "Демонтаж отмечается в варианте перепланировки".into(),
+                }],
+            },
             ToEngine::SetTool { tool } => self.set_tool(tool),
             ToEngine::SetToolOptions { options } => {
                 if options.wall_thickness.is_finite() && options.wall_thickness > 0.0 {
@@ -220,12 +347,11 @@ impl EngineState {
             ToEngine::Select { ids } => self.select(ids),
             ToEngine::SelectAll => {
                 let (lo, hi) = (DVec2::splat(-1e12), DVec2::splat(1e12));
-                let ids = crate::hit::in_rect(self.history.document(), &self.derived, lo, hi);
+                let ids = crate::hit::in_rect(self.doc(), &self.derived, lo, hi);
                 self.select(ids)
             }
             ToEngine::DeleteSelection => {
-                let commands =
-                    crate::edit::delete(self.history.document(), &self.derived, &self.selection);
+                let commands = crate::edit::delete(self.doc(), &self.derived, &self.selection);
                 self.execute_all(commands)
             }
             ToEngine::SetWallLength { id, length } => self.set_wall_length(&id, length),
@@ -238,13 +364,98 @@ impl EngineState {
     pub fn take_scenes(&mut self) -> (Option<Scene>, Option<Scene>) {
         let font = Font::shared();
         let document = self.document_dirty.then(|| {
+            let images = |key: &str| self.images.contains_key(key);
+            if let View::Compare { left, right } = &self.view {
+                return self.compare_scene(left.as_deref(), right.as_deref(), font, &images);
+            }
             let (doc, derived) = self.shown();
-            draw::document(doc, derived, font, &|key| self.images.contains_key(key))
+            let mut scene = draw::document(doc, derived, font, &images);
+            if let (Some(v), Some((survey, survey_derived))) = (self.variant(), &self.survey) {
+                let ids = op_model::view::demolished(self.history.document(), v);
+                draw::demolition(
+                    &mut scene,
+                    &draw::Demolition {
+                        survey,
+                        derived: survey_derived,
+                        ids: &ids,
+                    },
+                );
+            }
+            scene
         });
         self.document_dirty = false;
         let overlay = self.overlay_dirty.then(|| self.overlay(font));
         self.overlay_dirty = false;
         (document, overlay)
+    }
+
+    /// Два вида рядом: правый сдвинут вправо на ширину левого и 3 м.
+    pub(crate) fn compare_layout(
+        &self,
+        left: Option<&str>,
+        right: Option<&str>,
+    ) -> [(Option<String>, DVec2); 2] {
+        let full = self.history.document();
+        let projected = op_model::view::project(full, left);
+        let derived = Derived::new(&projected);
+        let (lo, hi) = derived.nodes.values().fold(
+            (DVec2::splat(f64::MAX), DVec2::splat(f64::MIN)),
+            |(lo, hi), p| (lo.min(*p), hi.max(*p)),
+        );
+        let width = if lo.x <= hi.x { hi.x - lo.x } else { 5000.0 };
+        [
+            (left.map(str::to_owned), DVec2::ZERO),
+            (right.map(str::to_owned), DVec2::new(width + 3000.0, 0.0)),
+        ]
+    }
+
+    fn compare_scene(
+        &self,
+        left: Option<&str>,
+        right: Option<&str>,
+        font: Option<&Font>,
+        images: &dyn Fn(&str) -> bool,
+    ) -> Scene {
+        let full = self.history.document();
+        let mut scene = Scene::new();
+        for (variant, offset) in self.compare_layout(left, right) {
+            let mut doc = op_model::view::project(full, variant.as_deref());
+            crate::variants::translate(&mut doc, offset);
+            let derived = Derived::new(&doc);
+            scene.extend(draw::document(&doc, &derived, font, images));
+            if let Some(v) = &variant {
+                let mut survey = op_model::view::project(full, None);
+                crate::variants::translate(&mut survey, offset);
+                let survey_derived = Derived::new(&survey);
+                let ids = op_model::view::demolished(full, v);
+                draw::demolition(
+                    &mut scene,
+                    &draw::Demolition {
+                        survey: &survey,
+                        derived: &survey_derived,
+                        ids: &ids,
+                    },
+                );
+            }
+            // Подпись вида над планом.
+            let top = derived
+                .nodes
+                .values()
+                .fold(DVec2::splat(f64::MAX), |a, p| a.min(*p));
+            if let Some(font) = font
+                && top.x < f64::MAX
+            {
+                let mut style = draw::world_text(320.0, draw::palette::ink());
+                style.align = op_render::scene::Align::Left;
+                scene.text(
+                    font,
+                    top - DVec2::new(0.0, 900.0),
+                    &crate::variants::view_name(full, variant.as_deref()),
+                    style,
+                );
+            }
+        }
+        scene
     }
 
     /// Изображения подложек, которые ещё не загружены в рендерер.
@@ -361,6 +572,9 @@ impl EngineState {
         request: &crate::protocol::ScanImport,
         source: Option<Vec<u8>>,
     ) -> EngineEvents {
+        // Скан — это обмер: импорт всегда в общий вид.
+        self.view = View::Survey;
+        self.document_changed();
         let commands =
             crate::scan_import::commands(self.history.document(), &mut self.ids, request, source);
         let mut events = self.execute_all(commands);
@@ -384,11 +598,25 @@ impl EngineState {
         self.document_changed();
     }
 
-    /// Пересчитывает производные данные после изменения документа.
+    /// Пересчитывает проекцию вида и производные данные после изменения документа.
     pub(crate) fn document_changed(&mut self) {
-        let doc = self.history.document();
-        self.derived = Derived::new(doc);
+        let full = self.history.document();
+        // Вид на удалённый вариант (например, после отмены его создания) — обмер.
+        if let Some(v) = self.variant()
+            && full.variant(v).is_none()
+        {
+            self.view = View::Survey;
+        }
+        let variant = self.variant().map(str::to_owned);
+        self.projected = op_model::view::project(full, variant.as_deref());
+        self.derived = Derived::new(&self.projected);
+        self.survey = variant.as_ref().map(|_| {
+            let survey = op_model::view::project(full, None);
+            let derived = Derived::new(&survey);
+            (survey, derived)
+        });
         self.preview = None;
+        let doc = self.history.document();
         let alive: HashSet<&str> = all_ids(doc);
         self.selection.retain(|id| alive.contains(id.as_str()));
         if self
@@ -423,8 +651,10 @@ impl EngineState {
 
     /// Показывает превью правки (документ не меняется).
     pub(crate) fn set_preview(&mut self, commands: Vec<Command>) {
+        let commands = self.adapt(commands);
         let mut doc = self.history.document().clone();
         if Command::batch(commands).apply(&mut doc).is_ok() {
+            let doc = op_model::view::project(&doc, self.variant());
             let derived = Derived::new(&doc);
             self.preview = Some((doc, derived));
         } else {
@@ -443,6 +673,7 @@ impl EngineState {
 
     /// Выполняет команды одним действием истории.
     pub(crate) fn execute_all(&mut self, commands: Vec<Command>) -> Vec<FromEngine> {
+        let commands = self.adapt(commands);
         if commands.is_empty() {
             return vec![];
         }
@@ -461,6 +692,8 @@ impl EngineState {
                     self.document_event(),
                     self.derived_event(),
                     self.history_event(),
+                    self.summary_event(),
+                    self.view_mode_event(),
                 ];
                 if before != self.selection {
                     events.push(self.selection_event());
@@ -504,7 +737,7 @@ impl EngineState {
                 message: "длина стены должна быть не меньше 1 мм".into(),
             }];
         }
-        let doc = self.history.document();
+        let doc = self.doc();
         let Some(wall) = doc.wall(id) else {
             return vec![];
         };
@@ -518,7 +751,7 @@ impl EngineState {
     }
 
     fn find_rooms(&mut self) -> Vec<FromEngine> {
-        let doc = self.history.document();
+        let doc = self.doc();
         let used: HashSet<usize> = self.derived.room_regions.values().copied().collect();
         let mut number = doc.rooms.len();
         let mut commands = Vec::new();
@@ -535,6 +768,7 @@ impl EngineState {
             created.push(id.clone());
             commands.push(Command::Put {
                 element: Element::Room(op_model::Room {
+                    variant: None,
                     id,
                     layer: LayerKind::Rooms.id().into(),
                     name: format!("Помещение {number}"),
@@ -556,8 +790,30 @@ impl EngineState {
     }
 
     fn zoom_to_fit(&mut self) {
+        let compare_points: Vec<DVec2> = match &self.view {
+            View::Compare { left, right } => self
+                .compare_layout(left.as_deref(), right.as_deref())
+                .into_iter()
+                .flat_map(|(v, offset)| {
+                    let doc = op_model::view::project(self.history.document(), v.as_deref());
+                    Derived::new(&doc)
+                        .nodes
+                        .values()
+                        .map(move |p| *p + offset)
+                        .collect::<Vec<_>>()
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
         let (doc, derived) = self.shown();
         let mut points: Vec<DVec2> = derived.nodes.values().copied().collect();
+        if !compare_points.is_empty() {
+            points = compare_points;
+            // Место под подписи видов.
+            if let Some(top) = points.iter().map(|p| p.y).reduce(f64::min) {
+                points.push(DVec2::new(points[0].x, top - 1300.0));
+            }
+        }
         points.extend(doc.rooms.iter().map(|r| DVec2::new(r.x, r.y)));
         for l in &doc.leaders {
             points.push(DVec2::new(l.x, l.y));
@@ -588,12 +844,12 @@ impl EngineState {
 
     pub(crate) fn document_event(&self) -> FromEngine {
         FromEngine::DocumentChanged {
-            document: self.history.document().clone(),
+            document: Box::new(self.history.document().clone()),
         }
     }
 
     pub(crate) fn derived_event(&self) -> FromEngine {
-        let (rooms, walls, dimensions, free_regions) = self.derived.infos(self.history.document());
+        let (rooms, walls, dimensions, free_regions) = self.derived.infos(self.doc());
         FromEngine::DerivedChanged {
             rooms,
             walls,
@@ -635,7 +891,23 @@ impl EngineState {
     /// Текущий шаг инструмента.
     #[must_use]
     pub fn step(&self) -> ToolStep {
+        if matches!(self.view, View::Compare { .. }) {
+            return ToolStep::Unavailable;
+        }
         self.data.step(self.tool)
+    }
+
+    /// Можно ли править элемент в текущем виде: в варианте — только его
+    /// новые элементы (элементы обмера только демонтируются).
+    pub(crate) fn owns(&self, id: &str) -> bool {
+        match self.variant() {
+            None => true,
+            Some(v) => self
+                .history
+                .document()
+                .element(id)
+                .is_some_and(|e| e.variant() == Some(v)),
+        }
     }
 }
 

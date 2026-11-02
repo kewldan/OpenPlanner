@@ -27,6 +27,21 @@ pub enum HandleKind {
     RoomLabel(String),
 }
 
+impl HandleKind {
+    /// Элемент, который двигает ручка.
+    #[must_use]
+    pub fn target(&self) -> &str {
+        match self {
+            Self::Node(id)
+            | Self::Opening(id)
+            | Self::DimensionOffset(id)
+            | Self::DimensionEnd(id, _)
+            | Self::LeaderPoint(id, _)
+            | Self::RoomLabel(id) => id,
+        }
+    }
+}
+
 /// Ручка на холсте.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Handle {

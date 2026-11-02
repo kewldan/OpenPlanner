@@ -238,6 +238,7 @@ mod tests {
     fn node(id: &str, x: f64, y: f64) -> Command {
         Command::Put {
             element: Element::Node(Node {
+                variant: None,
                 id: id.into(),
                 x,
                 y,
@@ -249,6 +250,8 @@ mod tests {
     fn wall(id: &str, a: &str, b: &str) -> Command {
         Command::Put {
             element: Element::Wall(Wall {
+                material: None,
+                variant: None,
                 id: id.into(),
                 layer: LayerKind::Walls.id().into(),
                 a: a.into(),
@@ -344,6 +347,7 @@ mod tests {
         node("x", 0.0, 0.0).apply(&mut doc).unwrap();
         let err = Command::Put {
             element: Element::Dimension(Dimension {
+                variant: None,
                 id: "x".into(),
                 layer: LayerKind::Dimensions.id().into(),
                 start: Anchor::Point { x: 0.0, y: 0.0 },

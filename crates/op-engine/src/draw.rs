@@ -41,10 +41,59 @@ pub mod palette {
     pub fn accent() -> Color {
         Color::hex(0x0A7C4E, 1.0)
     }
-    /// Ошибка.
+    /// Ошибка и демонтаж.
     #[must_use]
     pub fn danger() -> Color {
         Color::hex(0xC2410C, 1.0)
+    }
+    /// Новые стены по материалу.
+    #[must_use]
+    pub fn material(material: Option<op_model::WallMaterial>) -> Color {
+        match material {
+            Some(op_model::WallMaterial::AeratedConcrete) => Color::hex(0x7E95AD, 1.0),
+            Some(op_model::WallMaterial::Gypsum) => Color::hex(0xC9AE5D, 1.0),
+            Some(op_model::WallMaterial::Brick) => Color::hex(0xB0583E, 1.0),
+            None => Color::hex(0x0A7C4E, 1.0),
+        }
+    }
+}
+
+/// Демонтаж в виде варианта: обмер, его производные и демонтируемые элементы.
+#[derive(Debug, Clone, Copy)]
+pub struct Demolition<'a> {
+    /// Обмер.
+    pub survey: &'a Document,
+    /// Производные обмера.
+    pub derived: &'a Derived,
+    /// Демонтируемые элементы.
+    pub ids: &'a std::collections::HashSet<String>,
+}
+
+/// Демонтируемые стены — красным пунктиром со светлой заливкой, заложенные
+/// проёмы — пунктирным символом.
+pub fn demolition(scene: &mut Scene, d: &Demolition<'_>) {
+    let red = palette::danger();
+    for w in d.survey.walls.iter().filter(|w| d.ids.contains(&w.id)) {
+        if let Some(outline) = d.derived.wall_outlines.get(&w.id)
+            && !outline.is_empty()
+        {
+            scene.fill(&[outline], red.with_alpha(0.13));
+            for i in 0..outline.len() {
+                scene.dashed(outline[i], outline[(i + 1) % outline.len()], 1.5, 5.0, red);
+            }
+        }
+    }
+    for o in d
+        .survey
+        .openings
+        .iter()
+        .filter(|o| d.ids.contains(&o.id) && !d.ids.contains(&o.wall))
+    {
+        if let Some(g) = geometry::opening(d.survey, d.derived, o) {
+            for i in 0..g.rect.len() {
+                scene.dashed(g.rect[i], g.rect[(i + 1) % g.rect.len()], 1.5, 4.0, red);
+            }
+        }
     }
 }
 
@@ -121,13 +170,21 @@ pub fn document(
         }
     }
 
-    for shape in &derived.wall_shapes {
-        let mut contours: Vec<&[DVec2]> = vec![&shape.outer];
-        contours.extend(shape.holes.iter().map(Vec::as_slice));
-        scene.fill(&contours, palette::wall());
-        scene.polyline(&shape.outer, true, 1.0, palette::ink());
-        for hole in &shape.holes {
-            scene.polyline(hole, true, 1.0, palette::ink());
+    let groups = std::iter::once((palette::wall(), &derived.wall_shapes)).chain(
+        derived
+            .new_wall_shapes
+            .iter()
+            .map(|(m, shapes)| (palette::material(*m), shapes)),
+    );
+    for (color, shapes) in groups {
+        for shape in shapes {
+            let mut contours: Vec<&[DVec2]> = vec![&shape.outer];
+            contours.extend(shape.holes.iter().map(Vec::as_slice));
+            scene.fill(&contours, color);
+            scene.polyline(&shape.outer, true, 1.0, palette::ink());
+            for hole in &shape.holes {
+                scene.polyline(hole, true, 1.0, palette::ink());
+            }
         }
     }
 
