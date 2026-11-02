@@ -1,6 +1,6 @@
 [package]
 name = "op-export"
-description = "Экспорт OpenPlanner: PDF, XLSX, DXF, IFC"
+description = "Экспорт OpenPlanner: листы чертежей, PDF, SVG, DXF, XLSX"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,6 +8,12 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+ab_glyph.workspace = true
+base64.workspace = true
+flate2.workspace = true
+glam.workspace = true
+thiserror.workspace = true
+zip.workspace = true
 
 [lints]
 workspace = true
