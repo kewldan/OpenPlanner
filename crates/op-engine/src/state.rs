@@ -230,6 +230,7 @@ impl EngineState {
                 self.electrical_event(),
                 self.plumbing_event(),
                 self.finishes_event(),
+                self.estimate_event(),
             ],
         }
     }
@@ -279,6 +280,7 @@ impl EngineState {
             self.electrical_event(),
             self.plumbing_event(),
             self.finishes_event(),
+            self.estimate_event(),
         ]
     }
 
@@ -532,6 +534,25 @@ impl EngineState {
                         message: "Старт подбирается для плитки и досок в замкнутом помещении"
                             .into(),
                     }],
+                }
+            }
+            ToEngine::DefaultPrices => {
+                let mut prices = self.history.document().prices.clone();
+                let before = prices.len();
+                for item in crate::estimate::template() {
+                    if !prices
+                        .iter()
+                        .any(|p| p.code == item.code || p.id == item.id)
+                    {
+                        prices.push(item);
+                    }
+                }
+                if prices.len() == before {
+                    vec![FromEngine::Error {
+                        message: "Все позиции типового прайса уже есть в прайсе проекта".into(),
+                    }]
+                } else {
+                    self.execute_all(vec![Command::SetPrices { prices }])
                 }
             }
             ToEngine::ShowFinishes { show } => {
@@ -797,6 +818,78 @@ impl EngineState {
         }
     }
 
+    /// Смета текущего вида.
+    pub(crate) fn estimate_event(&self) -> FromEngine {
+        FromEngine::Estimate {
+            report: self.estimate(),
+        }
+    }
+
+    /// Смета текущего вида (в сравнении — обмер).
+    #[must_use]
+    pub fn estimate(&self) -> crate::protocol::EstimateReport {
+        let summary = crate::variants::summary(self.history.document(), self.variant());
+        crate::estimate::report(&self.projected, &self.derived, &summary)
+    }
+
+    /// Файл сметы текущего вида: XLSX (разделы, помещения, закупки) или CSV.
+    ///
+    /// # Errors
+    ///
+    /// Ошибка записи книги.
+    pub fn estimate_file(&self, format: crate::protocol::TableFormat) -> Result<Vec<u8>, String> {
+        let report = self.estimate();
+        match format {
+            crate::protocol::TableFormat::Xlsx => {
+                op_export::xlsx::write(&crate::estimate::worksheets(&report))
+                    .map_err(|e| e.to_string())
+            }
+            crate::protocol::TableFormat::Csv => Ok(crate::estimate::csv(&report).into_bytes()),
+        }
+    }
+
+    /// Файл прайса проекта: XLSX или CSV.
+    ///
+    /// # Errors
+    ///
+    /// Ошибка записи книги.
+    pub fn prices_file(&self, format: crate::protocol::TableFormat) -> Result<Vec<u8>, String> {
+        let prices = &self.history.document().prices;
+        match format {
+            crate::protocol::TableFormat::Xlsx => {
+                op_export::xlsx::write(&[op_export::xlsx::Worksheet {
+                    name: "Прайс".into(),
+                    tables: vec![crate::estimate::prices_table(prices)],
+                }])
+                .map_err(|e| e.to_string())
+            }
+            crate::protocol::TableFormat::Csv => {
+                Ok(crate::estimate::prices_csv(prices).into_bytes())
+            }
+        }
+    }
+
+    /// Импорт прайса из CSV или XLSX: позиции сопоставляются по коду или
+    /// наименованию, изменившиеся цены уходят в историю с датой `date`.
+    ///
+    /// # Errors
+    ///
+    /// Файл не читается или в нём нет позиций.
+    pub fn import_prices(&mut self, bytes: &[u8], date: &str) -> Result<EngineEvents, String> {
+        let rows = crate::estimate::read_table(bytes)?;
+        let imported = {
+            let ids = &mut self.ids;
+            crate::estimate::import(&self.history.document().prices, &rows, date, || {
+                ids.generate()
+            })?
+        };
+        Ok(EngineEvents {
+            events: self.execute_all(vec![Command::SetPrices {
+                prices: imported.prices,
+            }]),
+        })
+    }
+
     /// Прокладывает трубы заново: автоматические трубы вида удаляются, от каждого
     /// вывода без ручной трубы — новая до стояка или коллектора.
     fn route_pipes(&mut self) -> Vec<FromEngine> {
@@ -1051,6 +1144,7 @@ impl EngineState {
                     self.electrical_event(),
                     self.plumbing_event(),
                     self.finishes_event(),
+                    self.estimate_event(),
                 ];
                 if before != self.selection {
                     events.push(self.selection_event());

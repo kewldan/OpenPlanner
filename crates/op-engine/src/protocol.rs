@@ -2,7 +2,7 @@
 
 use op_model::{
     Command, DeviceKind, Document, Justification, Material, MaterialKind, PipeSystem, PlumbingKind,
-    WallMaterial,
+    PriceKind, WallMaterial,
 };
 use op_scan::{ScanAnswer, ScanParams, ScanResult};
 use serde::{Deserialize, Serialize};
@@ -512,6 +512,104 @@ pub struct FinishReport {
     pub totals: Vec<MaterialTotal>,
 }
 
+/// Строка сметы: позиция прайса в помещении (или без помещения).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct EstimateLine {
+    /// Позиция прайса.
+    pub item: String,
+    /// Помещение (без значения — общая строка).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub room: Option<String>,
+    /// Название помещения или «Общие работы».
+    pub room_name: String,
+    /// Раздел.
+    pub section: String,
+    /// Код.
+    pub code: String,
+    /// Наименование.
+    pub name: String,
+    /// Работа или материал.
+    pub kind: PriceKind,
+    /// Единица.
+    pub unit: String,
+    /// Объём по модели (до нормы и запаса).
+    pub measured: f64,
+    /// Количество.
+    pub quantity: f64,
+    /// Цена, ₽.
+    pub price: f64,
+    /// Сумма, ₽.
+    pub cost: f64,
+    /// Количество задано вручную.
+    pub overridden: bool,
+}
+
+/// Итог группы сметы (раздел или помещение).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct EstimateGroup {
+    /// Название.
+    pub name: String,
+    /// Работы, ₽.
+    pub works: f64,
+    /// Материалы, ₽.
+    pub materials: f64,
+    /// Всего, ₽.
+    pub total: f64,
+}
+
+/// Строка списка закупок.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct Purchase {
+    /// Позиция прайса.
+    pub item: String,
+    /// Код.
+    pub code: String,
+    /// Наименование.
+    pub name: String,
+    /// Единица.
+    pub unit: String,
+    /// Количество.
+    pub quantity: f64,
+    /// Цена, ₽.
+    pub price: f64,
+    /// Сумма, ₽.
+    pub cost: f64,
+}
+
+/// Смета текущего вида.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct EstimateReport {
+    /// Строки в порядке прайса.
+    pub lines: Vec<EstimateLine>,
+    /// Итоги по разделам.
+    pub sections: Vec<EstimateGroup>,
+    /// Итоги по помещениям.
+    pub rooms: Vec<EstimateGroup>,
+    /// Материалы к закупке.
+    pub purchases: Vec<Purchase>,
+    /// Работы, ₽.
+    pub works: f64,
+    /// Материалы, ₽.
+    pub materials: f64,
+    /// Всего, ₽.
+    pub total: f64,
+}
+
+/// Формат таблицы для экспорта сметы и прайса.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub enum TableFormat {
+    /// Книга Excel.
+    Xlsx,
+    /// CSV (разделитель «;», UTF-8).
+    Csv,
+}
+
 /// Расчёт группы щита.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]
@@ -650,6 +748,8 @@ pub struct ViewSummary {
     pub openings_added: u32,
     /// Заложенные проёмы.
     pub openings_closed: u32,
+    /// Стоимость по смете, ₽.
+    pub cost: f64,
 }
 
 /// Сообщение от UI движку.
@@ -833,6 +933,8 @@ pub enum ToEngine {
         /// Отделка.
         id: String,
     },
+    /// Добавить в прайс проекта позиции типового прайса, которых в нём нет (по коду).
+    DefaultPrices,
     /// Показывать раскладку отделки пола на плане.
     ShowFinishes {
         /// Показывать.
@@ -997,6 +1099,11 @@ pub enum FromEngine {
     Finishes {
         /// Расчёт.
         report: FinishReport,
+    },
+    /// Смета текущего вида.
+    Estimate {
+        /// Смета.
+        report: EstimateReport,
     },
     /// Сводка обмера и всех вариантов: площади и изменения.
     VariantsSummary {

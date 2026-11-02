@@ -8,6 +8,7 @@ pub mod derived;
 pub mod draw;
 pub mod edit;
 pub mod electric;
+pub mod estimate;
 pub mod finish;
 pub mod furniture;
 pub mod geometry;

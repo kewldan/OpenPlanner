@@ -500,7 +500,7 @@ pub fn summary(doc: &Document, variant: Option<&str>) -> ViewSummary {
         .iter()
         .filter(|o| removed.contains(&o.id) && !demolished_walls.contains(o.wall.as_str()))
         .count();
-    ViewSummary {
+    let mut summary = ViewSummary {
         variant: variant.map(str::to_owned),
         name: view_name(doc, variant),
         rooms,
@@ -517,7 +517,12 @@ pub fn summary(doc: &Document, variant: Option<&str>) -> ViewSummary {
         )
         .unwrap_or(0),
         openings_closed: u32::try_from(openings_closed).unwrap_or(0),
+        cost: 0.0,
+    };
+    if !doc.prices.is_empty() {
+        summary.cost = crate::estimate::report(&projected, &derived, &summary).total;
     }
+    summary
 }
 
 /// Сдвигает документ на вектор (для показа двух видов рядом).

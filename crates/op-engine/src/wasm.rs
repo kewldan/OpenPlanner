@@ -7,7 +7,10 @@ use wasm_bindgen::prelude::*;
 
 use crate::{
     EngineState,
-    protocol::{DrawingFormat, DrawingRequest, DrawingSetInfo, EngineEvents, ScanImport, ToEngine},
+    protocol::{
+        DrawingFormat, DrawingRequest, DrawingSetInfo, EngineEvents, ScanImport, TableFormat,
+        ToEngine,
+    },
 };
 
 /// Распознаёт скан (GLB, OBJ, PLY, ZIP, RoomPlan JSON). Вызывается в
@@ -250,6 +253,46 @@ impl Engine {
             .drawings(&request)
             .export(format)
             .map_err(|err| JsError::new(&err.to_string()))
+    }
+
+    /// Файл сметы текущего вида (XLSX или CSV).
+    ///
+    /// # Errors
+    ///
+    /// Формат не соответствует протоколу или книга не записалась.
+    #[wasm_bindgen(js_name = exportEstimate)]
+    #[allow(clippy::needless_pass_by_value)] // wasm-bindgen принимает аргументы только по значению
+    pub fn export_estimate(&self, format: Ts<TableFormat>) -> Result<Vec<u8>, JsError> {
+        self.state
+            .estimate_file(format.to_rust()?)
+            .map_err(|err| JsError::new(&err))
+    }
+
+    /// Файл прайса проекта (XLSX или CSV).
+    ///
+    /// # Errors
+    ///
+    /// Формат не соответствует протоколу или книга не записалась.
+    #[wasm_bindgen(js_name = exportPrices)]
+    #[allow(clippy::needless_pass_by_value)] // wasm-bindgen принимает аргументы только по значению
+    pub fn export_prices(&self, format: Ts<TableFormat>) -> Result<Vec<u8>, JsError> {
+        self.state
+            .prices_file(format.to_rust()?)
+            .map_err(|err| JsError::new(&err))
+    }
+
+    /// Импорт прайса из CSV или XLSX; `date` — дата для истории цен.
+    ///
+    /// # Errors
+    ///
+    /// Файл не читается или в нём нет позиций.
+    #[wasm_bindgen(js_name = importPrices)]
+    pub fn import_prices(&mut self, bytes: &[u8], date: &str) -> Result<Ts<EngineEvents>, JsError> {
+        let events = self
+            .state
+            .import_prices(bytes, date)
+            .map_err(|err| JsError::new(&err))?;
+        Ok(events.into_ts()?)
     }
 
     /// ZIP-архив из файлов (PNG листов, растеризованных в UI).

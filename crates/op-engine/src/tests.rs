@@ -2506,3 +2506,177 @@ fn finish_sheets_elevations_and_cleanup() {
     s.handle(ToEngine::DeleteSelection);
     assert!(s.document().finishes.is_empty());
 }
+
+// ---------------------------------------------------------------- смета
+
+fn estimate(events: &EngineEvents) -> crate::protocol::EstimateReport {
+    events
+        .events
+        .iter()
+        .rev()
+        .find_map(|e| match e {
+            FromEngine::Estimate { report } => Some(report.clone()),
+            _ => None,
+        })
+        .unwrap()
+}
+
+fn line<'a>(
+    report: &'a crate::protocol::EstimateReport,
+    code: &str,
+    room: Option<&str>,
+) -> Option<&'a crate::protocol::EstimateLine> {
+    report
+        .lines
+        .iter()
+        .find(|l| l.code == code && l.room.as_deref() == room)
+}
+
+#[test]
+fn estimate_takes_quantities_from_the_model() {
+    let mut s = state();
+    finished(&mut s);
+    let room = left_room(&s);
+    device_tool(&mut s, op_model::DeviceKind::Socket);
+    click(&mut s, 1700.0, 1150.0);
+    click(&mut s, 3000.0, 1150.0);
+    tool(&mut s, Tool::Select);
+    assert!(estimate(&s.snapshot()).lines.is_empty());
+    let report = estimate(&s.handle(ToEngine::DefaultPrices));
+    // Повторно типовой прайс не добавляется.
+    assert!(has_error(&s.handle(ToEngine::DefaultPrices)));
+    // Плитка на полу левой комнаты — по площади отделки.
+    let floor = line(&report, "О-01", Some(&room)).unwrap();
+    assert!((floor.quantity - 5.35).abs() < 0.01, "{floor:?}");
+    assert!((floor.cost - floor.quantity * 1900.0).abs() < 0.01);
+    assert_eq!(floor.room_name, "Помещение 1");
+    // Розетки — по помещениям, где стоят.
+    let sockets: f64 = report
+        .lines
+        .iter()
+        .filter(|l| l.code == "Э-01")
+        .map(|l| l.quantity)
+        .sum();
+    assert!((sockets - 2.0).abs() < 1e-9);
+    // Грунтовка — норма 0,15 л/м² и запас 10 % от площади стен.
+    let walls = finishes(&s.snapshot())
+        .rooms
+        .iter()
+        .find(|r| r.id == room)
+        .unwrap()
+        .walls_net;
+    let primer = line(&report, "О-08", Some(&room)).unwrap();
+    assert!((primer.quantity - (walls * 0.15 * 1.1 * 100.0).round() / 100.0).abs() < 1e-9);
+    // Клей и затирка — из расчёта отделки, в списке закупок.
+    for code in ["О-10", "О-11", "О-09"] {
+        assert!(report.purchases.iter().any(|p| p.code == code), "{code}");
+    }
+    assert!(report.purchases.iter().all(|p| p.code != "О-01"));
+    // Итоги сходятся.
+    let sum: f64 = report.lines.iter().map(|l| l.cost).sum();
+    assert!((report.total - sum).abs() < 0.05);
+    assert!((report.total - (report.works + report.materials)).abs() < 0.01);
+    assert!(report.sections.iter().any(|g| g.name == "Отделка"));
+    assert!(report.rooms.iter().any(|g| g.name == "Помещение 1"));
+}
+
+#[test]
+fn manual_quantities_override_and_undo() {
+    let mut s = state();
+    finished(&mut s);
+    let room = left_room(&s);
+    s.handle(ToEngine::DefaultPrices);
+    let events = s.handle(ToEngine::Command {
+        command: Command::SetOverrides {
+            overrides: vec![op_model::QuantityOverride {
+                item: "price-О-01".into(),
+                room: Some(room.clone()),
+                quantity: 6.0,
+            }],
+        },
+    });
+    let l = line(&estimate(&events), "О-01", Some(&room))
+        .unwrap()
+        .clone();
+    assert!(l.overridden && (l.quantity - 6.0).abs() < 1e-9);
+    assert!((l.cost - 11_400.0).abs() < 1e-9);
+    // Позиция с ручным объёмом — строка есть сразу, количество задаёт пользователь.
+    let mut prices = s.document().prices.clone();
+    prices.push(op_model::PriceItem {
+        id: "own".into(),
+        code: "Х-01".into(),
+        section: "Прочее".into(),
+        name: "Доставка".into(),
+        kind: op_model::PriceKind::Work,
+        unit: "шт.".into(),
+        price: 3000.0,
+        measure: op_model::Measure::Manual,
+        rate: 1.0,
+        reserve: 0.0,
+        history: Vec::new(),
+    });
+    let report = estimate(&s.handle(ToEngine::Command {
+        command: Command::SetPrices { prices },
+    }));
+    let own = line(&report, "Х-01", None).unwrap();
+    assert!((own.quantity).abs() < 1e-9 && own.room_name == crate::estimate::NO_ROOM);
+    s.handle(ToEngine::Undo);
+    s.handle(ToEngine::Undo);
+    let report = estimate(&s.snapshot());
+    assert!(!line(&report, "О-01", Some(&room)).unwrap().overridden);
+}
+
+#[test]
+fn variants_are_priced_for_comparison() {
+    let mut s = state();
+    replanned(&mut s);
+    s.handle(ToEngine::DefaultPrices);
+    let views = summaries(&s.snapshot());
+    let survey = views.iter().find(|v| v.variant.is_none()).unwrap();
+    let variant = views.iter().find(|v| v.variant.is_some()).unwrap();
+    // В варианте — демонтаж, перегородка из ГКЛ и закладка: дороже обмера.
+    assert!(
+        variant.cost > survey.cost,
+        "{} > {}",
+        variant.cost,
+        survey.cost
+    );
+    let report = estimate(&s.snapshot());
+    assert!(line(&report, "Д-01", None).is_some());
+    assert!(line(&report, "П-02", None).is_some());
+    assert!(line(&report, "П-05", None).is_some_and(|l| l.kind == op_model::PriceKind::Material));
+}
+
+#[test]
+fn estimate_and_prices_files_round_trip() {
+    use crate::protocol::TableFormat;
+    let mut s = state();
+    finished(&mut s);
+    s.handle(ToEngine::DefaultPrices);
+    let book = s.estimate_file(TableFormat::Xlsx).unwrap();
+    let rows = op_export::xlsx::read(&book).unwrap();
+    assert!(
+        rows.iter()
+            .any(|r| r.first().is_some_and(|c| c == "Итог сметы"))
+    );
+    let csv = String::from_utf8(s.estimate_file(TableFormat::Csv).unwrap()).unwrap();
+    assert!(csv.starts_with('\u{feff}') && csv.contains("Список закупок"));
+    // Прайс уходит в CSV и приходит обратно в новый проект.
+    let prices = s.prices_file(TableFormat::Csv).unwrap();
+    let mut other = state();
+    other.import_prices(&prices, "02.11.2026").unwrap();
+    assert_eq!(other.document().prices.len(), s.document().prices.len());
+    // Новая цена из XLSX — с историей.
+    let mut changed = other.document().prices.clone();
+    changed[0].price += 100.0;
+    let book = op_export::xlsx::write(&[op_export::xlsx::Worksheet {
+        name: "Прайс".into(),
+        tables: vec![crate::estimate::prices_table(&changed)],
+    }])
+    .unwrap();
+    other.import_prices(&book, "03.11.2026").unwrap();
+    let first = &other.document().prices[0];
+    assert_eq!(first.history.len(), 1);
+    assert_eq!(first.history[0].date, "03.11.2026");
+    assert!(other.import_prices(b"nothing here", "").is_err());
+}
