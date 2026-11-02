@@ -178,7 +178,7 @@ mod tests {
 }
 
 #[cfg(test)]
-mod tests {
+mod format5 {
     use super::*;
 
     #[test]
