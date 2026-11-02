@@ -7,7 +7,9 @@
 use crate::{
     Camera2D, RenderError,
     gpu::{GpuScene, Pipelines},
+    gpu3d::Pipelines3D,
     scene::Scene,
+    three::{Camera3D, Scene3D},
 };
 
 /// Кадр в памяти: RGBA8, строки подряд.
@@ -54,15 +56,61 @@ pub fn render_plan_image(
     scene: &Scene,
     images: &[SceneImage<'_>],
 ) -> Result<Image, RenderError> {
-    pollster::block_on(render(width, height, camera, scene, images))
+    pollster::block_on(render(width, height, |device, queue, encoder, view| {
+        let mut pipelines = Pipelines::new(device, queue, FORMAT);
+        for (key, w, h, rgba) in images {
+            pipelines.set_image(device, queue, key, *w, *h, rgba);
+        }
+        let mut gpu_scene = GpuScene::new(device);
+        gpu_scene.upload(device, queue, scene);
+        pipelines.prepare(queue, camera, (width, height), 1.0, false);
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("plan"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            ..Default::default()
+        });
+        pipelines.draw(&mut pass, &[&gpu_scene]);
+    }))
 }
 
+/// Рисует 3D-сцену (с картой теней, если есть солнце) и возвращает кадр.
+///
+/// # Errors
+///
+/// [`RenderError::Adapter`], если в системе нет подходящего GPU-адаптера.
+pub fn render_3d_image(
+    width: u32,
+    height: u32,
+    camera: &Camera3D,
+    scene: &Scene3D,
+) -> Result<Image, RenderError> {
+    pollster::block_on(render(width, height, |device, queue, encoder, view| {
+        let mut three = Pipelines3D::new(device, FORMAT);
+        three.upload(device, queue, scene);
+        three.render(
+            (device, queue),
+            encoder,
+            view,
+            (width, height),
+            camera,
+            false,
+        );
+    }))
+}
+
+/// Создаёт устройство и текстуру кадра, выполняет `draw` и читает кадр обратно.
 async fn render(
     width: u32,
     height: u32,
-    camera: &Camera2D,
-    scene: &Scene,
-    images: &[SceneImage<'_>],
+    draw: impl FnOnce(&wgpu::Device, &wgpu::Queue, &mut wgpu::CommandEncoder, &wgpu::TextureView),
 ) -> Result<Image, RenderError> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let adapter = instance
@@ -96,14 +144,6 @@ async fn render(
     });
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-    let mut pipelines = Pipelines::new(&device, &queue, FORMAT);
-    for (key, w, h, rgba) in images {
-        pipelines.set_image(&device, &queue, key, *w, *h, rgba);
-    }
-    let mut gpu_scene = GpuScene::new(&device);
-    gpu_scene.upload(&device, &queue, scene);
-    pipelines.prepare(&queue, camera, (width, height), 1.0, false);
-
     // Строки буфера выравниваются по 256 байт.
     let row = width * 4;
     let padded_row =
@@ -118,22 +158,7 @@ async fn render(
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("frame"),
     });
-    {
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("plan"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            ..Default::default()
-        });
-        pipelines.draw(&mut pass, &[&gpu_scene]);
-    }
+    draw(&device, &queue, &mut encoder, &view);
     encoder.copy_texture_to_buffer(
         texture.as_image_copy(),
         wgpu::TexelCopyBufferInfo {
@@ -333,5 +358,126 @@ mod tests {
             g > 0xb0 && r < 0x40 && b < 0x40,
             "подложка зелёная: {r} {g} {b}"
         );
+    }
+
+    #[test]
+    fn sun_casts_shadow_in_3d() {
+        use glam::DVec3;
+
+        use crate::{
+            scene::Color,
+            three::{Mesh, Sun},
+        };
+        let square = |lo: f64, hi: f64| {
+            vec![
+                DVec2::new(lo, lo),
+                DVec2::new(hi, lo),
+                DVec2::new(hi, hi),
+                DVec2::new(lo, hi),
+            ]
+        };
+        let mut opaque = Mesh::default();
+        let white = Color([0.9, 0.9, 0.9, 1.0]);
+        opaque.cap(&[square(-3000.0, 3000.0)], 0.0, true, white);
+        opaque.block(
+            [
+                DVec2::new(-200.0, -1500.0),
+                DVec2::new(200.0, -1500.0),
+                DVec2::new(200.0, 1500.0),
+                DVec2::new(-200.0, 1500.0),
+            ],
+            0.0,
+            2500.0,
+            white,
+        );
+        let scene = Scene3D {
+            opaque,
+            glass: Mesh::default(),
+            sun: Some(Sun {
+                direction: DVec3::new(1.0, 0.0, 1.0).normalize(),
+                intensity: 1.0,
+            }),
+        };
+        let camera = Camera3D {
+            eye: DVec3::new(0.0, -9000.0, 9000.0),
+            target: DVec3::ZERO,
+            fov_y: 0.9,
+        };
+        let image = match render_3d_image(800, 600, &camera, &scene) {
+            Ok(image) => image,
+            Err(err) if std::env::var_os("OPENPLANNER_REQUIRE_GPU").is_none() => {
+                eprintln!("пропуск: нет GPU-адаптера ({err})");
+                return;
+            }
+            Err(err) => panic!("рендер не удался: {err}"),
+        };
+        let m = camera.view_proj(800.0 / 600.0);
+        let at = |p: DVec3| {
+            let n = m.project_point3(p);
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // внутри кадра
+            let px = ((n.x * 0.5 + 0.5) * 800.0) as u32;
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let py = ((0.5 - n.y * 0.5) * 600.0) as u32;
+            let [r, g, b, _] = image.pixel(px, py);
+            u32::from(r) + u32::from(g) + u32::from(b)
+        };
+        let shadow = at(DVec3::new(-1500.0, 0.0, 0.0));
+        let lit = at(DVec3::new(1500.0, 0.0, 0.0));
+        assert!(
+            lit > shadow + 90,
+            "тень за стенкой: освещено {lit}, в тени {shadow}"
+        );
+
+        // Солнце с юга (−Y): тень ложится к северу (+Y), а не зеркально.
+        let rotated = Scene3D {
+            opaque: {
+                let mut m = Mesh::default();
+                m.cap(&[square(-3000.0, 3000.0)], 0.0, true, white);
+                m.block(
+                    [
+                        DVec2::new(-1500.0, -200.0),
+                        DVec2::new(1500.0, -200.0),
+                        DVec2::new(1500.0, 200.0),
+                        DVec2::new(-1500.0, 200.0),
+                    ],
+                    0.0,
+                    2500.0,
+                    white,
+                );
+                m
+            },
+            glass: Mesh::default(),
+            sun: Some(Sun {
+                direction: DVec3::new(0.0, -1.0, 1.0).normalize(),
+                intensity: 1.0,
+            }),
+        };
+        let top = Camera3D {
+            eye: DVec3::new(0.0, -1.0, 12_000.0),
+            target: DVec3::ZERO,
+            fov_y: 0.9,
+        };
+        let Ok(image2) = render_3d_image(800, 600, &top, &rotated) else {
+            return;
+        };
+        let m2 = top.view_proj(800.0 / 600.0);
+        let at2 = |p: DVec3| {
+            let n = m2.project_point3(p);
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // внутри кадра
+            let px = ((n.x * 0.5 + 0.5) * 800.0) as u32;
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let py = ((0.5 - n.y * 0.5) * 600.0) as u32;
+            let [r, g, b, _] = image2.pixel(px, py);
+            u32::from(r) + u32::from(g) + u32::from(b)
+        };
+        let north = at2(DVec3::new(0.0, 1500.0, 0.0));
+        let south = at2(DVec3::new(0.0, -1500.0, 0.0));
+        assert!(
+            south > north + 90,
+            "тень к северу: юг {south}, север {north}"
+        );
+        // Угол кадра — небо.
+        let [r, g, b, _] = image.pixel(2, 2);
+        assert!(b >= r && (0xe0..=0xf8).contains(&g), "небо: {r} {g} {b}");
     }
 }

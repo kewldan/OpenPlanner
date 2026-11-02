@@ -1,7 +1,9 @@
 use crate::{
     Camera2D,
     gpu::{GpuScene, Pipelines},
+    gpu3d::Pipelines3D,
     scene::Scene,
+    three::{Camera3D, Scene3D},
 };
 
 /// Слой сцены: документ меняется редко, оверлей инструмента — при каждом движении мыши.
@@ -38,6 +40,7 @@ pub struct Renderer {
     pipelines: Pipelines,
     document: GpuScene,
     overlay: GpuScene,
+    three: Pipelines3D,
 }
 
 impl Renderer {
@@ -85,6 +88,7 @@ impl Renderer {
         surface.configure(&device, &config);
 
         let pipelines = Pipelines::new(&device, &queue, config.format);
+        let three = Pipelines3D::new(&device, config.format);
         let document = GpuScene::new(&device);
         let overlay = GpuScene::new(&device);
         let backend = adapter.get_info().backend;
@@ -99,6 +103,7 @@ impl Renderer {
             pipelines,
             document,
             overlay,
+            three,
         })
     }
 
@@ -145,24 +150,61 @@ impl Renderer {
         self.pipelines.has_image(key)
     }
 
+    /// Загружает 3D-сцену.
+    pub fn set_scene_3d(&mut self, scene: &Scene3D) {
+        self.three.upload(&self.device, &self.queue, scene);
+    }
+
+    /// Рисует кадр 3D-вида.
+    pub fn render_3d(&mut self, camera: &Camera3D) {
+        let Some(frame) = self.frame() else {
+            return;
+        };
+        let view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("frame 3d"),
+            });
+        self.three.render(
+            (&self.device, &self.queue),
+            &mut encoder,
+            &view,
+            (self.config.width, self.config.height),
+            camera,
+            self.config.format.is_srgb(),
+        );
+        self.queue.submit([encoder.finish()]);
+        self.queue.present(frame);
+    }
+
+    /// Текстура кадра поверхности; `None` — кадр пропускается.
+    fn frame(&mut self) -> Option<wgpu::SurfaceTexture> {
+        match self.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(frame) => Some(frame),
+            wgpu::CurrentSurfaceTexture::Suboptimal(frame) => {
+                self.surface.configure(&self.device, &self.config);
+                Some(frame)
+            }
+            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
+                self.surface.configure(&self.device, &self.config);
+                None
+            }
+            other => {
+                log::warn!("кадр пропущен: {other:?}");
+                None
+            }
+        }
+    }
+
     /// Рисует кадр.
     ///
     /// `device_pixel_ratio` — отношение физических пикселей к CSS-пикселям.
     pub fn render(&mut self, camera: &Camera2D, device_pixel_ratio: f64) {
-        let frame = match self.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(frame) => frame,
-            wgpu::CurrentSurfaceTexture::Suboptimal(frame) => {
-                self.surface.configure(&self.device, &self.config);
-                frame
-            }
-            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
-                self.surface.configure(&self.device, &self.config);
-                return;
-            }
-            other => {
-                log::warn!("кадр пропущен: {other:?}");
-                return;
-            }
+        let Some(frame) = self.frame() else {
+            return;
         };
         let view = frame
             .texture
