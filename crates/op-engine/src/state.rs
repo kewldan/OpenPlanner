@@ -819,6 +819,16 @@ impl EngineState {
         Ok(EngineEvents { events })
     }
 
+    /// Расшифрованное изображение подложки, которое уже известно (не надо читать заново).
+    pub(crate) fn images_insert(&mut self, key: String, image: DecodedImage) {
+        self.images.insert(key, image);
+    }
+
+    /// Показать весь план (после импорта).
+    pub(crate) fn zoom_to_fit_now(&mut self) {
+        self.zoom_to_fit();
+    }
+
     /// Расчёт электрики текущего вида.
     pub(crate) fn electrical_event(&self) -> FromEngine {
         FromEngine::Electrical {

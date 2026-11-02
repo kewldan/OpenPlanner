@@ -10,7 +10,10 @@ use std::fmt::Write as _;
 
 use glam::DVec2;
 
-use crate::sheet::{Align, Rgb, Shape, Sheet};
+use crate::{
+    ExportError,
+    sheet::{Align, Rgb, Shape, Sheet},
+};
 
 /// Записывает план листа в DXF.
 #[must_use]
@@ -283,6 +286,227 @@ fn num(v: f64) -> String {
     }
 }
 
+// ---------------------------------------------------------------- чтение
+
+/// Линия чертежа DXF: слой и вершины в миллиметрах плана (Y вниз).
+#[derive(Debug, Clone, PartialEq)]
+pub struct DxfPath {
+    /// Слой.
+    pub layer: String,
+    /// Вершины.
+    pub points: Vec<DVec2>,
+    /// Замкнута.
+    pub closed: bool,
+}
+
+/// Прочитанный чертёж: линии по слоям в миллиметрах.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct DxfDrawing {
+    /// Линии.
+    pub paths: Vec<DxfPath>,
+    /// Слои в порядке появления.
+    pub layers: Vec<String>,
+}
+
+/// Символ байта Windows-1251 (обратно к [`cp1251`]).
+fn from_cp1251(b: u8) -> char {
+    if b.is_ascii() {
+        return char::from(b);
+    }
+    if b >= 0xC0 {
+        return char::from_u32(0x0410 + u32::from(b - 0xC0)).unwrap_or('?');
+    }
+    (0x80..=0xFFu32)
+        .filter_map(char::from_u32)
+        .chain([
+            'Ё', 'ё', '№', '«', '»', '—', '–', '…', 'Є', 'є', 'І', 'і', 'Ї', 'ї', 'Ў', 'ў',
+        ])
+        .find(|c| cp1251(*c) == Some(b))
+        .unwrap_or('?')
+}
+
+/// Текст файла: UTF-8 (DXF 2007+) или Windows-1251 (старые версии).
+fn decode(bytes: &[u8]) -> String {
+    match std::str::from_utf8(bytes) {
+        Ok(s) => s.to_owned(),
+        Err(_) => bytes.iter().map(|b| from_cp1251(*b)).collect(),
+    }
+}
+
+/// Множитель единиц `$INSUNITS` в миллиметры (0 — без единиц: считаем миллиметрами).
+fn units_to_mm(code: i64) -> f64 {
+    match code {
+        1 => 25.4,
+        2 => 304.8,
+        5 => 10.0,
+        6 => 1000.0,
+        14 => 100.0,
+        _ => 1.0,
+    }
+}
+
+/// Дуга окружности ломаной: углы — градусы против часовой стрелки (DXF, Y вверх).
+fn arc_points(c: DVec2, r: f64, from: f64, to: f64) -> Vec<DVec2> {
+    let mut sweep = to - from;
+    if sweep <= 0.0 {
+        sweep += 360.0;
+    }
+    // Шаг не больше 10°.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // сегментов ≤ 36
+    let n = (sweep / 10.0).ceil().max(1.0) as u32;
+    (0..=n)
+        .map(|i| {
+            let a = (from + sweep * f64::from(i) / f64::from(n)).to_radians();
+            c + DVec2::new(a.cos(), a.sin()) * r
+        })
+        .collect()
+}
+
+/// Читает текстовый DXF: отрезки, полилинии (LWPOLYLINE и POLYLINE), окружности
+/// и дуги из раздела ENTITIES. Блоки (INSERT) и текст пропускаются. Координаты
+/// переводятся в миллиметры по `$INSUNITS`, ось Y — вниз, как на плане.
+///
+/// # Errors
+///
+/// Двоичный DXF или файл без раздела ENTITIES.
+pub fn read(bytes: &[u8]) -> Result<DxfDrawing, ExportError> {
+    if bytes.starts_with(b"AutoCAD Binary DXF") {
+        return Err(ExportError::Format(
+            "двоичный DXF не поддерживается — сохраните чертёж как текстовый DXF".into(),
+        ));
+    }
+    let text = decode(bytes);
+    let lines: Vec<&str> = text.lines().map(str::trim).collect();
+    let pairs: Vec<(i32, &str)> = lines
+        .chunks(2)
+        .filter_map(|c| match c {
+            [code, value] => Some((code.parse().ok()?, *value)),
+            _ => None,
+        })
+        .collect();
+    let mut scale = 1.0;
+    if let Some(i) = pairs.iter().position(|p| *p == (9, "$INSUNITS"))
+        && let Some((70, v)) = pairs.get(i + 1)
+    {
+        scale = units_to_mm(v.parse().unwrap_or(0));
+    }
+    let start = pairs
+        .windows(2)
+        .position(|w| w[0] == (0, "SECTION") && w[1] == (2, "ENTITIES"))
+        .ok_or_else(|| {
+            ExportError::Format("в файле нет раздела ENTITIES — это не чертёж DXF".into())
+        })?;
+    let mut out = DxfDrawing::default();
+    let point = |x: f64, y: f64| DVec2::new(x * scale, -y * scale);
+    let num = |v: &str| v.parse::<f64>().unwrap_or(0.0);
+    let mut i = start + 2;
+    // Открытая POLYLINE (R12): вершины идут отдельными сущностями VERTEX до SEQEND.
+    let mut open: Option<DxfPath> = None;
+    while i < pairs.len() {
+        let (code, kind) = pairs[i];
+        if code != 0 {
+            i += 1;
+            continue;
+        }
+        if kind == "ENDSEC" {
+            break;
+        }
+        // Поля сущности — до следующей пары с кодом 0.
+        let end = pairs[i + 1..]
+            .iter()
+            .position(|p| p.0 == 0)
+            .map_or(pairs.len(), |n| i + 1 + n);
+        let fields = &pairs[i + 1..end];
+        let get = |c: i32| fields.iter().find(|p| p.0 == c).map(|p| p.1);
+        let layer = get(8).unwrap_or("0").to_owned();
+        let mut path = |points: Vec<DVec2>, closed: bool, layer: String| {
+            if points.len() >= 2 {
+                if !out.layers.contains(&layer) {
+                    out.layers.push(layer.clone());
+                }
+                out.paths.push(DxfPath {
+                    layer,
+                    points,
+                    closed,
+                });
+            }
+        };
+        match kind {
+            "LINE" => path(
+                vec![
+                    point(num(get(10).unwrap_or("0")), num(get(20).unwrap_or("0"))),
+                    point(num(get(11).unwrap_or("0")), num(get(21).unwrap_or("0"))),
+                ],
+                false,
+                layer,
+            ),
+            "LWPOLYLINE" => {
+                let xs: Vec<f64> = fields
+                    .iter()
+                    .filter(|p| p.0 == 10)
+                    .map(|p| num(p.1))
+                    .collect();
+                let ys: Vec<f64> = fields
+                    .iter()
+                    .filter(|p| p.0 == 20)
+                    .map(|p| num(p.1))
+                    .collect();
+                let flags = get(70).map_or(0, |v| v.parse::<i64>().unwrap_or(0));
+                path(
+                    xs.iter().zip(&ys).map(|(x, y)| point(*x, *y)).collect(),
+                    flags & 1 == 1,
+                    layer,
+                );
+            }
+            "POLYLINE" => {
+                let flags = get(70).map_or(0, |v| v.parse::<i64>().unwrap_or(0));
+                open = Some(DxfPath {
+                    layer,
+                    points: Vec::new(),
+                    closed: flags & 1 == 1,
+                });
+            }
+            "VERTEX" => {
+                if let Some(p) = open.as_mut() {
+                    p.points.push(point(
+                        num(get(10).unwrap_or("0")),
+                        num(get(20).unwrap_or("0")),
+                    ));
+                }
+            }
+            "SEQEND" => {
+                if let Some(p) = open.take() {
+                    path(p.points, p.closed, p.layer);
+                }
+            }
+            "CIRCLE" | "ARC" => {
+                let c = DVec2::new(num(get(10).unwrap_or("0")), num(get(20).unwrap_or("0")));
+                let r = num(get(40).unwrap_or("0"));
+                let (from, to, closed) = if kind == "ARC" {
+                    (
+                        num(get(50).unwrap_or("0")),
+                        num(get(51).unwrap_or("360")),
+                        false,
+                    )
+                } else {
+                    (0.0, 360.0, true)
+                };
+                let mut pts: Vec<DVec2> = arc_points(c, r, from, to)
+                    .into_iter()
+                    .map(|p| point(p.x, p.y))
+                    .collect();
+                if closed {
+                    pts.pop();
+                }
+                path(pts, closed, layer);
+            }
+            _ => {}
+        }
+        i = end;
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -355,5 +579,25 @@ mod tests {
             !text.contains("ENTITIES\r\n  0\r\nPOLYLINE\r\n  8\r\n0\r\n"),
             "рамка листа не попадает"
         );
+    }
+
+    #[test]
+    fn reads_back_own_drawing_and_other_entities() {
+        let dxf = "0\nSECTION\n2\nHEADER\n9\n$INSUNITS\n70\n6\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n0\nLINE\n8\nСтены\n10\n0\n20\n0\n11\n4\n21\n0\n0\nLWPOLYLINE\n8\nA\n90\n3\n70\n1\n10\n0\n20\n0\n10\n1\n20\n0\n10\n1\n20\n1\n0\nCIRCLE\n8\nA\n10\n0\n20\n0\n40\n0.5\n0\nINSERT\n8\nA\n0\nENDSEC\n0\nEOF\n";
+        let d = read(dxf.as_bytes()).unwrap();
+        assert_eq!(d.layers, vec!["Стены".to_owned(), "A".to_owned()]);
+        assert_eq!(d.paths.len(), 3);
+        // Метры → мм, Y вниз.
+        assert_eq!(d.paths[0].points[1], DVec2::new(4000.0, 0.0));
+        assert_eq!(d.paths[1].points[2], DVec2::new(1000.0, -1000.0));
+        assert!(d.paths[1].closed && d.paths[2].closed);
+        assert!(read(b"AutoCAD Binary DXF\r\n").is_err());
+        assert!(read(b"0\nEOF\n").is_err());
+    }
+
+    #[test]
+    fn cp1251_decodes() {
+        assert_eq!(decode(&[0xD1, 0xF2, 0xE5, 0xED, 0xFB]), "Стены");
+        assert_eq!(from_cp1251(0xA8), 'Ё');
     }
 }

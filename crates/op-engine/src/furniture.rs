@@ -670,8 +670,9 @@ pub struct Model {
 ///
 /// Файл не читается как GLB или в нём нет треугольников.
 pub fn read_model(bytes: &[u8]) -> Result<Model, String> {
-    if !bytes.starts_with(b"glTF") {
-        return Err("нужен файл GLB (glTF 2.0)".into());
+    let text = bytes.iter().find(|b| !b.is_ascii_whitespace()) == Some(&b'{');
+    if !bytes.starts_with(b"glTF") && !text {
+        return Err("нужен файл GLB или glTF 2.0".into());
     }
     let loaded = op_scan::io::load(bytes).map_err(|err| err.to_string())?;
     let to_mm = loaded.to_mm.unwrap_or(1000.0);

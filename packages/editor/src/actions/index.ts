@@ -1,4 +1,5 @@
 import type { Tool } from "@openplanner/engine-client";
+import { pickDxf } from "../dxf/store";
 import { callEngine, sendToEngine } from "../engine";
 import { t } from "../i18n";
 import { platform } from "../platform";
@@ -238,6 +239,14 @@ export const actions: readonly Action[] = [
     keywords: "изображение картинка план скан png jpg",
     enabled: notBusy,
     run: () => void addUnderlay(),
+  },
+  {
+    id: "file.importDxf",
+    title: "Импорт DXF…",
+    group: "file",
+    keywords: "dxf чертёж cad автокад подложка стены импорт план",
+    enabled: notBusy,
+    run: () => void pickDxf(),
   },
   {
     id: "view.zoomIn",

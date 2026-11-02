@@ -1,4 +1,4 @@
-//! Чтение файлов скана: GLB, OBJ, PLY, ZIP с ними и параметрическая
+//! Чтение файлов скана: GLB и glTF, OBJ, PLY, ZIP с ними и параметрическая
 //! комната RoomPlan (JSON).
 
 mod glb;
@@ -97,6 +97,11 @@ fn add(loaded: &mut Loaded, bytes: &[u8], depth: u32) -> Result<(), ScanError> {
             return Ok(());
         }
         read_zip(loaded, bytes)?;
+    } else if bytes.iter().find(|b| !b.is_ascii_whitespace()) == Some(&b'{') && glb::is_gltf(bytes)
+    {
+        let mesh = glb::read_gltf(bytes)?;
+        set_geometry(loaded, ScanFormat::Glb, Up::Y, Some(1000.0));
+        append_mesh(&mut loaded.mesh, mesh);
     } else if bytes.iter().find(|b| !b.is_ascii_whitespace()) == Some(&b'{') {
         loaded.room = Some(roomplan::read(bytes)?);
         if loaded.format.is_none() {

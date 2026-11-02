@@ -6,6 +6,7 @@
 pub mod camera3d;
 pub mod derived;
 pub mod draw;
+pub mod dxf_import;
 pub mod edit;
 pub mod electric;
 pub mod estimate;

@@ -1,5 +1,6 @@
 import { PlanCanvas } from "./canvas/PlanCanvas";
 import { DrawingsDialog } from "./drawings/DrawingsDialog";
+import { DxfDialog } from "./dxf/DxfDialog";
 import styles from "./Editor.module.css";
 import { EstimateDialog } from "./estimate/EstimateDialog";
 import { Inspector } from "./inspector/Inspector";
@@ -31,6 +32,7 @@ export function Editor() {
       <CompareDialog />
       <DrawingsDialog />
       <EstimateDialog />
+      <DxfDialog />
     </div>
   );
 }

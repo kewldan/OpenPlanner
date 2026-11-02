@@ -12,6 +12,7 @@ publish.workspace = true
 wasm = ["dep:tsify", "dep:wasm-bindgen", "op-model/wasm"]
 
 [dependencies]
+base64.workspace = true
 glam.workspace = true
 op-geom.workspace = true
 op-model.workspace = true

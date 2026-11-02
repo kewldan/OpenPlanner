@@ -10,6 +10,7 @@ import { IconButton } from "@openplanner/ui";
 import { type KeyboardEvent, type MouseEvent, useState } from "react";
 import { addUnderlay, isEnabled, toolActions } from "../actions";
 import { format, isMacPlatform } from "../actions/shortcut";
+import { pickDxf } from "../dxf/store";
 import { ElectricalPanel } from "../electric/ElectricalPanel";
 import { sendToEngine } from "../engine";
 import { FinishPanel } from "../finish/FinishPanel";
@@ -70,6 +71,9 @@ export function Toolbar() {
       </IconButton>
       <IconButton label={t("tool.underlay")} disabled={!ready} onClick={() => void addUnderlay()}>
         <Icon name="image" />
+      </IconButton>
+      <IconButton label={t("tool.importDxf")} disabled={!ready} onClick={() => void pickDxf()}>
+        <Icon name="ruler" />
       </IconButton>
     </nav>
   );

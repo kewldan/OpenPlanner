@@ -50,7 +50,7 @@ fn is_image(path: &Path) -> bool {
 }
 
 /// Файлы скана: сетки, облака точек, архивы экспорта, данные комнаты.
-const SCAN_EXTENSIONS: [&str; 5] = ["glb", "zip", "ply", "obj", "json"];
+const SCAN_EXTENSIONS: [&str; 6] = ["glb", "gltf", "zip", "ply", "obj", "json"];
 /// Наибольший размер файла скана.
 const MAX_SCAN_BYTES: u64 = 1 << 30;
 
@@ -63,9 +63,9 @@ fn is_scan(path: &Path) -> bool {
 /// Файлы экспорта: чертежи, изображения листов, ведомости, смета, архивы.
 const EXPORT_EXTENSIONS: [&str; 8] = ["pdf", "svg", "dxf", "png", "xlsx", "csv", "ifc", "zip"];
 
-/// Таблицы прайса для импорта.
-const TABLE_EXTENSIONS: [&str; 2] = ["csv", "xlsx"];
-/// Прайс больше этого (байт) не читается.
+/// Таблицы прайса и чертежи DXF для импорта.
+const TABLE_EXTENSIONS: [&str; 3] = ["csv", "xlsx", "dxf"];
+/// Таблица или чертёж больше этого (байт) не читается.
 const MAX_TABLE_BYTES: u64 = 64 << 20;
 
 fn is_table(path: &Path) -> bool {
@@ -138,7 +138,7 @@ pub fn read_scan(path: PathBuf) -> CmdResult<Response> {
         .map_err(|err| io_error("прочитать", &path, &err))
 }
 
-/// Читает таблицу прайса (CSV или XLSX) до 64 МБ.
+/// Читает таблицу прайса (CSV, XLSX) или чертёж DXF до 64 МБ.
 #[tauri::command]
 pub fn read_table(path: PathBuf) -> CmdResult<Response> {
     check(&path, is_table)?;
@@ -272,6 +272,7 @@ mod tests {
         assert!(is_export(Path::new("/x/листы.zip")));
         assert!(is_export(Path::new("/x/Кв — смета.csv")));
         assert!(is_table(Path::new("/x/прайс.XLSX")) && !is_table(Path::new("/x/прайс.pdf")));
+        assert!(is_table(Path::new("/x/план.dxf")));
         assert!(!is_export(Path::new("/x/кв.oplan")));
         assert!(!is_export(Path::new("/x/.bashrc")));
     }

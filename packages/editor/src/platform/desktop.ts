@@ -66,7 +66,7 @@ export const desktopPlatform: Platform = {
       title: "Своя модель мебели",
       multiple: false,
       directory: false,
-      filters: [{ name: "Модель GLB", extensions: ["glb"] }],
+      filters: [{ name: "Модель glTF", extensions: ["glb", "gltf"] }],
     });
     if (typeof path !== "string") return null;
     // GLB читается той же командой, что и сканы (проверка расширения и размера).
@@ -80,6 +80,18 @@ export const desktopPlatform: Platform = {
       multiple: false,
       directory: false,
       filters: [{ name: "Таблица CSV или Excel", extensions: [...TABLE_EXTENSIONS] }],
+    });
+    if (typeof path !== "string") return null;
+    const buffer = await invoke<ArrayBuffer>("read_table", { path });
+    return { name: fileName(path), bytes: new Uint8Array(buffer) };
+  },
+
+  async openDrawing() {
+    const path = await open({
+      title: "Чертёж DXF",
+      multiple: false,
+      directory: false,
+      filters: [{ name: "Чертёж DXF", extensions: ["dxf"] }],
     });
     if (typeof path !== "string") return null;
     const buffer = await invoke<ArrayBuffer>("read_table", { path });

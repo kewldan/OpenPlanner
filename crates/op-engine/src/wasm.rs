@@ -294,6 +294,39 @@ impl Engine {
         Ok(events.into_ts()?)
     }
 
+    /// Слои и габарит чертежа DXF перед импортом.
+    ///
+    /// # Errors
+    ///
+    /// Файл не читается как текстовый DXF.
+    #[wasm_bindgen(js_name = dxfInfo)]
+    pub fn dxf_info(bytes: &[u8]) -> Result<Ts<crate::protocol::DxfInfo>, JsError> {
+        Ok(crate::dxf_import::info(bytes)
+            .map_err(|err| JsError::new(&err))?
+            .into_ts()?)
+    }
+
+    /// Импорт DXF подложкой или стенами.
+    ///
+    /// # Errors
+    ///
+    /// Файл не читается или на выбранных слоях нет линий.
+    #[wasm_bindgen(js_name = importDxf)]
+    #[allow(clippy::needless_pass_by_value)] // wasm-bindgen принимает аргументы только по значению
+    pub fn import_dxf(
+        &mut self,
+        bytes: &[u8],
+        name: &str,
+        options: Ts<crate::protocol::DxfImport>,
+    ) -> Result<Ts<EngineEvents>, JsError> {
+        let options = options.to_rust()?;
+        let events = self
+            .state
+            .import_dxf(bytes, name, &options)
+            .map_err(|err| JsError::new(&err))?;
+        Ok(events.into_ts()?)
+    }
+
     /// ZIP-архив из файлов (PNG листов, растеризованных в UI).
     ///
     /// # Errors

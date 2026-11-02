@@ -73,13 +73,19 @@ export const browserPlatform: Platform = {
   },
 
   async openModel() {
-    const file = await pickFile(".glb");
+    const file = await pickFile(".glb,.gltf");
     if (!file) return null;
     return { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) };
   },
 
   async openTable() {
     const file = await pickFile(TABLE_EXTENSIONS.map((ext) => `.${ext}`).join(","));
+    if (!file) return null;
+    return { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) };
+  },
+
+  async openDrawing() {
+    const file = await pickFile(".dxf");
     if (!file) return null;
     return { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) };
   },

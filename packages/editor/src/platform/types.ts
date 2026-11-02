@@ -51,6 +51,8 @@ export interface Platform {
   openModel(): Promise<PickedImage | null>;
   /** Выбрать таблицу прайса (CSV или XLSX). `null` — пользователь передумал. */
   openTable(): Promise<PickedImage | null>;
+  /** Выбрать чертёж DXF. `null` — пользователь передумал. */
+  openDrawing(): Promise<PickedImage | null>;
   /** Спросить, куда сохранить проект. `null` — пользователь отменил выбор. */
   chooseSaveTarget(suggestedName: string): Promise<SavedFile | null>;
   /** Записать проект туда, куда выбрал пользователь. */
@@ -72,7 +74,7 @@ export const PROJECT_EXTENSION = "oplan";
 export const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg"] as const;
 
 /** Расширения файлов скана. */
-export const SCAN_EXTENSIONS = ["glb", "zip", "ply", "obj", "json"] as const;
+export const SCAN_EXTENSIONS = ["glb", "gltf", "zip", "ply", "obj", "json"] as const;
 
 /** Расширения файлов экспорта; десктоп пишет только их. */
 export const EXPORT_EXTENSIONS = ["pdf", "svg", "dxf", "png", "xlsx", "csv", "ifc", "zip"] as const;

@@ -5,6 +5,8 @@ import type {
   DrawingFormat,
   DrawingRequest,
   DrawingSetInfo,
+  DxfImport,
+  DxfInfo,
   FromEngine,
   ScanImport,
   ScanResult,
@@ -33,6 +35,10 @@ export type {
   DrawingRequest,
   DrawingSetInfo,
   DrawingSettings,
+  DxfImport,
+  DxfInfo,
+  DxfLayer,
+  DxfMode,
   ElectricalReport,
   Element,
   EngineEvents,
@@ -135,7 +141,9 @@ export type EngineCall =
   | { type: "importFurniture"; bytes: Uint8Array; name: string }
   | { type: "exportEstimate"; format: TableFormat }
   | { type: "exportPrices"; format: TableFormat }
-  | { type: "importPrices"; bytes: Uint8Array; date: string };
+  | { type: "importPrices"; bytes: Uint8Array; date: string }
+  | { type: "dxfInfo"; bytes: Uint8Array }
+  | { type: "importDxf"; bytes: Uint8Array; name: string; options: DxfImport };
 
 /** Тип результата вызова. */
 export interface EngineCallResult {
@@ -153,6 +161,8 @@ export interface EngineCallResult {
   exportEstimate: Uint8Array;
   exportPrices: Uint8Array;
   importPrices: undefined;
+  dxfInfo: DxfInfo;
+  importDxf: undefined;
 }
 
 /** UI → воркер. */

@@ -512,6 +512,50 @@ pub struct FinishReport {
     pub totals: Vec<MaterialTotal>,
 }
 
+/// Слой чертежа DXF.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct DxfLayer {
+    /// Название.
+    pub name: String,
+    /// Линий на слое.
+    pub paths: u32,
+}
+
+/// Сведения о чертеже DXF перед импортом.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct DxfInfo {
+    /// Слои с линиями.
+    pub layers: Vec<DxfLayer>,
+    /// Ширина, мм.
+    pub width: f64,
+    /// Высота, мм.
+    pub height: f64,
+}
+
+/// Как импортировать DXF.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub enum DxfMode {
+    /// Подложкой: линии растром в масштабе чертежа.
+    Underlay,
+    /// Стенами: отрезки линий — оси стен.
+    Walls,
+}
+
+/// Параметры импорта DXF.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct DxfImport {
+    /// Подложкой или стенами.
+    pub mode: DxfMode,
+    /// Слои (пусто — все).
+    pub layers: Vec<String>,
+    /// Толщина стен, мм.
+    pub thickness: f64,
+}
+
 /// Строка сметы: позиция прайса в помещении (или без помещения).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]

@@ -23,6 +23,7 @@ function setup(
     openScan: async () => null,
     openModel: async () => null,
     openTable: async () => null,
+    openDrawing: async () => null,
     kind: "browser",
     openProject: async () => options.opened ?? null,
     chooseSaveTarget: async (name) =>

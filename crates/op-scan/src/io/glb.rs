@@ -1,4 +1,5 @@
-//! glTF 2.0 Binary: сетки сцены с учётом трансформаций узлов.
+//! glTF 2.0 — двоичный GLB и текстовый `.gltf` с буферами внутри файла (data URI):
+//! сетки сцены с учётом трансформаций узлов.
 
 use glam::{DAffine3, DMat4, DQuat, DVec3};
 use serde_json::Value;
@@ -21,28 +22,34 @@ fn numbers(v: &Value) -> Option<Vec<f64>> {
     v.as_array()?.iter().map(Value::as_f64).collect()
 }
 
-struct Glb<'a> {
+struct Glb {
     json: Value,
-    bin: &'a [u8],
+    /// Буферы по номерам: у GLB — двоичный блок, у `.gltf` — раскрытые data URI
+    /// (`None` — внешний файл).
+    buffers: Vec<Option<Vec<u8>>>,
 }
 
-impl Glb<'_> {
+impl Glb {
     /// Байты и шаг данных аксессора.
     fn view(&self, accessor: &Value) -> Result<(&[u8], usize, usize), ScanError> {
         let corrupt = || ScanError::Corrupt("GLB");
         let view = self.json["bufferViews"]
             .get(index(&accessor["bufferView"]).ok_or(corrupt())?)
             .ok_or(corrupt())?;
-        if index(&view["buffer"]) != Some(0) {
-            return Err(ScanError::Corrupt("GLB: внешние буферы не поддерживаются"));
-        }
+        let buffer = self
+            .buffers
+            .get(index(&view["buffer"]).ok_or(corrupt())?)
+            .and_then(Option::as_ref)
+            .ok_or(ScanError::Corrupt(
+                "glTF: внешние буферы не поддерживаются — нужен GLB или .gltf со встроенными данными",
+            ))?;
         let start =
             index(&view["byteOffset"]).unwrap_or(0) + index(&accessor["byteOffset"]).unwrap_or(0);
         let length = index(&view["byteLength"]).ok_or(corrupt())?;
         let stride = index(&view["byteStride"]).unwrap_or(0);
         let count = index(&accessor["count"]).ok_or(corrupt())?;
-        let end = (index(&view["byteOffset"]).unwrap_or(0) + length).min(self.bin.len());
-        Ok((self.bin.get(start..end).ok_or(corrupt())?, stride, count))
+        let end = (index(&view["byteOffset"]).unwrap_or(0) + length).min(buffer.len());
+        Ok((buffer.get(start..end).ok_or(corrupt())?, stride, count))
     }
 
     fn positions(&self, accessor: &Value) -> Result<Vec<DVec3>, ScanError> {
@@ -189,10 +196,47 @@ pub(super) fn read(bytes: &[u8]) -> Result<Mesh, ScanError> {
         }
         at += 8 + len;
     }
-    let glb = Glb {
+    scene(&Glb {
         json: json.ok_or(corrupt())?,
-        bin,
-    };
+        buffers: vec![Some(bin.to_vec())],
+    })
+}
+
+/// Похоже ли содержимое JSON на glTF (а не на данные комнаты RoomPlan).
+pub(super) fn is_gltf(bytes: &[u8]) -> bool {
+    serde_json::from_slice::<Value>(bytes)
+        .ok()
+        .is_some_and(|v| v["asset"]["version"].is_string() && v.get("meshes").is_some())
+}
+
+/// Читает текстовый `.gltf`: буферы — data URI в base64.
+pub(super) fn read_gltf(bytes: &[u8]) -> Result<Mesh, ScanError> {
+    use base64::Engine as _;
+    let json: Value =
+        serde_json::from_slice(bytes).map_err(|_| ScanError::Corrupt("glTF: не JSON"))?;
+    if !json["asset"]["version"]
+        .as_str()
+        .is_some_and(|v| v.starts_with('2'))
+    {
+        return Err(ScanError::Corrupt("glTF: поддерживается только версия 2.0"));
+    }
+    let buffers = json["buffers"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|b| {
+            let uri = b["uri"].as_str().unwrap_or("");
+            // Внешний файл буфера — `None`: аксессоры к нему дадут понятную ошибку.
+            uri.strip_prefix("data:")
+                .and_then(|rest| rest.split_once(";base64,"))
+                .and_then(|(_, data)| base64::engine::general_purpose::STANDARD.decode(data).ok())
+        })
+        .collect();
+    scene(&Glb { json, buffers })
+}
+
+/// Все треугольные сетки сцены по умолчанию.
+fn scene(glb: &Glb) -> Result<Mesh, ScanError> {
     let mut mesh = Mesh::default();
     let scene = index(&glb.json["scene"]).unwrap_or(0);
     let roots: Vec<usize> = glb.json["scenes"]
@@ -283,6 +327,32 @@ mod tests {
         };
         let back = read(&write_glb(&mesh)).unwrap();
         assert_eq!(back, mesh);
+    }
+
+    #[test]
+    fn text_gltf_with_data_uri() {
+        use base64::Engine as _;
+        let mesh = Mesh {
+            positions: vec![DVec3::ZERO, DVec3::X, DVec3::Y],
+            triangles: vec![[0, 1, 2]],
+        };
+        // Тот же GLB, но JSON с буфером в data URI.
+        let glb = write_glb(&mesh);
+        let json_len = u32_at(&glb, 12).unwrap() as usize;
+        let mut json: Value = serde_json::from_slice(&glb[20..20 + json_len]).unwrap();
+        let bin = &glb[20 + json_len + 8..];
+        json["buffers"][0]["uri"] = Value::String(format!(
+            "data:application/octet-stream;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(bin)
+        ));
+        let text = serde_json::to_vec(&json).unwrap();
+        assert!(is_gltf(&text));
+        assert_eq!(read_gltf(&text).unwrap(), mesh);
+        // Внешний буфер — понятная ошибка.
+        json["buffers"][0]["uri"] = Value::String("scene.bin".into());
+        let err = read_gltf(&serde_json::to_vec(&json).unwrap()).unwrap_err();
+        assert!(err.to_string().contains("внешние буферы"), "{err}");
+        assert!(!is_gltf(br#"{"rooms": []}"#));
     }
 
     #[test]
