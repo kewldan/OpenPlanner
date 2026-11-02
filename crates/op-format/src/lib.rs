@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
 
 /// Текущая версия формата.
-pub const FORMAT_VERSION: u32 = 4;
+pub const FORMAT_VERSION: u32 = 5;
 
 /// Имя файла манифеста внутри контейнера.
 pub const MANIFEST_PATH: &str = "manifest.json";
