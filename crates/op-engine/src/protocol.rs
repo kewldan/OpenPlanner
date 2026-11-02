@@ -1,6 +1,9 @@
 //! Протокол UI ↔ воркер. TS-типы генерируются через tsify.
 
-use op_model::{Command, DeviceKind, Document, Justification, WallMaterial};
+use op_model::{
+    Command, DeviceKind, Document, Justification, Material, MaterialKind, PipeSystem, PlumbingKind,
+    WallMaterial,
+};
 use op_scan::{ScanAnswer, ScanParams, ScanResult};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
@@ -34,6 +37,10 @@ pub enum Tool {
     Furniture,
     /// Электроточка или светильник: на стене — на её грани, иначе — где щёлкнули.
     Device,
+    /// Сантехническая точка: вывод — на грани стены, стояк и коллектор — где щёлкнули.
+    Plumbing,
+    /// Труба: вершины щелчками, двойной щелчок или Enter — конец.
+    Pipe,
 }
 
 /// Шаг инструмента — по нему UI показывает подсказку.
@@ -74,6 +81,12 @@ pub enum ToolStep {
     FurniturePlace,
     /// Электроточка: щелчок ставит точку.
     DevicePlace,
+    /// Сантехника: щелчок ставит точку.
+    PlumbingPlace,
+    /// Труба: первая вершина.
+    PipeStart,
+    /// Труба: следующая вершина, двойной щелчок или Enter — конец.
+    PipeNext,
 }
 
 /// Фаза ввода указателя (левая кнопка).
@@ -327,6 +340,176 @@ pub struct DeviceEntry {
     pub flux: f64,
     /// Условное обозначение в квадрате 100 × 100: путь SVG.
     pub icon: String,
+}
+
+/// Позиция каталога сантехники для UI.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct PlumbingEntry {
+    /// Идентификатор позиции.
+    pub id: String,
+    /// Вид.
+    pub kind: PlumbingKind,
+    /// Система.
+    pub system: PipeSystem,
+    /// Название.
+    pub name: String,
+    /// Раздел.
+    pub group: String,
+    /// Отметка по умолчанию, мм.
+    pub height: f64,
+    /// Диаметр по умолчанию, мм.
+    pub diameter: f64,
+    /// Ставится на стену.
+    pub on_wall: bool,
+    /// Обозначение в квадрате 100 × 100: путь SVG.
+    pub icon: String,
+}
+
+/// Расчёт трубы.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct PipeReport {
+    /// Труба.
+    pub id: String,
+    /// Система.
+    pub system: PipeSystem,
+    /// Диаметр, мм.
+    pub diameter: f64,
+    /// Длина по оси с подъёмами, м.
+    pub length: f64,
+    /// Наименьший уклон горизонтальных участков (канализация).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub slope: Option<f64>,
+    /// Что обслуживает: назначение вывода.
+    pub label: String,
+    /// Нарушения, понятные пользователю.
+    pub warnings: Vec<String>,
+}
+
+/// Строка спецификации: труба, фитинг, арматура.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct BillRow {
+    /// Наименование.
+    pub name: String,
+    /// Единица.
+    pub unit: String,
+    /// Количество.
+    pub amount: f64,
+    /// Примечание: хлысты, упаковки.
+    pub note: String,
+}
+
+/// Расчёт сантехники текущего вида.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct PlumbingReport {
+    /// Трубы.
+    pub pipes: Vec<PipeReport>,
+    /// Трубы и фитинги.
+    pub bill: Vec<BillRow>,
+    /// Выводов без трубы.
+    pub unconnected: u32,
+    /// Общие предупреждения: доступ к ревизии, нет стояка.
+    pub warnings: Vec<String>,
+}
+
+/// Грань помещения (стена по развёртке).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct FaceInfo {
+    /// Буква стены.
+    pub letter: String,
+    /// Длина, мм.
+    pub length: f64,
+}
+
+/// Поверхности помещения.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct RoomSurfaces {
+    /// Помещение.
+    pub id: String,
+    /// Название.
+    pub name: String,
+    /// Пол, м².
+    pub floor: f64,
+    /// Потолок, м².
+    pub ceiling: f64,
+    /// Периметр, м.
+    pub perimeter: f64,
+    /// Высота, м.
+    pub height: f64,
+    /// Стены без вычета проёмов, м².
+    pub walls_gross: f64,
+    /// Стены за вычетом проёмов, м².
+    pub walls_net: f64,
+    /// Грани.
+    pub faces: Vec<FaceInfo>,
+}
+
+/// Количество материала.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct Quantity {
+    /// Что: «Плитка», «Клей», «Затирка».
+    pub name: String,
+    /// Количество.
+    pub amount: f64,
+    /// Единица.
+    pub unit: String,
+    /// Упаковок (0 — не считается).
+    pub packs: u32,
+}
+
+/// Расчёт отделки поверхности.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct FinishInfo {
+    /// Отделка.
+    pub id: String,
+    /// Площадь, м².
+    pub area: f64,
+    /// Целых элементов.
+    pub whole: u32,
+    /// Подрезанных.
+    pub cut: u32,
+    /// Узких подрезок.
+    pub narrow: u32,
+    /// Расход.
+    pub quantities: Vec<Quantity>,
+    /// Предупреждения.
+    pub warnings: Vec<String>,
+}
+
+/// Итог по материалу.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct MaterialTotal {
+    /// Материал.
+    pub material: String,
+    /// Название.
+    pub name: String,
+    /// Вид.
+    pub kind: MaterialKind,
+    /// Площадь, м².
+    pub area: f64,
+    /// Расход.
+    pub quantities: Vec<Quantity>,
+}
+
+/// Расчёт отделки текущего вида.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct FinishReport {
+    /// Поверхности помещений.
+    pub rooms: Vec<RoomSurfaces>,
+    /// Отделка.
+    pub finishes: Vec<FinishInfo>,
+    /// Итоги по материалам.
+    pub totals: Vec<MaterialTotal>,
 }
 
 /// Расчёт группы щита.
@@ -629,6 +812,32 @@ pub enum ToEngine {
     },
     /// Распределить электроточки по группам щита (группы создаются заново).
     AutoCircuits,
+    /// Инструмент «Сантехника» с позицией каталога.
+    PlumbingTool {
+        /// Позиция каталога.
+        item: String,
+    },
+    /// Инструмент «Труба».
+    PipeTool {
+        /// Система.
+        system: PipeSystem,
+        /// Диаметр, мм.
+        diameter: f64,
+    },
+    /// Поставить выводы под приборы (ванна, раковина, унитаз…) без выводов.
+    FixtureOutlets,
+    /// Проложить трубы от выводов к стоякам и коллекторам (автоматические трубы — заново).
+    RoutePipes,
+    /// Подобрать старт раскладки отделки с наименьшим числом узких подрезок.
+    OptimizeLayout {
+        /// Отделка.
+        id: String,
+    },
+    /// Показывать раскладку отделки пола на плане.
+    ShowFinishes {
+        /// Показывать.
+        show: bool,
+    },
     /// Повернуть и (или) отразить выделенную мебель или предмет инструмента.
     TransformFurniture {
         /// Поворот по часовой стрелке, градусы.
@@ -768,6 +977,26 @@ pub enum FromEngine {
     Electrical {
         /// Расчёт.
         report: ElectricalReport,
+    },
+    /// Каталог сантехнических точек (один раз при запуске).
+    PlumbingCatalog {
+        /// Позиции.
+        items: Vec<PlumbingEntry>,
+    },
+    /// Расчёт сантехники текущего вида.
+    Plumbing {
+        /// Расчёт.
+        report: PlumbingReport,
+    },
+    /// Библиотека отделочных материалов (один раз при запуске).
+    MaterialLibrary {
+        /// Материалы.
+        items: Vec<Material>,
+    },
+    /// Поверхности помещений и расчёт отделки текущего вида.
+    Finishes {
+        /// Расчёт.
+        report: FinishReport,
     },
     /// Сводка обмера и всех вариантов: площади и изменения.
     VariantsSummary {

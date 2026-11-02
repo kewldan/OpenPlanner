@@ -196,6 +196,56 @@ fn device(mesh: &mut Mesh, d: &op_model::Device, ceiling: f64, options: &Options
     }
 }
 
+/// Труба: брусок сечением в диаметр вдоль каждого участка.
+fn pipe(mesh: &mut Mesh, pipe: &op_model::Pipe, options: &Options3d, white: bool) {
+    let top = options.cut.unwrap_or(f64::INFINITY);
+    let color = if white {
+        Color::hex(0xDADAD6, 1.0)
+    } else {
+        match pipe.system {
+            op_model::PipeSystem::Cold => Color::hex(0x5B8DEF, 1.0),
+            op_model::PipeSystem::Hot => Color::hex(0xE05A5A, 1.0),
+            op_model::PipeSystem::Drain => Color::hex(0x9A9A96, 1.0),
+        }
+    };
+    let r = pipe.diameter / 2.0;
+    for w in pipe.points.windows(2) {
+        let (a, b) = (crate::plumbing::xy(&w[0]), crate::plumbing::xy(&w[1]));
+        let z0 = w[0].z.min(w[1].z) - r;
+        let z1 = (w[0].z.max(w[1].z) + r).min(top);
+        if z1 <= z0 {
+            continue;
+        }
+        let dir = (b - a).try_normalize().unwrap_or(DVec2::X);
+        let n = DVec2::new(-dir.y, dir.x) * r;
+        let (a, b) = (a - dir * r, b + dir * r);
+        let rect = [a - n, b - n, b + n, a + n].map(from_plan);
+        mesh.block(rect, z0, z1, color);
+    }
+}
+
+/// Сантехническая точка: заглушка вывода, стояк до потолка, коллектор.
+fn plumbing_point(mesh: &mut Mesh, p: &op_model::PlumbingPoint, ceiling: f64, options: &Options3d) {
+    let top = options.cut.unwrap_or(f64::INFINITY);
+    let r = p.diameter / 2.0 + 10.0;
+    let (z0, z1, w, color) = match p.kind {
+        op_model::PlumbingKind::Outlet => (p.height - r, p.height + r, r, 0xF2F2EE),
+        op_model::PlumbingKind::Riser => (0.0, ceiling, r, 0xB5B5B0),
+        op_model::PlumbingKind::Manifold => (p.height - 40.0, p.height + 40.0, 200.0, 0xC9A227),
+    };
+    let z1 = z1.min(top);
+    if z1 <= z0 {
+        return;
+    }
+    let local = |x: f64, y: f64| from_plan(crate::plumbing::to_plan(p, DVec2::new(x, y)));
+    let (y0, y1) = match p.kind {
+        op_model::PlumbingKind::Outlet => (0.0, 2.0 * r),
+        _ => (-r.min(w), r.min(w)),
+    };
+    let rect = [local(-w, y0), local(w, y0), local(w, y1), local(-w, y1)];
+    mesh.block(rect, z0, z1, Color::hex(color, 1.0));
+}
+
 /// Солнце для настроек: положение (в том числе под горизонтом) и свет для сцены.
 #[must_use]
 pub fn sun(doc: &Document, options: &Options3d) -> Option<(SunPosition, Option<Sun>)> {
@@ -335,6 +385,12 @@ pub fn build(doc: &Document, derived: &Derived, options: &Options3d, models: &Mo
     for d in doc.devices.iter().filter(|d| shown(&d.layer)) {
         device(&mut opaque, d, doc.default_ceiling_height, options);
     }
+    for p in doc.pipes.iter().filter(|p| shown(&p.layer)) {
+        pipe(&mut opaque, p, options, palette.white);
+    }
+    for p in doc.plumbing.iter().filter(|p| shown(&p.layer)) {
+        plumbing_point(&mut opaque, p, doc.default_ceiling_height, options);
+    }
 
     // Полы и потолки помещений (метки в одной области — одно помещение).
     let mut used = HashSet::new();
@@ -349,10 +405,30 @@ pub fn build(doc: &Document, derived: &Derived, options: &Options3d, models: &Mo
         let contours: Vec<Vec<DVec2>> = std::iter::once(to3(&region.contour))
             .chain(region.islands.iter().map(|p| to3(p)))
             .collect();
-        opaque.cap(&contours, 0.0, true, palette.floor);
+        // Пол и потолок — цветом материала отделки, если она задана.
+        let finish = |surface: op_model::Surface| {
+            doc.finishes
+                .iter()
+                .rev()
+                .find(|f| f.room == r.id && f.surface == surface)
+                .and_then(|f| crate::finish::material(doc, &f.material))
+                .filter(|_| !palette.white)
+                .map(|m| crate::finish::color(&m))
+        };
+        opaque.cap(
+            &contours,
+            0.0,
+            true,
+            finish(op_model::Surface::Floor).unwrap_or(palette.floor),
+        );
         if options.ceiling && options.cut.is_none() {
             let height = r.ceiling_height.unwrap_or(default_height);
-            opaque.cap(&contours, height, false, palette.ceiling);
+            opaque.cap(
+                &contours,
+                height,
+                false,
+                finish(op_model::Surface::Ceiling).unwrap_or(palette.ceiling),
+            );
         }
     }
 

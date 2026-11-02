@@ -131,6 +131,21 @@ pub fn delete(doc: &Document, derived: &Derived, ids: &[String]) -> Vec<Command>
             commands.push(Command::Remove { id: r.id.clone() });
         }
     }
+    // Отделка удалённых помещений уходит вместе с ними.
+    if doc
+        .finishes
+        .iter()
+        .any(|f| selected.contains(f.room.as_str()))
+    {
+        commands.push(Command::SetFinishes {
+            finishes: doc
+                .finishes
+                .iter()
+                .filter(|f| !selected.contains(f.room.as_str()))
+                .cloned()
+                .collect(),
+        });
+    }
     for l in &doc.leaders {
         if selected.contains(l.id.as_str()) {
             commands.push(Command::Remove { id: l.id.clone() });
@@ -171,6 +186,16 @@ pub fn delete(doc: &Document, derived: &Derived, ids: &[String]) -> Vec<Command>
             s.lights.retain(|l| !lights.contains(l.as_str()));
         }
         commands.push(Command::SetScenes { scenes });
+    }
+    for e in doc
+        .plumbing
+        .iter()
+        .map(|p| &p.id)
+        .chain(doc.pipes.iter().map(|p| &p.id))
+    {
+        if selected.contains(e.as_str()) {
+            commands.push(Command::Remove { id: e.clone() });
+        }
     }
     for f in &doc.furniture {
         if selected.contains(f.id.as_str()) {
@@ -260,6 +285,24 @@ pub fn translate(doc: &Document, ids: &[String], delta: DVec2) -> Vec<Command> {
             d.x += delta.x;
             d.y += delta.y;
             commands.push(put(Element::Device(d)));
+        }
+    }
+    for p in &doc.plumbing {
+        if selected.contains(p.id.as_str()) {
+            let mut p = p.clone();
+            p.x += delta.x;
+            p.y += delta.y;
+            commands.push(put(Element::PlumbingPoint(p)));
+        }
+    }
+    for p in &doc.pipes {
+        if selected.contains(p.id.as_str()) {
+            let mut p = p.clone();
+            for v in &mut p.points {
+                v.x += delta.x;
+                v.y += delta.y;
+            }
+            commands.push(put(Element::Pipe(p)));
         }
     }
     for d in &doc.dimensions {

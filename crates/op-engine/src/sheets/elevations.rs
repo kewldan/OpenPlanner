@@ -4,8 +4,6 @@
 //! Развёртки собираются по итоговому виду (вариант, если он выбран, иначе обмер),
 //! в масштабе 1:50 или мельче, если самая длинная стена не помещается на лист.
 
-use std::collections::HashSet;
-
 use glam::DVec2;
 use op_export::{
     Align, Item, Rgb, Sheet, Text, Viewport,
@@ -13,29 +11,24 @@ use op_export::{
     table::{Cell, Column, THICK, Table},
 };
 use op_geom::left_normal;
-use op_model::{Document, OpeningKind};
+use op_model::OpeningKind;
 
 use super::{
     CAPTION_BAND, GAP, LAYER_DIMENSIONS, LAYER_FURNITURE, LAYER_OPENINGS, LAYER_TABLES,
     LAYER_WALLS, NAME_HEIGHT, Plot, SCALES, SMALL_HEIGHT, Views, flow, new_sheet,
 };
+use op_geom::tiling;
+
 use crate::{
-    derived::{Derived, opening_span},
+    finish,
     geometry::DimensionGeometry,
+    surfaces::{Face, faces, normalize},
 };
 
 /// Название листа.
 pub(super) const TITLE: &str = "Развёртки стен";
 /// Масштаб развёрток по умолчанию.
 const SCALE: u32 = 50;
-/// Грани короче этого (мм) не разворачиваются: торцы колонн, стыки.
-const MIN_FACE: f64 = 100.0;
-/// Буквы стен (без похожих на цифры и друг на друга, как для осей по ГОСТ 21.101).
-const LETTERS: [&str; 22] = [
-    "А", "Б", "В", "Г", "Д", "Е", "Ж", "И", "К", "Л", "М", "Н", "П", "Р", "С", "Т", "У", "Ф", "Ц",
-    "Ш", "Э", "Ю",
-];
-
 // Поля вокруг развёртки стены на листе, мм: слева — размер высоты, сверху —
 // подпись, снизу — цепочка и общий размер.
 const MARGIN_LEFT: f64 = 14.0;
@@ -47,36 +40,15 @@ const KEY_PLAN: f64 = 44.0;
 /// Строка заголовка помещения, мм.
 const HEADING: f64 = 8.0;
 
-/// Проём на грани: от и до вдоль грани, низ и верх от пола, мм.
+/// Отделка на грани: полоса высот, материал и раскладка (координаты грани).
 #[derive(Debug, Clone)]
-struct FaceOpening {
-    kind: OpeningKind,
-    from: f64,
-    to: f64,
+struct FaceFinish {
     bottom: f64,
     top: f64,
-    /// Петли двери — у левого края проёма (если смотреть из помещения).
-    hinge_left: bool,
-}
-
-/// Предмет мебели спинкой к грани: от и до вдоль грани, низ и верх, мм.
-#[derive(Debug, Clone)]
-struct FaceItem {
-    from: f64,
-    to: f64,
-    bottom: f64,
-    top: f64,
-}
-
-/// Грань помещения.
-#[derive(Debug, Clone)]
-struct Face {
-    letter: String,
-    start: DVec2,
-    end: DVec2,
-    length: f64,
-    openings: Vec<FaceOpening>,
-    furniture: Vec<FaceItem>,
+    name: String,
+    /// Куски плитки: контур и признак узкой подрезки.
+    pieces: Vec<(Vec<DVec2>, bool)>,
+    narrow: usize,
 }
 
 /// Помещение с гранями.
@@ -88,6 +60,8 @@ pub(super) struct RoomElevation {
     height: f64,
     contour: Vec<DVec2>,
     faces: Vec<Face>,
+    /// Отделка каждой грани (по порядку граней).
+    finishes: Vec<Vec<FaceFinish>>,
 }
 
 impl RoomElevation {
@@ -122,164 +96,61 @@ pub(super) fn rooms(views: &Views<'_>) -> Vec<RoomElevation> {
             let region = &derived.regions[*derived.room_regions.get(&row.id)?];
             let contour = normalize(&region.contour);
             let faces = faces(doc, derived, &contour);
+            let finishes = face_finishes(doc, derived, &row.id, faces.len());
             (!faces.is_empty()).then(|| RoomElevation {
                 number: i + 1,
                 name: row.name.clone(),
                 height: row.height * 1000.0,
                 contour,
                 faces,
+                finishes,
             })
         })
         .collect()
 }
 
-/// Контур по часовой стрелке на экране (ось Y вниз) от верхней левой вершины,
-/// без вершин посреди прямой. Так грань от начала к концу видна изнутри слева направо.
-fn normalize(contour: &[DVec2]) -> Vec<DVec2> {
-    let mut points: Vec<DVec2> = contour.to_vec();
-    let twice_area: f64 = (0..points.len())
-        .map(|i| points[i].perp_dot(points[(i + 1) % points.len()]))
-        .sum();
-    if twice_area < 0.0 {
-        points.reverse();
-    }
-    // Вершины на прямой.
-    let mut i = 0;
-    while points.len() > 3 && i < points.len() {
-        let n = points.len();
-        let (prev, p, next) = (points[(i + n - 1) % n], points[i], points[(i + 1) % n]);
-        let (u, v) = (p - prev, next - p);
-        if u.perp_dot(v).abs() <= 1e-6 * u.length() * v.length() && u.dot(v) > 0.0 {
-            points.remove(i);
-        } else {
-            i += 1;
-        }
-    }
-    let start = (0..points.len())
-        .min_by(|&a, &b| {
-            let (pa, pb) = (points[a], points[b]);
-            (pa.y.round(), pa.x)
-                .partial_cmp(&(pb.y.round(), pb.x))
-                .unwrap_or(std::cmp::Ordering::Equal)
-        })
-        .unwrap_or(0);
-    points.rotate_left(start);
-    points
-}
-
-/// Грани контура и проёмы в стенах, на гранях которых они лежат.
-fn faces(doc: &Document, derived: &Derived, contour: &[DVec2]) -> Vec<Face> {
-    let mut out = Vec::new();
-    for i in 0..contour.len() {
-        let (p, q) = (contour[i], contour[(i + 1) % contour.len()]);
-        let length = p.distance(q);
-        if length < MIN_FACE {
+/// Отделка стен помещения по граням: полосы, названия материалов, раскладка.
+fn face_finishes(
+    doc: &op_model::Document,
+    derived: &crate::derived::Derived,
+    room: &str,
+    count: usize,
+) -> Vec<Vec<FaceFinish>> {
+    let mut out = vec![Vec::new(); count];
+    let Some(geometry) = finish::room_geometry(doc, derived, room) else {
+        return out;
+    };
+    for f in doc
+        .finishes
+        .iter()
+        .filter(|f| f.room == room && f.surface == op_model::Surface::Walls)
+    {
+        let Some(material) = finish::material(doc, &f.material) else {
             continue;
-        }
-        let dir = (q - p) / length;
-        let mut seen = HashSet::new();
-        let mut openings = Vec::new();
-        for w in doc
-            .walls
-            .iter()
-            .filter(|w| derived.visible.contains(&w.layer))
-        {
-            let Some((a, b)) = derived.wall_axis(w) else {
+        };
+        for band in finish::wall_bands(doc, f, &geometry) {
+            let Some(face) = geometry.faces.get(band.face) else {
                 continue;
             };
-            let wall_len = a.distance(b);
-            if wall_len < 1e-6 {
-                continue;
-            }
-            let wdir = (b - a) / wall_len;
-            if wdir.perp_dot(dir).abs() > 1e-4 {
-                continue;
-            }
-            let n = left_normal(wdir);
-            let (left, right) = w.sides();
-            let on_face = [a + n * left, a - n * right]
-                .iter()
-                .any(|o| (p - *o).perp_dot(wdir).abs() < 1.0);
-            if !on_face {
-                continue;
-            }
-            for o in doc
-                .openings
-                .iter()
-                .filter(|o| o.wall == w.id && derived.visible.contains(&o.layer))
-            {
-                if !seen.insert(o.id.as_str()) {
-                    continue;
-                }
-                let (from, to) = opening_span(o, wall_len);
-                let along = |t: f64| (a + wdir * t - p).dot(dir);
-                let (t0, t1) = (along(from), along(to));
-                let (lo, hi) = (t0.min(t1).max(0.0), t0.max(t1).min(length));
-                if hi - lo < 1.0 {
-                    continue;
-                }
-                let hinge = along(if o.hinge_at_end { to } else { from });
-                let bottom = if o.kind == OpeningKind::Window {
-                    o.sill
-                } else {
-                    0.0
-                };
-                openings.push(FaceOpening {
-                    kind: o.kind,
-                    from: lo,
-                    to: hi,
-                    bottom,
-                    top: bottom + o.height,
-                    hinge_left: (hinge - lo).abs() <= (hinge - hi).abs(),
+            let area = finish::band_area(face, &band);
+            let layout = finish::spec(&material, f, DVec2::from(f.layout.origin))
+                .map(|spec| tiling::layout(&area, &spec, true))
+                .filter(|l| !l.approximate)
+                .unwrap_or_default();
+            if let Some(slot) = out.get_mut(band.face) {
+                slot.push(FaceFinish {
+                    bottom: band.bottom,
+                    top: band.top,
+                    name: material.name.clone(),
+                    narrow: layout.narrow,
+                    pieces: layout
+                        .pieces
+                        .into_iter()
+                        .map(|p| (p.outline, p.narrow))
+                        .collect(),
                 });
             }
         }
-        openings.sort_by(|a, b| a.from.total_cmp(&b.from));
-        // Мебель спинкой к грани (со стороны помещения).
-        let mut furniture = Vec::new();
-        for f in doc
-            .furniture
-            .iter()
-            .filter(|f| derived.visible.contains(&f.layer))
-        {
-            let back = [
-                crate::furniture::to_plan(f, DVec2::new(-f.width / 2.0, -f.depth / 2.0)),
-                crate::furniture::to_plan(f, DVec2::new(f.width / 2.0, -f.depth / 2.0)),
-            ];
-            let against = back.iter().all(|b| dir.perp_dot(*b - p).abs() < 60.0);
-            let inside = dir.perp_dot(DVec2::new(f.x, f.y) - p) > 0.0;
-            if !against || !inside {
-                continue;
-            }
-            let (t0, t1) = ((back[0] - p).dot(dir), (back[1] - p).dot(dir));
-            let (lo, hi) = (t0.min(t1).max(0.0), t0.max(t1).min(length));
-            if hi - lo > 1.0 {
-                furniture.push(FaceItem {
-                    from: lo,
-                    to: hi,
-                    bottom: f.elevation,
-                    top: f.elevation + f.height,
-                });
-            }
-        }
-        let letter = LETTERS.get(out.len()).map_or_else(
-            || {
-                format!(
-                    "{}{}",
-                    LETTERS[out.len() % LETTERS.len()],
-                    out.len() / LETTERS.len()
-                )
-            },
-            |l| (*l).to_owned(),
-        );
-        out.push(Face {
-            letter,
-            start: p,
-            end: q,
-            length,
-            openings,
-            furniture,
-        });
     }
     out
 }
@@ -387,7 +258,7 @@ pub(super) fn sheets(rooms: &[RoomElevation], table: Option<Table>, size: DVec2)
         pages[page].key_plan(at, room);
         at.x += KEY_PLAN + GAP;
         row = KEY_PLAN;
-        for face in &room.faces {
+        for (n, face) in room.faces.iter().enumerate() {
             let b = face_box(face, room.height, k);
             if at.x + b.x > right {
                 at = DVec2::new(left, at.y + row + GAP);
@@ -401,7 +272,12 @@ pub(super) fn sheets(rooms: &[RoomElevation], table: Option<Table>, size: DVec2)
                 at.y += HEADING;
                 row = 0.0;
             }
-            pages[page].face(at, face, room.height);
+            pages[page].face(
+                at,
+                face,
+                room.height,
+                room.finishes.get(n).map_or(&[], Vec::as_slice),
+            );
             at.x += b.x + GAP;
             row = row.max(b.y);
         }
@@ -517,8 +393,9 @@ impl Page {
         }
     }
 
-    /// Развёртка стены: контур, проёмы, размеры. `at` — левый верхний угол места на листе.
-    fn face(&mut self, at: DVec2, face: &Face, height: f64) {
+    /// Развёртка стены: контур, отделка с раскладкой, проёмы, размеры. `at` —
+    /// левый верхний угол места на листе. Узкие подрезки — в заголовке стены.
+    fn face(&mut self, at: DVec2, face: &Face, height: f64, finishes: &[FaceFinish]) {
         let k = self.k;
         self.paper_text(
             at + DVec2::new(MARGIN_LEFT, MARGIN_TOP / 2.0),
@@ -526,6 +403,18 @@ impl Page {
             NAME_HEIGHT,
             Align::Left,
         );
+        let narrow: usize = finishes.iter().map(|f| f.narrow).sum();
+        if narrow > 0 {
+            let layer = self.sheet.layer(LAYER_TABLES);
+            let mut text = Text::centered(
+                at + DVec2::new(MARGIN_LEFT + 22.0, MARGIN_TOP / 2.0),
+                format!("узкие подрезки: {narrow}"),
+                SMALL_HEIGHT,
+                Align::Left,
+            );
+            text.color = Rgb::hex(0xC2410C);
+            self.sheet.paper.push(Item::text(layer, text));
+        }
         // Начало координат стены — левый нижний угол (пол), ось Y вниз.
         let floor = (at + DVec2::new(MARGIN_LEFT, MARGIN_TOP + height / k)) * k;
         let point = |x: f64, y: f64| floor + DVec2::new(x, -y);
@@ -537,6 +426,58 @@ impl Page {
             items: std::mem::take(&mut self.model),
             k,
         };
+        // Отделка: раскладка тонкими линиями (узкие подрезки — красным), граница
+        // полосы и название материала у её низа.
+        let finish_layer = plot.sheet.layer("Отделка");
+        for f in finishes {
+            for (piece, narrow) in &f.pieces {
+                plot.items.push(Item::polyline(
+                    finish_layer,
+                    piece.iter().map(|p| point(p.x, p.y)).collect(),
+                    true,
+                    0.09,
+                    if *narrow {
+                        Rgb::hex(0xC2410C)
+                    } else {
+                        Rgb::hex(0x888888)
+                    },
+                ));
+            }
+            if f.bottom > 1.0 {
+                plot.items.push(Item {
+                    layer: finish_layer,
+                    shape: op_export::sheet::Shape::Stroke {
+                        points: vec![point(0.0, f.bottom), point(face.length, f.bottom)],
+                        closed: false,
+                        width: 0.25,
+                        color: Rgb::BLACK,
+                        dash: Some((2.0, 1.0)),
+                    },
+                });
+            }
+            if f.top < height - 1.0 {
+                plot.items.push(Item {
+                    layer: finish_layer,
+                    shape: op_export::sheet::Shape::Stroke {
+                        points: vec![point(0.0, f.top), point(face.length, f.top)],
+                        closed: false,
+                        width: 0.25,
+                        color: Rgb::BLACK,
+                        dash: Some((2.0, 1.0)),
+                    },
+                });
+            }
+            if f.top - f.bottom > 4.0 * k {
+                plot.text(
+                    finish_layer,
+                    point(1.5 * k, f.bottom + 2.0 * k),
+                    &f.name,
+                    SMALL_HEIGHT * 0.8,
+                    Align::Left,
+                    Rgb::hex(0x333333),
+                );
+            }
+        }
         plot.items.push(Item::polyline(
             walls,
             vec![
@@ -552,6 +493,12 @@ impl Page {
         for o in &face.openings {
             let top = o.top.min(height);
             let (a, b) = (point(o.from, o.bottom), point(o.to, top));
+            // Проём закрывает раскладку.
+            plot.items.push(Item::fill(
+                openings,
+                vec![vec![a, DVec2::new(b.x, a.y), b, DVec2::new(a.x, b.y)]],
+                Rgb::WHITE,
+            ));
             plot.items.push(Item::polyline(
                 openings,
                 vec![a, DVec2::new(b.x, a.y), b, DVec2::new(a.x, b.y)],
@@ -684,37 +631,5 @@ fn dimension(a: DVec2, b: DVec2, offset: DVec2) -> DimensionGeometry {
         dir,
         normal: left_normal(dir),
         length,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn contour_goes_clockwise_from_the_top_left() {
-        // Против часовой стрелки на экране, с лишней вершиной посреди стороны.
-        let ccw = [
-            DVec2::new(0.0, 0.0),
-            DVec2::new(0.0, 3000.0),
-            DVec2::new(4000.0, 3000.0),
-            DVec2::new(4000.0, 0.0),
-            DVec2::new(2000.0, 0.0),
-        ];
-        let c = normalize(&ccw);
-        assert_eq!(
-            c,
-            [
-                DVec2::new(0.0, 0.0),
-                DVec2::new(4000.0, 0.0),
-                DVec2::new(4000.0, 3000.0),
-                DVec2::new(0.0, 3000.0)
-            ]
-        );
-    }
-
-    #[test]
-    fn letters_skip_lookalikes() {
-        assert!(!LETTERS.contains(&"З") && !LETTERS.contains(&"О") && !LETTERS.contains(&"Ч"));
     }
 }

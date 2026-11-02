@@ -68,6 +68,14 @@ fn outline(
         draw::device_symbol(scene, d, color, width);
         return true;
     }
+    if let Some(p) = doc.plumbing_point(id) {
+        draw::plumbing_symbol(scene, p, color, width);
+        return true;
+    }
+    if let Some(p) = doc.pipe(id) {
+        draw::pipe(scene, p, color, width + 1.5);
+        return true;
+    }
     if let Some(f) = doc.furniture_item(id) {
         scene.polyline(&crate::furniture::corners(f), true, width, color);
         return true;
@@ -205,6 +213,24 @@ impl EngineState {
             (Tool::Device, _) => {
                 if let Some(d) = self.device_candidate(p, false) {
                     draw::device_symbol(&mut scene, &d, accent, 1.5);
+                }
+            }
+            (Tool::Plumbing, _) => {
+                if let Some(pt) = self.plumbing_candidate(p, false) {
+                    draw::plumbing_symbol(&mut scene, &pt, accent, 1.5);
+                }
+            }
+            (Tool::Pipe, data) => {
+                let color = palette::pipe(self.pipe.0);
+                let mut points = match data {
+                    ToolData::Pipe { points } => points.clone(),
+                    _ => Vec::new(),
+                };
+                let q = self.cursor.as_ref().map_or(p, |c| c.point);
+                points.push(q);
+                scene.polyline(&points, false, 2.0, color);
+                for v in &points {
+                    scene.dot(*v, 5.0, color);
                 }
             }
             (Tool::Furniture, _) => {

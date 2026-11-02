@@ -12,6 +12,7 @@ use crate::{
     edit::{self, WallEnd},
     electric, furniture, geometry,
     hit::{self, HandleKind},
+    plumbing,
     protocol::{FromEngine, PointerPhase, SnapKind, Tool, ToolStep},
     snap::{self, Snap, SnapInput},
     state::EngineState,
@@ -25,6 +26,8 @@ const HANDLE_RADIUS_PX: f64 = 7.0;
 const FURNITURE_SNAP_PX: f64 = 24.0;
 /// Расстояние, на котором электроточка притягивается к грани стены, CSS-пиксели.
 const DEVICE_SNAP_PX: f64 = 40.0;
+/// Расстояние, на котором вершина трубы притягивается к сантехнической точке, CSS-пиксели.
+const PIPE_SNAP_PX: f64 = 20.0;
 /// Радиус попадания по линии, CSS-пиксели.
 const HIT_RADIUS_PX: f64 = 5.0;
 
@@ -52,6 +55,11 @@ pub enum ToolData {
     Leader {
         /// Точка.
         target: DVec2,
+    },
+    /// Труба: поставленные вершины.
+    Pipe {
+        /// Вершины.
+        points: Vec<DVec2>,
     },
     /// Калибровка подложки.
     Calibrate {
@@ -90,6 +98,9 @@ impl ToolData {
             (Tool::Demolish, _) => ToolStep::DemolishPick,
             (Tool::Furniture, _) => ToolStep::FurniturePlace,
             (Tool::Device, _) => ToolStep::DevicePlace,
+            (Tool::Plumbing, _) => ToolStep::PlumbingPlace,
+            (Tool::Pipe, Self::Pipe { .. }) => ToolStep::PipeNext,
+            (Tool::Pipe, _) => ToolStep::PipeStart,
         }
     }
 }
@@ -227,6 +238,9 @@ impl EngineState {
     }
 
     pub(crate) fn finish(&mut self) -> Vec<FromEngine> {
+        if matches!(self.data, ToolData::Pipe { .. }) {
+            return self.finish_pipe();
+        }
         if matches!(self.data, ToolData::Wall { .. }) {
             self.data = ToolData::None;
             self.overlay_dirty = true;
@@ -296,6 +310,8 @@ impl EngineState {
             Tool::Calibrate => self.calibrate_pointer(phase, p, alt),
             Tool::Furniture => self.furniture_pointer(phase, p, alt),
             Tool::Device => self.device_pointer(phase, p, alt),
+            Tool::Plumbing => self.plumbing_pointer(phase, p, alt),
+            Tool::Pipe => self.pipe_pointer(phase, p, shift, alt),
         }
     }
 
@@ -472,6 +488,9 @@ impl EngineState {
         if let Some(d) = doc.device(id) {
             return Some(DVec2::new(d.x, d.y));
         }
+        if let Some(p) = doc.plumbing_point(id) {
+            return Some(DVec2::new(p.x, p.y));
+        }
         None
     }
 
@@ -533,6 +552,44 @@ impl EngineState {
                         d.y = round_to(target.y, 10.0);
                     }
                     return vec![put(Element::Device(d))];
+                }
+                // Один вывод сантехники: скользит по граням стен.
+                if let [id] = self.selection.as_slice()
+                    && let Some(pt) = doc.plumbing_point(id)
+                    && plumbing::on_wall(pt.kind)
+                    && !alt
+                {
+                    let target = *grab + (p - drag.start_world);
+                    let mut pt = pt.clone();
+                    if let Some((at, rotation)) = electric::snap_to_face_at(
+                        doc,
+                        &self.derived,
+                        target,
+                        DEVICE_SNAP_PX / self.px(),
+                        0.0,
+                    ) {
+                        pt.x = at.x;
+                        pt.y = at.y;
+                        pt.rotation = rotation;
+                    } else {
+                        pt.x = round_to(target.x, 10.0);
+                        pt.y = round_to(target.y, 10.0);
+                    }
+                    return vec![put(Element::PlumbingPoint(pt))];
+                }
+                // Трубы и сантехнические точки переносятся без привязок, с шагом 10 мм.
+                if self
+                    .selection
+                    .iter()
+                    .all(|id| doc.pipe(id).is_some() || doc.plumbing_point(id).is_some())
+                {
+                    let step = if alt { 1.0 } else { 10.0 };
+                    let d = p - drag.start_world;
+                    return edit::translate(
+                        doc,
+                        &self.selection,
+                        DVec2::new(round_to(d.x, step), round_to(d.y, step)),
+                    );
                 }
                 let exclude: Vec<String> = doc
                     .walls
@@ -733,6 +790,149 @@ impl EngineState {
         };
         d.id = self.ids.generate();
         self.execute_all(vec![put(Element::Device(d))])
+    }
+
+    // ---------- Сантехника ----------
+
+    /// Точка инструмента «Сантехника» в точке `p`: вывод — на грани стены.
+    pub(crate) fn plumbing_candidate(
+        &self,
+        p: DVec2,
+        alt: bool,
+    ) -> Option<op_model::PlumbingPoint> {
+        let item = plumbing::item(&self.plumbing_item)?;
+        let snapped = (plumbing::on_wall(item.kind) && !alt)
+            .then(|| {
+                electric::snap_to_face_at(
+                    self.doc(),
+                    &self.derived,
+                    p,
+                    DEVICE_SNAP_PX / self.px(),
+                    0.0,
+                )
+            })
+            .flatten();
+        let (at, rotation) =
+            snapped.unwrap_or((DVec2::new(round_to(p.x, 10.0), round_to(p.y, 10.0)), 0.0));
+        Some(op_model::PlumbingPoint {
+            id: String::new(),
+            layer: LayerKind::Plumbing.id().into(),
+            variant: None,
+            kind: item.kind,
+            system: item.system,
+            x: at.x,
+            y: at.y,
+            rotation,
+            height: item.height,
+            diameter: item.diameter,
+            label: String::new(),
+            fixture: None,
+        })
+    }
+
+    fn plumbing_pointer(&mut self, phase: PointerPhase, p: DVec2, alt: bool) -> Vec<FromEngine> {
+        self.cursor = Some(Snap {
+            point: p,
+            kind: None,
+            node: None,
+            wall: None,
+            guides: Vec::new(),
+        });
+        self.overlay_dirty = true;
+        if phase != PointerPhase::Down {
+            return vec![];
+        }
+        let Some(mut pt) = self.plumbing_candidate(p, alt) else {
+            return vec![];
+        };
+        pt.id = self.ids.generate();
+        self.execute_all(vec![put(Element::PlumbingPoint(pt))])
+    }
+
+    /// Вершина трубы под курсором: центр сантехнической точки рядом, с Shift —
+    /// по осям от предыдущей вершины, иначе — с шагом 10 мм.
+    pub(crate) fn pipe_vertex(&self, p: DVec2, shift: bool, alt: bool) -> DVec2 {
+        if !alt
+            && let Some(c) =
+                plumbing::snap_point(self.doc(), &self.derived, p, PIPE_SNAP_PX / self.px())
+        {
+            return c;
+        }
+        let mut q = DVec2::new(round_to(p.x, 10.0), round_to(p.y, 10.0));
+        if shift
+            && let ToolData::Pipe { points } = &self.data
+            && let Some(last) = points.last()
+        {
+            let d = q - *last;
+            q = if d.x.abs() >= d.y.abs() {
+                DVec2::new(q.x, last.y)
+            } else {
+                DVec2::new(last.x, q.y)
+            };
+        }
+        q
+    }
+
+    fn pipe_pointer(
+        &mut self,
+        phase: PointerPhase,
+        p: DVec2,
+        shift: bool,
+        alt: bool,
+    ) -> Vec<FromEngine> {
+        let q = self.pipe_vertex(p, shift, alt);
+        self.cursor = Some(Snap {
+            point: q,
+            kind: None,
+            node: None,
+            wall: None,
+            guides: Vec::new(),
+        });
+        self.overlay_dirty = true;
+        match phase {
+            PointerPhase::Down => {
+                let first = !matches!(self.data, ToolData::Pipe { .. });
+                match &mut self.data {
+                    ToolData::Pipe { points } => {
+                        if points.last().is_none_or(|l| l.distance(q) > 1.0) {
+                            points.push(q);
+                        }
+                    }
+                    _ => self.data = ToolData::Pipe { points: vec![q] },
+                }
+                if first {
+                    vec![self.tool_event()]
+                } else {
+                    vec![]
+                }
+            }
+            PointerPhase::DoubleClick => self.finish_pipe(),
+            _ => vec![],
+        }
+    }
+
+    /// Заканчивает трубу инструмента: две вершины и больше — новая ручная труба.
+    fn finish_pipe(&mut self) -> Vec<FromEngine> {
+        let ToolData::Pipe { points } = std::mem::take(&mut self.data) else {
+            return vec![];
+        };
+        self.overlay_dirty = true;
+        let mut events = vec![self.tool_event()];
+        if points.len() < 2 {
+            return events;
+        }
+        let (system, diameter) = self.pipe;
+        let pipe = op_model::Pipe {
+            id: self.ids.generate(),
+            layer: LayerKind::Plumbing.id().into(),
+            variant: None,
+            system,
+            diameter,
+            points: plumbing::manual_vertices(self.doc(), system, diameter, &points),
+            auto: false,
+        };
+        events.extend(self.execute_all(vec![put(Element::Pipe(pipe))]));
+        events
     }
 
     // ---------- Демонтаж ----------

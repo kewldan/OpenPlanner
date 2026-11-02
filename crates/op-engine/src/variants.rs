@@ -320,6 +320,36 @@ pub fn create(
         d.variant.clone_from(&new_variant);
         commands.push(put(Element::Device(d)));
     }
+    // Сантехника: выводы копии ссылаются на приборы копии.
+    for p in doc.plumbing.iter().filter(|e| mine(&e.variant)) {
+        let mut p = p.clone();
+        p.id = fresh(&mut map, &p.id, ids);
+        p.fixture = p.fixture.as_ref().map(|f| re(f, &map));
+        p.variant.clone_from(&new_variant);
+        commands.push(put(Element::PlumbingPoint(p)));
+    }
+    for p in doc.pipes.iter().filter(|e| mine(&e.variant)) {
+        let mut p = p.clone();
+        p.id = fresh(&mut map, &p.id, ids);
+        p.variant.clone_from(&new_variant);
+        commands.push(put(Element::Pipe(p)));
+    }
+    // Отделка помещений копии — копией отделки исходных помещений.
+    let copies: Vec<op_model::Finish> = doc
+        .finishes
+        .iter()
+        .filter(|f| map.contains_key(&f.room))
+        .map(|f| op_model::Finish {
+            id: ids.generate(),
+            room: re(&f.room, &map),
+            ..f.clone()
+        })
+        .collect();
+    if !copies.is_empty() {
+        let mut finishes = doc.finishes.clone();
+        finishes.extend(copies);
+        commands.push(Command::SetFinishes { finishes });
+    }
     (commands, id)
 }
 
@@ -346,6 +376,35 @@ pub fn delete(doc: &Document, variant: &str) -> Vec<Command> {
         .filter(|e| mine(&e.variant))
         .for_each(|e| remove(&e.id));
     doc.devices
+        .iter()
+        .filter(|e| mine(&e.variant))
+        .for_each(|e| remove(&e.id));
+    doc.pipes
+        .iter()
+        .filter(|e| mine(&e.variant))
+        .for_each(|e| remove(&e.id));
+    let rooms: Vec<&str> = doc
+        .rooms
+        .iter()
+        .filter(|e| mine(&e.variant))
+        .map(|e| e.id.as_str())
+        .collect();
+    if doc
+        .finishes
+        .iter()
+        .any(|f| rooms.contains(&f.room.as_str()))
+    {
+        out.push(Command::SetFinishes {
+            finishes: doc
+                .finishes
+                .iter()
+                .filter(|f| !rooms.contains(&f.room.as_str()))
+                .cloned()
+                .collect(),
+        });
+    }
+    let mut remove = |id: &str| out.push(Command::Remove { id: id.to_owned() });
+    doc.plumbing
         .iter()
         .filter(|e| mine(&e.variant))
         .for_each(|e| remove(&e.id));
@@ -488,6 +547,16 @@ pub fn translate(doc: &mut Document, d: DVec2) {
     for dev in &mut doc.devices {
         dev.x += d.x;
         dev.y += d.y;
+    }
+    for p in &mut doc.plumbing {
+        p.x += d.x;
+        p.y += d.y;
+    }
+    for p in &mut doc.pipes {
+        for v in &mut p.points {
+            v.x += d.x;
+            v.y += d.y;
+        }
     }
     for dim in &mut doc.dimensions {
         for a in [&mut dim.start, &mut dim.end] {

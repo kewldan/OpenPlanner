@@ -574,6 +574,17 @@ fn every_element_survives_json() {
         kind: op_model::DeviceKind::Switch2,
     });
     click(&mut s, 1500.0, 1100.0);
+    s.handle(ToEngine::PlumbingTool {
+        item: "riser-drain".into(),
+    });
+    click(&mut s, 3700.0, 4700.0);
+    s.handle(ToEngine::PipeTool {
+        system: op_model::PipeSystem::Drain,
+        diameter: 50.0,
+    });
+    click(&mut s, 2000.0, 4700.0);
+    click(&mut s, 3700.0, 4700.0);
+    s.handle(ToEngine::Finish);
     let doc = s.document();
     let elements: Vec<Element> = doc
         .layers
@@ -589,8 +600,13 @@ fn every_element_survives_json() {
         .chain(doc.underlays.iter().cloned().map(Element::Underlay))
         .chain(doc.furniture.iter().cloned().map(Element::Furniture))
         .chain(doc.devices.iter().cloned().map(Element::Device))
+        .chain(doc.plumbing.iter().cloned().map(Element::PlumbingPoint))
+        .chain(doc.pipes.iter().cloned().map(Element::Pipe))
         .collect();
-    assert_eq!(elements.len(), 9 + 4 + 4 + 1 + 1 + 1 + 1 + 1 + 1 + 1);
+    assert_eq!(
+        elements.len(),
+        10 + 4 + 4 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1
+    );
     for element in elements {
         let command = Command::Put {
             element,
@@ -2022,4 +2038,471 @@ fn variant_copy_keeps_switch_links() {
     let new_switch = copied.iter().find(|d| !d.kind.is_light()).unwrap();
     assert_ne!(new_light.id, light);
     assert_eq!(new_switch.keys, vec![vec![new_light.id.clone()]]);
+}
+
+// ---------------------------------------------------------------- сантехника
+
+fn plumbing(events: &EngineEvents) -> crate::protocol::PlumbingReport {
+    events
+        .events
+        .iter()
+        .rev()
+        .find_map(|e| match e {
+            FromEngine::Plumbing { report } => Some(report.clone()),
+            _ => None,
+        })
+        .unwrap()
+}
+
+fn plumbing_tool(s: &mut EngineState, item: &str) {
+    assert!(!has_error(
+        &s.handle(ToEngine::PlumbingTool { item: item.into() })
+    ));
+}
+
+/// Две комнаты; в левой у верхней стены — раковина и унитаз, внизу — стояки.
+fn bathroom(s: &mut EngineState) {
+    two_rooms(s);
+    furniture_tool(s, "washbasin");
+    click(s, 1500.0, 1300.0);
+    furniture_tool(s, "toilet");
+    click(s, 2150.0, 1400.0);
+    plumbing_tool(s, "riser-drain");
+    click(s, 2300.0, 2000.0);
+    plumbing_tool(s, "riser-cold");
+    click(s, 2300.0, 2250.0);
+    plumbing_tool(s, "riser-hot");
+    click(s, 2150.0, 2250.0);
+    tool(s, Tool::Select);
+}
+
+#[test]
+fn fixtures_get_outlets_and_pipes_route_to_risers() {
+    use op_model::{PipeSystem, PlumbingKind};
+    let mut s = state();
+    bathroom(&mut s);
+    assert_eq!(s.document().plumbing.len(), 3);
+    let events = s.handle(ToEngine::FixtureOutlets);
+    assert!(!has_error(&events));
+    let outlets: Vec<_> = s
+        .document()
+        .plumbing
+        .iter()
+        .filter(|p| p.kind == PlumbingKind::Outlet)
+        .cloned()
+        .collect();
+    // Раковина: ГВС, ХВС, канализация; унитаз: ХВС и канализация Ø110.
+    assert_eq!(outlets.len(), 5);
+    assert!(
+        outlets.iter().all(|o| (o.y - 1060.0).abs() < 1e-6),
+        "{outlets:?}"
+    );
+    assert!(outlets.iter().all(|o| o.fixture.is_some()));
+    assert!(
+        outlets
+            .iter()
+            .any(|o| o.system == PipeSystem::Drain && (o.diameter - 110.0).abs() < 1e-9)
+    );
+    assert_eq!(plumbing(&events).unconnected, 5);
+    // Повторно выводы не ставятся.
+    assert!(has_error(&s.handle(ToEngine::FixtureOutlets)));
+
+    let events = s.handle(ToEngine::RoutePipes);
+    assert!(!has_error(&events));
+    let report = plumbing(&events);
+    assert_eq!(s.document().pipes.len(), 5);
+    assert_eq!(report.unconnected, 0);
+    assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+    // Канализация раковины — с нормальным уклоном 3 %, без замечаний.
+    let drain = report
+        .pipes
+        .iter()
+        .find(|p| p.system == PipeSystem::Drain && (p.diameter - 50.0).abs() < 1e-9)
+        .unwrap();
+    assert!((drain.slope.unwrap() - 0.03).abs() < 1e-3, "{drain:?}");
+    assert!(drain.warnings.is_empty(), "{drain:?}");
+    let names: Vec<&str> = report.bill.iter().map(|r| r.name.as_str()).collect();
+    for expected in [
+        "Труба PP-R PN20 Ø20",
+        "Труба канализационная ПП Ø110",
+        "Водорозетка Ø20×1/2″",
+        "Тройник канализационный 110×50",
+    ] {
+        assert!(names.contains(&expected), "{names:?}");
+    }
+    // Новая прокладка заменяет автоматические трубы, а не добавляет.
+    s.handle(ToEngine::RoutePipes);
+    assert_eq!(s.document().pipes.len(), 5);
+    // Отмена — одним шагом.
+    s.handle(ToEngine::Undo);
+    assert_eq!(s.document().pipes.len(), 5);
+    s.handle(ToEngine::Undo);
+    assert!(s.document().pipes.is_empty());
+}
+
+#[test]
+fn drain_checks_and_revision_access() {
+    use op_model::{PipeSystem, PipeVertex};
+    let mut s = state();
+    bathroom(&mut s);
+    s.handle(ToEngine::FixtureOutlets);
+    // Врезка стояка выше слива унитаза: не дотянуться.
+    let mut riser = s
+        .document()
+        .plumbing
+        .iter()
+        .find(|p| p.kind == op_model::PlumbingKind::Riser && p.system == PipeSystem::Drain)
+        .unwrap()
+        .clone();
+    riser.height = 450.0;
+    s.handle(ToEngine::Command {
+        command: Command::Put {
+            element: Element::PlumbingPoint(riser.clone()),
+            index: None,
+        },
+    });
+    let report = plumbing(&s.handle(ToEngine::RoutePipes));
+    assert!(
+        report
+            .pipes
+            .iter()
+            .any(|p| p.warnings.iter().any(|w| w.contains("ниже врезки"))),
+        "{:?}",
+        report.pipes
+    );
+    // Ручная труба почти без уклона.
+    let flat = op_model::Pipe {
+        id: "flat".into(),
+        layer: LayerKind::Plumbing.id().into(),
+        variant: None,
+        system: PipeSystem::Drain,
+        diameter: 50.0,
+        points: vec![
+            PipeVertex {
+                x: 1200.0,
+                y: 4000.0,
+                z: 400.0,
+            },
+            PipeVertex {
+                x: 2200.0,
+                y: 4000.0,
+                z: 395.0,
+            },
+        ],
+        auto: false,
+    };
+    let report = plumbing(&s.handle(ToEngine::Command {
+        command: Command::Put {
+            element: Element::Pipe(flat),
+            index: None,
+        },
+    }));
+    let pipe = report.pipes.iter().find(|p| p.id == "flat").unwrap();
+    assert!(
+        pipe.warnings
+            .iter()
+            .any(|w| w.contains("меньше наименьшего")),
+        "{pipe:?}"
+    );
+    // Шкаф над стояком закрывает ревизию.
+    furniture_tool(&mut s, "wardrobe");
+    let events = click(&mut s, riser.x, riser.y + 200.0);
+    let report = plumbing(&events);
+    assert!(
+        report.warnings.iter().any(|w| w.contains("ревизи")),
+        "{:?}",
+        report.warnings
+    );
+}
+
+#[test]
+fn pipe_tool_snaps_to_points_and_finishes_with_enter() {
+    use op_model::PipeSystem;
+    let mut s = state();
+    bathroom(&mut s);
+    s.handle(ToEngine::PipeTool {
+        system: PipeSystem::Cold,
+        diameter: 25.0,
+    });
+    assert_eq!(s.step(), ToolStep::PipeStart);
+    // Первая вершина — рядом со стояком ХВС: встаёт в его центр.
+    click(&mut s, 2310.0, 2240.0);
+    assert_eq!(s.step(), ToolStep::PipeNext);
+    click(&mut s, 2300.0, 3500.0);
+    click(&mut s, 1500.0, 3500.0);
+    s.handle(ToEngine::Finish);
+    assert_eq!(s.step(), ToolStep::PipeStart);
+    let pipe = s.document().pipes[0].clone();
+    assert!(!pipe.auto && pipe.points.len() == 3);
+    assert!((pipe.points[0].x - 2300.0).abs() < 1e-6 && (pipe.points[0].y - 2250.0).abs() < 1e-6);
+    // Вода — на отметке стояка.
+    assert!(pipe.points.iter().all(|v| (v.z - 300.0).abs() < 1e-6));
+    // Одна вершина — трубы нет.
+    click(&mut s, 3000.0, 3000.0);
+    s.handle(ToEngine::Finish);
+    assert_eq!(s.document().pipes.len(), 1);
+    // Труба выделяется щелчком и переносится.
+    tool(&mut s, Tool::Select);
+    click(&mut s, 1900.0, 3500.0);
+    assert_eq!(s.selection(), std::slice::from_ref(&pipe.id));
+    drag(
+        &mut s,
+        DVec2::new(1900.0, 3500.0),
+        DVec2::new(1900.0, 3600.0),
+    );
+    let moved = &s.document().pipes[0].points;
+    assert!((moved[2].y - 3600.0).abs() < 1.0, "{moved:?}");
+}
+
+#[test]
+fn plumbing_sheets_3d_and_variant_copy() {
+    let mut s = state();
+    bathroom(&mut s);
+    s.handle(ToEngine::FixtureOutlets);
+    s.handle(ToEngine::RoutePipes);
+    let set = s.drawings(&request(None));
+    let titles: Vec<&str> = set.sheets.iter().map(|s| s.title.as_str()).collect();
+    assert!(
+        titles.contains(&"План водоснабжения") && titles.contains(&"План канализации"),
+        "{titles:?}"
+    );
+    let sewer = set
+        .sheets
+        .iter()
+        .find(|s| s.title == "План канализации")
+        .unwrap();
+    let texts = sheet_texts(sewer);
+    assert!(texts.iter().any(|t| t == "Трубы канализации"));
+    assert!(texts.iter().any(|t| t == "К1"), "{texts:?}");
+    assert!(set.worksheets.iter().any(|w| w.name == "Сантехника"));
+    // В 3D — трубы цветом системы.
+    enable_3d(&mut s);
+    let scene = s.take_scene_3d().unwrap();
+    let cold = op_render::scene::Color::hex(0x5B8DEF, 1.0).0;
+    let same = |a: [f32; 4], b: [f32; 4]| a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-6);
+    assert!(scene.opaque.vertices.iter().any(|v| same(v.color, cold)));
+    s.handle(ToEngine::Set3d {
+        options: crate::protocol::Options3d::default(),
+    });
+    // Копия варианта: выводы ссылаются на приборы копии.
+    s.handle(ToEngine::CreateVariant {
+        name: "А".into(),
+        copy_of: None,
+    });
+    let a = variant_id(&s);
+    s.handle(ToEngine::FurnitureTool {
+        item: "washer".into(),
+    });
+    click(&mut s, 3500.0, 1400.0);
+    s.handle(ToEngine::FixtureOutlets);
+    s.handle(ToEngine::CreateVariant {
+        name: "Б".into(),
+        copy_of: Some(a.clone()),
+    });
+    let b = variant_id(&s);
+    let doc = s.document();
+    let washer = doc
+        .furniture
+        .iter()
+        .find(|f| f.variant.as_deref() == Some(b.as_str()))
+        .unwrap();
+    let outlets: Vec<_> = doc
+        .plumbing
+        .iter()
+        .filter(|p| p.variant.as_deref() == Some(b.as_str()))
+        .collect();
+    assert_eq!(outlets.len(), 2);
+    assert!(
+        outlets
+            .iter()
+            .all(|p| p.fixture.as_deref() == Some(washer.id.as_str()))
+    );
+}
+
+// ---------------------------------------------------------------- отделка
+
+fn finishes(events: &EngineEvents) -> crate::protocol::FinishReport {
+    events
+        .events
+        .iter()
+        .rev()
+        .find_map(|e| match e {
+            FromEngine::Finishes { report } => Some(report.clone()),
+            _ => None,
+        })
+        .unwrap()
+}
+
+fn left_room(s: &EngineState) -> String {
+    s.document()
+        .rooms
+        .iter()
+        .find(|r| r.x < 2500.0)
+        .unwrap()
+        .id
+        .clone()
+}
+
+fn finish(id: &str, room: &str, surface: op_model::Surface, material: &str) -> op_model::Finish {
+    op_model::Finish {
+        id: id.into(),
+        room: room.into(),
+        surface,
+        face: None,
+        material: material.into(),
+        bottom: 0.0,
+        top: None,
+        layout: op_model::TileLayout::default(),
+    }
+}
+
+fn set_finishes(s: &mut EngineState, list: Vec<op_model::Finish>) -> EngineEvents {
+    s.handle(ToEngine::Command {
+        command: Command::SetFinishes { finishes: list },
+    })
+}
+
+/// Левая комната: пол — керамогранит, стены — краска, стена А — плитка до 1500,
+/// потолок — натяжной.
+fn finished(s: &mut EngineState) -> EngineEvents {
+    use op_model::Surface;
+    two_rooms(s);
+    let room = left_room(s);
+    let mut apron = finish("apron", &room, Surface::Walls, "tile-300x600");
+    apron.face = Some(0);
+    apron.top = Some(1500.0);
+    set_finishes(
+        s,
+        vec![
+            finish("floor", &room, Surface::Floor, "porcelain-600x600"),
+            finish("paint", &room, Surface::Walls, "paint-white"),
+            apron,
+            finish("ceiling", &room, Surface::Ceiling, "stretch-matte"),
+        ],
+    )
+}
+
+#[test]
+fn finishes_compute_areas_and_consumption() {
+    let mut s = state();
+    let events = finished(&mut s);
+    assert!(!has_error(&events));
+    let report = finishes(&events);
+    // Левая комната 1380 × 3880 мм (грани стен толщиной 120).
+    let room = report.rooms.iter().find(|r| r.id == left_room(&s)).unwrap();
+    assert!((room.floor - 5.35).abs() < 0.01, "{room:?}");
+    assert!((room.perimeter - 10.52).abs() < 0.01);
+    assert_eq!(room.faces.len(), 4);
+    assert_eq!(room.faces[0].letter, "А");
+    assert!((room.faces[0].length - 1380.0).abs() < 1.0);
+    let by = |id: &str| report.finishes.iter().find(|f| f.id == id).unwrap().clone();
+    // Плитка до 1500 на стене А закрывает краску в своей полосе.
+    let apron = by("apron");
+    assert!((apron.area - 2.07).abs() < 0.01, "{apron:?}");
+    let paint = by("paint");
+    assert!(
+        (paint.area - (room.walls_net - 2.07)).abs() < 0.02,
+        "{paint:?}"
+    );
+    assert!(
+        paint
+            .quantities
+            .iter()
+            .any(|q| q.name == "Краска" && q.packs >= 1)
+    );
+    let floor = by("floor");
+    assert!(floor.whole > 0 && floor.cut > 0);
+    let names: Vec<&str> = floor.quantities.iter().map(|q| q.name.as_str()).collect();
+    assert_eq!(names, ["Плитка", "Клей", "Затирка"]);
+    let ceiling = by("ceiling");
+    assert!((ceiling.area - room.ceiling).abs() < 0.01);
+    assert_eq!(report.totals.len(), 4);
+}
+
+#[test]
+fn layout_start_is_optimized_and_undoable() {
+    use op_model::Surface;
+    let mut s = state();
+    two_rooms(&mut s);
+    let room = left_room(&s);
+    let mut floor = finish("floor", &room, Surface::Floor, "porcelain-600x600");
+    // Старт в 50 мм от стены: узкие полосы у левой стены.
+    floor.layout.origin = [50.0, 0.0];
+    let before = finishes(&set_finishes(&mut s, vec![floor]));
+    let info = &before.finishes[0];
+    assert!(info.narrow > 0, "{info:?}");
+    assert!(info.warnings.iter().any(|w| w.contains("узкие")));
+    let after = finishes(&s.handle(ToEngine::OptimizeLayout { id: "floor".into() }));
+    assert_eq!(after.finishes[0].narrow, 0, "{:?}", after.finishes[0]);
+    assert!(after.finishes[0].cut <= info.cut);
+    s.handle(ToEngine::Undo);
+    assert!((s.document().finishes[0].layout.origin[0] - 50.0).abs() < 1e-9);
+    // Для краски старт не подбирается.
+    set_finishes(
+        &mut s,
+        vec![finish("p", &room, Surface::Walls, "paint-white")],
+    );
+    assert!(has_error(
+        &s.handle(ToEngine::OptimizeLayout { id: "p".into() })
+    ));
+}
+
+#[test]
+fn finish_sheets_elevations_and_cleanup() {
+    let mut s = state();
+    finished(&mut s);
+    let set = s.drawings(&request(None));
+    let titles: Vec<&str> = set.sheets.iter().map(|s| s.title.as_str()).collect();
+    assert!(
+        titles.contains(&"План полов") && titles.contains(&"План потолков"),
+        "{titles:?}"
+    );
+    let floors = set.sheets.iter().find(|s| s.title == "План полов").unwrap();
+    let texts = sheet_texts(floors);
+    assert!(texts.iter().any(|t| t == "Ведомость отделки полов"));
+    assert!(texts.iter().any(|t| t == "Расход отделочных материалов"));
+    let elevations = set
+        .sheets
+        .iter()
+        .find(|s| s.title == "Развёртки стен")
+        .unwrap();
+    let texts = sheet_texts(elevations);
+    assert!(
+        texts.iter().any(|t| t == "Плитка настенная 300×600"),
+        "{texts:?}"
+    );
+    assert!(set.worksheets.iter().any(|w| w.name == "Отделка"));
+    // Плитка с узкой подрезкой — предупреждение на развёртке.
+    let mut list = s.document().finishes.clone();
+    list[2].layout.origin = [30.0, 0.0];
+    set_finishes(&mut s, list);
+    let set = s.drawings(&request(None));
+    let elevations = set
+        .sheets
+        .iter()
+        .find(|s| s.title == "Развёртки стен")
+        .unwrap();
+    assert!(
+        sheet_texts(elevations)
+            .iter()
+            .any(|t| t.starts_with("узкие подрезки"))
+    );
+    // В 3D пол — цветом керамогранита.
+    enable_3d(&mut s);
+    let scene = s.take_scene_3d().unwrap();
+    let floor = op_render::scene::Color::hex(0xB9B4AA, 1.0).0;
+    let same = |a: [f32; 4]| a.iter().zip(floor).all(|(x, y)| (x - y).abs() < 1e-6);
+    assert!(scene.opaque.vertices.iter().any(|v| same(v.color)));
+    s.handle(ToEngine::Set3d {
+        options: crate::protocol::Options3d::default(),
+    });
+    // Раскладка пола на плане — по запросу UI.
+    s.handle(ToEngine::ShowFinishes { show: true });
+    let (document, _) = s.take_scenes();
+    assert!(document.is_some());
+    // Удалённое помещение уносит свою отделку.
+    let room = left_room(&s);
+    s.handle(ToEngine::Select { ids: vec![room] });
+    s.handle(ToEngine::DeleteSelection);
+    assert!(s.document().finishes.is_empty());
 }

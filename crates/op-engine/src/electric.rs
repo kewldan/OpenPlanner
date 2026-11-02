@@ -502,6 +502,18 @@ pub fn snap_to_face(
     p: DVec2,
     radius: f64,
 ) -> Option<(DVec2, f64)> {
+    snap_to_face_at(doc, derived, p, radius, SYMBOL / 2.0)
+}
+
+/// Как [`snap_to_face`], но центр отстоит от грани на `inset` (0 — на самой грани).
+#[must_use]
+pub fn snap_to_face_at(
+    doc: &Document,
+    derived: &Derived,
+    p: DVec2,
+    radius: f64,
+    inset: f64,
+) -> Option<(DVec2, f64)> {
     let mut best: Option<(f64, DVec2, f64)> = None;
     for w in doc
         .walls
@@ -522,7 +534,7 @@ pub fn snap_to_face(
             let along = (p - origin).dot(dir).clamp(0.0, len);
             let off = (p - origin).dot(out);
             if off >= -1.0 && off <= radius && best.is_none_or(|(e, ..)| off < e) {
-                let at = origin + dir * along + out * (SYMBOL / 2.0);
+                let at = origin + dir * along + out * inset;
                 best = Some((off, at, crate::furniture::rotation_facing(out)));
             }
         }

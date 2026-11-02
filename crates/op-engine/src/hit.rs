@@ -147,6 +147,26 @@ pub fn hit(
             return Some(d.id.clone());
         }
     }
+    for q in doc
+        .plumbing
+        .iter()
+        .rev()
+        .filter(|q| derived.editable(&q.layer))
+    {
+        if crate::plumbing::contains(q, p, radius) {
+            return Some(q.id.clone());
+        }
+    }
+    for q in doc
+        .pipes
+        .iter()
+        .rev()
+        .filter(|q| derived.editable(&q.layer))
+    {
+        if crate::plumbing::pipe_contains(q, p, radius) {
+            return Some(q.id.clone());
+        }
+    }
     for f in doc
         .furniture
         .iter()
@@ -323,6 +343,16 @@ pub fn in_rect(doc: &Document, derived: &Derived, lo: DVec2, hi: DVec2) -> Vec<S
     for d in doc.devices.iter().filter(|d| derived.editable(&d.layer)) {
         if inside(DVec2::new(d.x, d.y)) {
             ids.push(d.id.clone());
+        }
+    }
+    for q in doc.plumbing.iter().filter(|q| derived.editable(&q.layer)) {
+        if inside(DVec2::new(q.x, q.y)) {
+            ids.push(q.id.clone());
+        }
+    }
+    for q in doc.pipes.iter().filter(|q| derived.editable(&q.layer)) {
+        if q.points.iter().all(|v| inside(crate::plumbing::xy(v))) {
+            ids.push(q.id.clone());
         }
     }
     for u in doc.underlays.iter().filter(|u| derived.editable(&u.layer)) {

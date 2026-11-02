@@ -8,6 +8,8 @@
 //! что не поместилось, переносится на листы продолжения.
 
 mod elevations;
+mod finishes;
+mod plumbing;
 
 use std::collections::{HashMap, HashSet};
 
@@ -97,6 +99,10 @@ enum Kind {
     Lighting,
     Switches,
     Wiring,
+    Water,
+    Sewer,
+    Floors,
+    Ceilings,
 }
 
 impl Kind {
@@ -111,6 +117,10 @@ impl Kind {
             Self::Lighting => "План освещения",
             Self::Switches => "План выключателей",
             Self::Wiring => "План электропроводки",
+            Self::Water => "План водоснабжения",
+            Self::Sewer => "План канализации",
+            Self::Floors => "План полов",
+            Self::Ceilings => "План потолков",
         }
     }
 }
@@ -171,6 +181,18 @@ pub fn build(doc: &Document, variant: Option<&str>, date: &str) -> SheetSet {
         if !doc.circuits.is_empty() && has(&|_| true) {
             kinds.push(Kind::Wiring);
         }
+    }
+    if views.has_plumbing(true) {
+        kinds.push(Kind::Water);
+    }
+    if views.has_plumbing(false) {
+        kinds.push(Kind::Sewer);
+    }
+    if views.has_finishes(op_model::Surface::Floor) {
+        kinds.push(Kind::Floors);
+    }
+    if views.has_finishes(op_model::Surface::Ceiling) {
+        kinds.push(Kind::Ceilings);
     }
 
     let size = {
@@ -1021,6 +1043,20 @@ impl<'a> Views<'a> {
                 out.push(circuits_table(self.final_view().0, &report));
                 out.push(panel_table(&report.panel));
             }
+            Kind::Water | Kind::Sewer => {
+                let water = kind == Kind::Water;
+                out.push(self.plumbing_points_table(water));
+                if !water {
+                    out.extend(self.drain_pipes_table());
+                }
+                out.extend(self.bill_table(water));
+                out.extend(self.plumbing_notes(water));
+            }
+            Kind::Floors => {
+                out.push(self.finishes_table(Some(op_model::Surface::Floor)));
+                out.extend(self.totals_table());
+            }
+            Kind::Ceilings => out.push(self.finishes_table(Some(op_model::Surface::Ceiling))),
         }
         out
     }
@@ -1346,12 +1382,39 @@ impl<'a> Views<'a> {
                 tables,
             });
         }
+        let mut tables = Vec::new();
+        for water in [true, false] {
+            if self.has_plumbing(water) {
+                tables.push(self.plumbing_points_table(water));
+                if !water {
+                    tables.extend(self.drain_pipes_table());
+                }
+                tables.extend(self.bill_table(water));
+            }
+        }
+        if !tables.is_empty() {
+            out.push(Worksheet {
+                name: "Сантехника".into(),
+                tables,
+            });
+        }
+        if !self.final_view().0.finishes.is_empty() {
+            out.push(Worksheet {
+                name: "Отделка".into(),
+                tables: std::iter::once(self.finishes_table(None))
+                    .chain(self.totals_table())
+                    .collect(),
+            });
+        }
         out
     }
 
     /// План листа.
     fn draw(&self, kind: Kind, plot: &mut Plot<'_>) {
         match (kind, &self.variant) {
+            (Kind::Water | Kind::Sewer, _) => self.draw_plumbing(kind == Kind::Water, plot),
+            (Kind::Floors, _) => self.draw_finishes(op_model::Surface::Floor, plot),
+            (Kind::Ceilings, _) => self.draw_finishes(op_model::Surface::Ceiling, plot),
             (Kind::Sockets | Kind::Lighting | Kind::Switches | Kind::Wiring, _) => {
                 let (doc, derived) = self.final_view();
                 let rooms = match &self.variant {

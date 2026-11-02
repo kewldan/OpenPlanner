@@ -46,6 +46,15 @@ pub mod palette {
     pub fn electric() -> Color {
         Color::hex(0x1D4ED8, 1.0)
     }
+    /// Система трубопровода: ХВС — синий, ГВС — красный, канализация — коричневый.
+    #[must_use]
+    pub fn pipe(system: op_model::PipeSystem) -> Color {
+        match system {
+            op_model::PipeSystem::Cold => Color::hex(0x2563EB, 1.0),
+            op_model::PipeSystem::Hot => Color::hex(0xDC2626, 1.0),
+            op_model::PipeSystem::Drain => Color::hex(0x7C5A3A, 1.0),
+        }
+    }
     /// Ошибка и демонтаж.
     #[must_use]
     pub fn danger() -> Color {
@@ -189,7 +198,27 @@ pub fn device_symbol(scene: &mut Scene, d: &op_model::Device, color: Color, widt
     }
 }
 
+/// Обозначение сантехнической точки.
+pub fn plumbing_symbol(scene: &mut Scene, p: &op_model::PlumbingPoint, color: Color, width: f32) {
+    for m in crate::plumbing::plan_marks(p) {
+        scene.polyline(&m.points, m.closed, width, color);
+    }
+}
+
+/// Труба: ось ломаной; канализация — штрихами.
+pub fn pipe(scene: &mut Scene, pipe: &op_model::Pipe, color: Color, width: f32) {
+    let points: Vec<DVec2> = pipe.points.iter().map(crate::plumbing::xy).collect();
+    if pipe.system == op_model::PipeSystem::Drain {
+        for w in points.windows(2) {
+            scene.dashed(w[0], w[1], width, 6.0, color);
+        }
+    } else {
+        scene.polyline(&points, false, width, color);
+    }
+}
+
 /// Сцена документа: подложки, помещения, мебель, стены, проёмы, размеры, выноски.
+/// `tiles` — раскладка отделки пола (режим «Отделка»).
 #[must_use]
 pub fn document(
     doc: &Document,
@@ -197,6 +226,7 @@ pub fn document(
     font: Option<&Font>,
     images: &dyn Fn(&str) -> bool,
     models: &Models,
+    tiles: Option<&crate::finish::PlanTiles>,
 ) -> Scene {
     let mut scene = Scene::new();
     let shown = |layer: &str| derived.visible.contains(layer);
@@ -222,6 +252,15 @@ pub fn document(
             let mut contours: Vec<&[DVec2]> = vec![&region.contour];
             contours.extend(region.islands.iter().map(Vec::as_slice));
             scene.fill(&contours, palette::room());
+        }
+    }
+    if let Some(tiles) = tiles {
+        for (contours, color) in &tiles.fills {
+            let rings: Vec<&[DVec2]> = contours.iter().map(Vec::as_slice).collect();
+            scene.fill(&rings, color.with_alpha(0.55));
+        }
+        for piece in &tiles.pieces {
+            scene.polyline(piece, true, 0.6, palette::muted().with_alpha(0.7));
         }
     }
 
@@ -296,6 +335,13 @@ pub fn document(
             };
             scene.text(font, area_at, &text, world_text(ROOM_AREA_SIZE, color));
         }
+    }
+
+    for p in doc.pipes.iter().filter(|p| shown(&p.layer)) {
+        pipe(&mut scene, p, palette::pipe(p.system), 2.0);
+    }
+    for p in doc.plumbing.iter().filter(|p| shown(&p.layer)) {
+        plumbing_symbol(&mut scene, p, palette::pipe(p.system), 1.2);
     }
 
     for d in doc.devices.iter().filter(|d| shown(&d.layer)) {

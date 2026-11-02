@@ -88,6 +88,12 @@ pub struct EngineState {
     pub(crate) furniture_rotation: f64,
     /// Свои модели мебели по путям файлов в проекте.
     pub(crate) models: HashMap<String, Arc<crate::furniture::Model>>,
+    /// Позиция каталога для инструмента «Сантехника».
+    pub(crate) plumbing_item: String,
+    /// Система и диаметр для инструмента «Труба».
+    pub(crate) pipe: (op_model::PipeSystem, f64),
+    /// Показывать раскладку отделки пола на плане.
+    pub(crate) show_finishes: bool,
     images: HashMap<String, DecodedImage>,
     uploaded: HashSet<String>,
 }
@@ -126,6 +132,9 @@ impl EngineState {
             furniture_item: "sofa".into(),
             furniture_rotation: 0.0,
             models: HashMap::new(),
+            plumbing_item: "outlet-cold".into(),
+            pipe: (op_model::PipeSystem::Cold, 20.0),
+            show_finishes: false,
             images: HashMap::new(),
             uploaded: HashSet::new(),
         }
@@ -212,7 +221,15 @@ impl EngineState {
                 FromEngine::DeviceCatalog {
                     items: crate::electric::catalog_entries(),
                 },
+                FromEngine::PlumbingCatalog {
+                    items: crate::plumbing::catalog_entries(),
+                },
+                FromEngine::MaterialLibrary {
+                    items: crate::finish::library(),
+                },
                 self.electrical_event(),
+                self.plumbing_event(),
+                self.finishes_event(),
             ],
         }
     }
@@ -260,6 +277,8 @@ impl EngineState {
             self.tool_event(),
             self.view_event(),
             self.electrical_event(),
+            self.plumbing_event(),
+            self.finishes_event(),
         ]
     }
 
@@ -444,6 +463,84 @@ impl EngineState {
                 }));
                 self.execute_all(commands)
             }
+            ToEngine::PlumbingTool { item } => {
+                if crate::plumbing::item(&item).is_none() {
+                    return EngineEvents {
+                        events: vec![FromEngine::Error {
+                            message: "Такой позиции нет в каталоге".into(),
+                        }],
+                    };
+                }
+                self.plumbing_item = item;
+                self.set_tool(Tool::Plumbing)
+            }
+            ToEngine::PipeTool { system, diameter } => {
+                if !diameter.is_finite() || diameter <= 0.0 {
+                    return EngineEvents {
+                        events: vec![FromEngine::Error {
+                            message: "диаметр должен быть больше нуля".into(),
+                        }],
+                    };
+                }
+                self.pipe = (system, diameter);
+                self.set_tool(Tool::Pipe)
+            }
+            ToEngine::FixtureOutlets => {
+                let points = {
+                    let ids = &mut self.ids;
+                    crate::plumbing::outlets_for_fixtures(&self.projected, &self.derived, || {
+                        ids.generate()
+                    })
+                };
+                if points.is_empty() {
+                    vec![FromEngine::Error {
+                        message: "Нет приборов без выводов: поставьте ванну, раковину, унитаз…"
+                            .into(),
+                    }]
+                } else {
+                    self.execute_all(
+                        points
+                            .into_iter()
+                            .map(|p| Command::Put {
+                                element: Element::PlumbingPoint(p),
+                                index: None,
+                            })
+                            .collect(),
+                    )
+                }
+            }
+            ToEngine::RoutePipes => self.route_pipes(),
+            ToEngine::OptimizeLayout { id } => {
+                match crate::finish::optimize(&self.projected, &self.derived, &id) {
+                    Some(updated) => {
+                        let finishes = self
+                            .history
+                            .document()
+                            .finishes
+                            .iter()
+                            .map(|f| {
+                                if f.id == id {
+                                    updated.clone()
+                                } else {
+                                    f.clone()
+                                }
+                            })
+                            .collect();
+                        self.execute_all(vec![Command::SetFinishes { finishes }])
+                    }
+                    None => vec![FromEngine::Error {
+                        message: "Старт подбирается для плитки и досок в замкнутом помещении"
+                            .into(),
+                    }],
+                }
+            }
+            ToEngine::ShowFinishes { show } => {
+                if self.show_finishes != show {
+                    self.show_finishes = show;
+                    self.document_dirty = true;
+                }
+                vec![]
+            }
             ToEngine::TransformFurniture { rotate, mirror } => {
                 self.transform_furniture(rotate, mirror)
             }
@@ -461,7 +558,11 @@ impl EngineState {
                 return self.compare_scene(left.as_deref(), right.as_deref(), font, &images);
             }
             let (doc, derived) = self.shown();
-            let mut scene = draw::document(doc, derived, font, &images, &self.models);
+            let tiles = self
+                .show_finishes
+                .then(|| crate::finish::plan_tiles(doc, derived));
+            let mut scene =
+                draw::document(doc, derived, font, &images, &self.models, tiles.as_ref());
             if let (Some(v), Some((survey, survey_derived))) = (self.variant(), &self.survey) {
                 let ids = op_model::view::demolished(self.history.document(), v);
                 draw::demolition(
@@ -514,7 +615,14 @@ impl EngineState {
             let mut doc = op_model::view::project(full, variant.as_deref());
             crate::variants::translate(&mut doc, offset);
             let derived = Derived::new(&doc);
-            scene.extend(draw::document(&doc, &derived, font, images, &self.models));
+            scene.extend(draw::document(
+                &doc,
+                &derived,
+                font,
+                images,
+                &self.models,
+                None,
+            ));
             if let Some(v) = &variant {
                 let mut survey = op_model::view::project(full, None);
                 crate::variants::translate(&mut survey, offset);
@@ -673,6 +781,50 @@ impl EngineState {
         FromEngine::Electrical {
             report: crate::electric::report(&self.projected, &self.derived),
         }
+    }
+
+    /// Расчёт сантехники текущего вида.
+    pub(crate) fn plumbing_event(&self) -> FromEngine {
+        FromEngine::Plumbing {
+            report: crate::plumbing::report(&self.projected, &self.derived),
+        }
+    }
+
+    /// Поверхности и расчёт отделки текущего вида.
+    pub(crate) fn finishes_event(&self) -> FromEngine {
+        FromEngine::Finishes {
+            report: crate::finish::report(&self.projected, &self.derived),
+        }
+    }
+
+    /// Прокладывает трубы заново: автоматические трубы вида удаляются, от каждого
+    /// вывода без ручной трубы — новая до стояка или коллектора.
+    fn route_pipes(&mut self) -> Vec<FromEngine> {
+        let (doc, derived) = (&self.projected, &self.derived);
+        let mut commands: Vec<Command> = doc
+            .pipes
+            .iter()
+            .filter(|p| p.auto && derived.visible.contains(&p.layer))
+            .filter(|p| self.owns(&p.id))
+            .map(|p| Command::Remove { id: p.id.clone() })
+            .collect();
+        let mut kept = doc.clone();
+        kept.pipes.retain(|p| !p.auto);
+        let pipes = {
+            let ids = &mut self.ids;
+            crate::plumbing::route_all(&kept, derived, || ids.generate())
+        };
+        if pipes.is_empty() {
+            return vec![FromEngine::Error {
+                message: "Нечего прокладывать: нужны выводы и стояк или коллектор их системы"
+                    .into(),
+            }];
+        }
+        commands.extend(pipes.into_iter().map(|p| Command::Put {
+            element: Element::Pipe(p),
+            index: None,
+        }));
+        self.execute_all(commands)
     }
 
     /// Добавляет свою модель мебели (GLB) в центр видимой области и выделяет её.
@@ -897,6 +1049,8 @@ impl EngineState {
                     self.summary_event(),
                     self.view_mode_event(),
                     self.electrical_event(),
+                    self.plumbing_event(),
+                    self.finishes_event(),
                 ];
                 if before != self.selection {
                     events.push(self.selection_event());
@@ -1134,6 +1288,8 @@ fn all_ids(doc: &Document) -> HashSet<&str> {
         .chain(doc.underlays.iter().map(|e| e.id.as_str()))
         .chain(doc.furniture.iter().map(|e| e.id.as_str()))
         .chain(doc.devices.iter().map(|e| e.id.as_str()))
+        .chain(doc.plumbing.iter().map(|e| e.id.as_str()))
+        .chain(doc.pipes.iter().map(|e| e.id.as_str()))
         .collect()
 }
 
