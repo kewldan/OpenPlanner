@@ -4,7 +4,7 @@ Guidance for AI coding agents working in this repository.
 
 ## Project
 
-OpenPlanner is an open-source **desktop apartment-renovation planner**. One model of an apartment produces themed working-drawing sheets (survey, demolition, partitions, furniture, electrical, plumbing, finishes), an estimate and a 3D view. Work proceeds in **stages** (no throwaway MVP); Stage 0 (foundation) and Stage 1 (survey: walls, openings, rooms, dimensions, leaders, layers, image underlay) are done, Stage 2 (LiDAR scan import) is next.
+OpenPlanner is an open-source **desktop apartment-renovation planner**. One model of an apartment produces themed working-drawing sheets (survey, demolition, partitions, furniture, electrical, plumbing, finishes), an estimate and a 3D view. Work proceeds in **stages** (no throwaway MVP); Stages 0 (foundation), 1 (survey: walls, openings, rooms, dimensions, leaders, layers, image underlay) and 2 (LiDAR scan import with review) are done; Stage 3 (replanning and variants) is next.
 
 Key documents (written in Russian — read them before larger changes):
 
@@ -27,6 +27,7 @@ WebView ─ UI thread (React)  ⇄ postMessage ⇄  Web Worker: op-engine (WASM)
 
 - **The Rust core owns the document.** All edits are `op_model::Command`s applied through `History` (reversible, serialisable): generic `put` / `remove` / `putAsset` / `removeAsset` / `batch` plus project-property commands. One user action = one command (usually a `batch`) = one undo step = one journal line. The UI never mutates the model; it sends `ToEngine` messages and applies `FromEngine` events to Zustand stores (`packages/editor/src/store`). Simple property edits from the inspector send `put` with the modified element.
 - **Canvas tools live in the engine** (`crates/op-engine/src/tools.rs`): the UI forwards pointer events (CSS px of the canvas) and keys; snapping (`snap.rs`), hit-testing (`hit.rs`), previews (`overlay.rs`) and command building (`edit.rs`) happen next to the geometry. Derived data (wall outlines, room regions, areas) is recomputed in `derived.rs` from the document — rooms are _label points_, their contours are holes of the union of wall outlines (`op-geom`).
+- **Scan recognition lives in `crates/op-scan`** (pure Rust, no GPU): readers → samples → `detect` → `assemble` → `plan::apply`. It runs in a second Web Worker (`analyzeScan` from the same WASM module); the engine imports the result with `importScan` as one batch. Tests use synthetic scans (`op_scan::synth`) — never commit third-party scans. Regenerate the e2e fixture with `cargo run -p op-scan --example synthetic_scan -- apps/desktop/e2e/fixtures/apartment.glb`.
 - **Scenes are built on the CPU** (`op_render::scene::Scene`, `draw.rs`) and uploaded by the WASM wrapper; `EngineState` has no GPU dependency, so engine behaviour is tested natively (`crates/op-engine/src/tests.rs`).
 - **Protocol types are generated from Rust** with tsify (`crates/op-engine/src/protocol.rs` → `packages/engine-client/wasm/op_engine.d.ts`). Never hand-write duplicates of these types in TS.
 - **One renderer** (`crates/op-render`, wgpu) for 2D, point clouds and 3D. It runs in WASM on WebGPU, falling back to WebGL2. Anything relying on compute shaders needs a non-compute path.
@@ -99,6 +100,8 @@ OpenPlanner reimplements **behaviour** of existing planners, never their code, t
 - **Text halos are drawn in a separate pass** under all glyphs; drawing halo and glyph together lets the next glyph's halo erase the previous glyph's right edge («под» turned into «гсд»). Small text averages 4 SDF samples per pixel.
 - **Opening a file zooms to fit**, so e2e clicks after `importFile` must use the fitted camera (see `fitView` in `e2e/survey.spec.ts`); a fresh/new project uses the default camera ((4000, 3000) mm at the centre, 0.1 px/mm).
 - **In the browser a reopened file has no path**: its journal is not found after a reload. Recovery after reload is tested for untitled projects; file recovery is covered by the desktop tests.
+- **Synthetic scan holes must align with the mesh grid** — `synth` splits wall cells at opening edges; otherwise detected widths drift by a cell. Detection precision is ~50 mm horizontally and ~100 mm vertically, refined by fractional emptiness of boundary cells.
+- **Disk fills up**: `target/` grows past 20 GB with native, WASM and Tauri builds. Delete `target/*/incremental` when `No space left on device` appears.
 - **`pkill -f <pattern>` kills your own shell** when the pattern appears in the command line; kill by PID (`pgrep … | xargs kill`).
 - **Playwright in this container** needs `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-*/chrome-linux64/chrome` (the project pins a newer Playwright than the preinstalled browsers).
 - CI macOS VMs and GPU-less Windows runners have no hardware WebGPU adapter; Windows gets a software one via `--enable-unsafe-webgpu --ignore-gpu-blocklist`. The selftest reports `backend=`, `webgpu=` (worker) and `main_webgpu=` (main thread) — use them to tell environment limits from bugs.
