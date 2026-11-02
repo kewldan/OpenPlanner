@@ -56,6 +56,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Cell::number(26.75, 2),
         ]),
     };
+    std::fs::write(
+        format!("{path}.xlsx"),
+        op_export::xlsx::write(&[op_export::xlsx::Worksheet {
+            name: "Экспликация".into(),
+            tables: vec![table.clone(), table.clone()],
+        }])?,
+    )?;
     table.draw(
         frame_layer,
         corner - DVec2::new(0.0, table.height() + 5.0),
@@ -97,6 +104,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         denominator: 50.0,
         clip: (DVec2::new(20.0, 5.0), DVec2::new(225.0, 292.0)),
     });
+    std::fs::write(format!("{path}.dxf"), op_export::dxf::write(&sheet))?;
+    std::fs::write(
+        format!("{path}.svg"),
+        op_export::svg::write(
+            &sheet,
+            op_export::svg::SvgOptions {
+                text_as_paths: true,
+                embed_font: false,
+            },
+        ),
+    )?;
     let bytes = pdf::write(
         &[sheet],
         &pdf::PdfInfo {
