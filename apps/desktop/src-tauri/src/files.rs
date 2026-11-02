@@ -48,6 +48,17 @@ fn is_image(path: &Path) -> bool {
         .is_some_and(|ext| IMAGE_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
 }
 
+/// Файлы скана: сетки, облака точек, архивы экспорта, данные комнаты.
+const SCAN_EXTENSIONS: [&str; 5] = ["glb", "zip", "ply", "obj", "json"];
+/// Наибольший размер файла скана.
+const MAX_SCAN_BYTES: u64 = 1 << 30;
+
+fn is_scan(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| SCAN_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+}
+
 fn check(path: &Path, ok: fn(&Path) -> bool) -> CmdResult<()> {
     if ok(path) {
         Ok(())
@@ -86,6 +97,21 @@ pub fn read_project(path: PathBuf) -> CmdResult<Response> {
 #[tauri::command]
 pub fn read_image(path: PathBuf) -> CmdResult<Response> {
     check(&path, is_image)?;
+    fs::read(&path)
+        .map(Response::new)
+        .map_err(|err| io_error("прочитать", &path, &err))
+}
+
+/// Читает файл скана (GLB, ZIP, PLY, OBJ, JSON) до 1 ГБ.
+#[tauri::command]
+pub fn read_scan(path: PathBuf) -> CmdResult<Response> {
+    check(&path, is_scan)?;
+    let size = fs::metadata(&path)
+        .map_err(|err| io_error("прочитать", &path, &err))?
+        .len();
+    if size > MAX_SCAN_BYTES {
+        return Err(format!("файл «{}» больше 1 ГБ", path.display()));
+    }
     fs::read(&path)
         .map(Response::new)
         .map_err(|err| io_error("прочитать", &path, &err))
@@ -187,6 +213,8 @@ mod tests {
         assert!(!is_project(Path::new("/etc/passwd")));
         assert!(is_image(Path::new("/home/u/план.JPG")));
         assert!(!is_image(Path::new("/home/u/план.svg")));
+        assert!(is_scan(Path::new("/home/u/скан.GLB")));
+        assert!(!is_scan(Path::new("/home/u/скан.exe")));
         assert!(is_journal(Path::new("/x/кв.oplan.journal")));
         assert!(!is_journal(Path::new("/x/кв.journal")));
         assert!(!is_journal(Path::new("/x/кв.oplan")));

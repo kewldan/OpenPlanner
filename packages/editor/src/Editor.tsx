@@ -3,6 +3,7 @@ import styles from "./Editor.module.css";
 import { Inspector } from "./inspector/Inspector";
 import { CommandPalette } from "./palette/CommandPalette";
 import { ShortcutsDialog } from "./palette/ShortcutsDialog";
+import { ScanWizard } from "./scan/ScanWizard";
 import { Sidebar, Toolbar } from "./shell/Sidebar";
 import { StatusBar } from "./shell/StatusBar";
 import { useShortcuts } from "./shell/shortcuts";
@@ -23,6 +24,7 @@ export function Editor() {
       <StatusBar />
       <CommandPalette />
       <ShortcutsDialog />
+      <ScanWizard />
     </div>
   );
 }

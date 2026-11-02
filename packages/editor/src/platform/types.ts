@@ -45,6 +45,8 @@ export interface Platform {
   openProject(): Promise<OpenedFile | null>;
   /** Выбрать изображение PNG или JPEG. `null` — пользователь передумал. */
   openImage(): Promise<PickedImage | null>;
+  /** Выбрать файл скана (GLB, ZIP, PLY, OBJ, JSON). `null` — пользователь передумал. */
+  openScan(): Promise<PickedImage | null>;
   /** Спросить, куда сохранить проект. `null` — пользователь отменил выбор. */
   chooseSaveTarget(suggestedName: string): Promise<SavedFile | null>;
   /** Записать проект туда, куда выбрал пользователь. */
@@ -59,6 +61,9 @@ export const PROJECT_EXTENSION = "oplan";
 
 /** Расширения изображений для подложки. */
 export const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg"] as const;
+
+/** Расширения файлов скана. */
+export const SCAN_EXTENSIONS = ["glb", "zip", "ply", "obj", "json"] as const;
 
 /** Имя файла без папок. */
 export function fileName(path: string): string {

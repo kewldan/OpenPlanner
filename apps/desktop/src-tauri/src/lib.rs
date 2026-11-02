@@ -114,6 +114,7 @@ pub fn run() {
             selftest_report,
             files::read_project,
             files::read_image,
+            files::read_scan,
             files::write_project,
             files::journal_path,
             files::journal_read,

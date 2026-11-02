@@ -19,7 +19,7 @@ export type EditorMode =
   | "plumbing"
   | "finish";
 
-export type EditorDialog = "palette" | "shortcuts" | null;
+export type EditorDialog = "palette" | "shortcuts" | "scan" | null;
 
 export type EngineStatus =
   | { state: "starting" }

@@ -20,6 +20,7 @@ function setup(
 
   const platform: Platform = {
     openImage: async () => null,
+    openScan: async () => null,
     kind: "browser",
     openProject: async () => options.opened ?? null,
     chooseSaveTarget: async (name) =>
