@@ -1,14 +1,18 @@
-import { sendToEngine } from "../engine";
+import type { Tool } from "@openplanner/engine-client";
+import { callEngine, sendToEngine } from "../engine";
+import { t } from "../i18n";
+import { platform } from "../platform";
 import { project } from "../project";
 import { useEditor } from "../store/editor";
 import { applyTheme } from "../theme";
 import type { Shortcut } from "./shortcut";
 
-export type ActionGroup = "file" | "edit" | "view" | "help";
+export type ActionGroup = "file" | "edit" | "tools" | "view" | "help";
 
 export const groupTitles: Record<ActionGroup, string> = {
   file: "Файл",
   edit: "Правка",
+  tools: "Инструменты",
   view: "Вид",
   help: "Справка",
 };
@@ -33,6 +37,43 @@ const zoomAtCenter = (factor: number) => {
 };
 
 const notBusy = () => !project.store.getState().busy;
+
+const hasSelection = () => useEditor.getState().selection.length > 0;
+
+/** Добавляет изображение-подложку, выбранное пользователем. */
+export async function addUnderlay(): Promise<void> {
+  try {
+    const picked = await platform.openImage();
+    if (!picked) return;
+    await callEngine({ type: "addUnderlay", bytes: picked.bytes, name: picked.name });
+  } catch (error) {
+    useEditor.setState({ lastError: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+function tool(id: Tool, code: string, keywords: string): Action {
+  return {
+    id: `tool.${id}`,
+    title: t(`tool.${id}`),
+    group: "tools",
+    keywords,
+    keys: [{ code }],
+    run: () => sendToEngine({ type: "setTool", tool: id }),
+  };
+}
+
+/** Инструменты в порядке панели инструментов. */
+export const toolActions: readonly Action[] = [
+  tool("select", "KeyV", "выделить курсор стрелка"),
+  tool("wall", "KeyW", "стены рисовать обмер"),
+  tool("door", "KeyD", "проём дверной"),
+  tool("window", "KeyO", "проём оконный"),
+  tool("arch", "KeyA", "проём арочный"),
+  tool("room", "KeyR", "комната площадь"),
+  tool("dimension", "KeyM", "размерная линия измерить"),
+  tool("leader", "KeyL", "текст подпись примечание"),
+  tool("calibrate", "KeyK", "масштаб подложки"),
+];
 
 /** Все команды приложения. Порядок — порядок в палитре. */
 export const actions: readonly Action[] = [
@@ -95,6 +136,53 @@ export const actions: readonly Action[] = [
     run: () => sendToEngine({ type: "redo" }),
   },
   {
+    id: "edit.delete",
+    title: "Удалить выделенное",
+    group: "edit",
+    keywords: "стереть убрать",
+    keys: [{ code: "Delete" }, { code: "Backspace" }],
+    enabled: hasSelection,
+    run: () => sendToEngine({ type: "deleteSelection" }),
+  },
+  {
+    id: "edit.selectAll",
+    title: "Выделить всё",
+    group: "edit",
+    keys: [{ code: "KeyA", mod: true }],
+    run: () => sendToEngine({ type: "selectAll" }),
+  },
+  {
+    id: "edit.cancel",
+    title: "Прервать действие инструмента",
+    group: "edit",
+    keywords: "отмена снять выделение",
+    keys: [{ code: "Escape" }],
+    run: () => sendToEngine({ type: "cancel" }),
+  },
+  {
+    id: "edit.finish",
+    title: "Закончить цепочку стен",
+    group: "edit",
+    keys: [{ code: "Enter" }],
+    run: () => sendToEngine({ type: "finish" }),
+  },
+  {
+    id: "edit.findRooms",
+    title: "Найти помещения",
+    group: "edit",
+    keywords: "комнаты площади контуры автоматически",
+    run: () => sendToEngine({ type: "findRooms" }),
+  },
+  ...toolActions,
+  {
+    id: "file.addUnderlay",
+    title: "Добавить подложку…",
+    group: "file",
+    keywords: "изображение картинка план скан png jpg",
+    enabled: notBusy,
+    run: () => void addUnderlay(),
+  },
+  {
     id: "view.zoomIn",
     title: "Приблизить",
     group: "view",
@@ -119,6 +207,15 @@ export const actions: readonly Action[] = [
     keywords: "масштаб вписать",
     keys: [{ code: "Digit1", shift: true }],
     run: () => sendToEngine({ type: "zoomToFit" }),
+  },
+  {
+    id: "view.scale50",
+    title: "Масштаб 1:50",
+    group: "view",
+    keywords: "зум 100",
+    keys: [{ code: "Digit0", mod: true }],
+    inInputs: true,
+    run: () => sendToEngine({ type: "zoomToScale", denominator: 50 }),
   },
   {
     id: "view.themeAuto",

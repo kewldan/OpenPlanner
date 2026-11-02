@@ -1,5 +1,335 @@
 {
   "$defs": {
+    "Anchor": {
+      "description": "Конец размера: узел стены или свободная точка.",
+      "oneOf": [
+        {
+          "description": "Узел: размер следует за ним.",
+          "properties": {
+            "node": {
+              "description": "Узел.",
+              "type": "string"
+            },
+            "type": {
+              "const": "node",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "node"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Точка плана.",
+          "properties": {
+            "type": {
+              "const": "point",
+              "type": "string"
+            },
+            "x": {
+              "description": "X, мм.",
+              "format": "double",
+              "type": "number"
+            },
+            "y": {
+              "description": "Y, мм.",
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "type",
+            "x",
+            "y"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Dimension": {
+      "description": "Линейный размер между двумя точками.",
+      "properties": {
+        "end": {
+          "$ref": "#/$defs/Anchor",
+          "description": "Конец."
+        },
+        "id": {
+          "description": "Идентификатор.",
+          "type": "string"
+        },
+        "layer": {
+          "description": "Слой.",
+          "type": "string"
+        },
+        "offset": {
+          "description": "Смещение размерной линии от линии между точками, мм (влево от направления начало → конец).",
+          "format": "double",
+          "type": "number"
+        },
+        "start": {
+          "$ref": "#/$defs/Anchor",
+          "description": "Начало."
+        }
+      },
+      "required": [
+        "id",
+        "layer",
+        "start",
+        "end",
+        "offset"
+      ],
+      "type": "object"
+    },
+    "Justification": {
+      "description": "Линия привязки стены: где лежат узлы относительно толщины.",
+      "oneOf": [
+        {
+          "const": "center",
+          "description": "По оси: толщина поровну в обе стороны.",
+          "type": "string"
+        },
+        {
+          "const": "left",
+          "description": "Стена слева от линии узлов (по направлению рисования).",
+          "type": "string"
+        },
+        {
+          "const": "right",
+          "description": "Стена справа от линии узлов.",
+          "type": "string"
+        }
+      ]
+    },
+    "Layer": {
+      "description": "Слой: группа элементов, которую можно скрыть или заблокировать.",
+      "properties": {
+        "id": {
+          "description": "Идентификатор.",
+          "type": "string"
+        },
+        "locked": {
+          "description": "Элементы слоя нельзя выделить и изменить на холсте.",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "Название.",
+          "type": "string"
+        },
+        "system": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LayerKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Тип системного слоя; у пользовательского слоя — нет."
+        },
+        "visible": {
+          "description": "Элементы слоя видны.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "visible",
+        "locked"
+      ],
+      "type": "object"
+    },
+    "LayerKind": {
+      "description": "Системный слой: в него попадают новые элементы своего типа.",
+      "oneOf": [
+        {
+          "const": "walls",
+          "description": "Стены.",
+          "type": "string"
+        },
+        {
+          "const": "openings",
+          "description": "Окна, двери, арки.",
+          "type": "string"
+        },
+        {
+          "const": "rooms",
+          "description": "Помещения.",
+          "type": "string"
+        },
+        {
+          "const": "dimensions",
+          "description": "Размеры.",
+          "type": "string"
+        },
+        {
+          "const": "leaders",
+          "description": "Выноски.",
+          "type": "string"
+        },
+        {
+          "const": "underlays",
+          "description": "Подложки.",
+          "type": "string"
+        }
+      ]
+    },
+    "Leader": {
+      "description": "Выноска: стрелка к точке и текст.",
+      "properties": {
+        "id": {
+          "description": "Идентификатор.",
+          "type": "string"
+        },
+        "layer": {
+          "description": "Слой.",
+          "type": "string"
+        },
+        "text": {
+          "description": "Текст.",
+          "type": "string"
+        },
+        "textX": {
+          "description": "X начала полки с текстом, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "textY": {
+          "description": "Y начала полки, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "x": {
+          "description": "X точки, на которую указывает выноска, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "y": {
+          "description": "Y точки, мм.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "layer",
+        "x",
+        "y",
+        "textX",
+        "textY",
+        "text"
+      ],
+      "type": "object"
+    },
+    "Node": {
+      "description": "Узел — точка, в которой начинаются и заканчиваются стены.",
+      "properties": {
+        "id": {
+          "description": "Идентификатор.",
+          "type": "string"
+        },
+        "x": {
+          "description": "X, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "y": {
+          "description": "Y, мм (вниз).",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "Opening": {
+      "description": "Окно, дверь или арка в стене.",
+      "properties": {
+        "height": {
+          "description": "Высота, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "hingeAtEnd": {
+          "default": false,
+          "description": "Петли двери у конца `b` стены (иначе — у конца `a`).",
+          "type": "boolean"
+        },
+        "id": {
+          "description": "Идентификатор.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/OpeningKind",
+          "description": "Тип."
+        },
+        "layer": {
+          "description": "Слой.",
+          "type": "string"
+        },
+        "offset": {
+          "description": "Расстояние от узла `a` стены до середины проёма вдоль оси, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "sill": {
+          "description": "Высота низа проёма от пола, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "swing": {
+          "$ref": "#/$defs/Side",
+          "default": "left",
+          "description": "Сторона стены, в которую открывается дверь."
+        },
+        "wall": {
+          "description": "Стена.",
+          "type": "string"
+        },
+        "width": {
+          "description": "Ширина, мм.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "layer",
+        "wall",
+        "kind",
+        "offset",
+        "width",
+        "height",
+        "sill"
+      ],
+      "type": "object"
+    },
+    "OpeningKind": {
+      "description": "Тип проёма.",
+      "oneOf": [
+        {
+          "const": "door",
+          "description": "Дверь.",
+          "type": "string"
+        },
+        {
+          "const": "window",
+          "description": "Окно.",
+          "type": "string"
+        },
+        {
+          "const": "arch",
+          "description": "Арка (проём без заполнения).",
+          "type": "string"
+        }
+      ]
+    },
     "ProjectMeta": {
       "description": "Сведения о проекте, которые попадают в основную надпись чертежей.",
       "properties": {
@@ -17,25 +347,260 @@
         "address"
       ],
       "type": "object"
+    },
+    "Room": {
+      "description": "Помещение. Контур и площадь вычисляются: это замкнутая область стен,\nв которой лежит точка подписи.",
+      "properties": {
+        "ceilingHeight": {
+          "description": "Высота потолка, мм; без значения — высота по умолчанию из проекта.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "Идентификатор.",
+          "type": "string"
+        },
+        "layer": {
+          "description": "Слой.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Название.",
+          "type": "string"
+        },
+        "x": {
+          "description": "X точки подписи, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "y": {
+          "description": "Y точки подписи, мм.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "layer",
+        "name",
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "Side": {
+      "description": "Сторона стены относительно направления от узла `a` к узлу `b`.",
+      "oneOf": [
+        {
+          "const": "left",
+          "description": "Слева.",
+          "type": "string"
+        },
+        {
+          "const": "right",
+          "description": "Справа.",
+          "type": "string"
+        }
+      ]
+    },
+    "Underlay": {
+      "description": "Изображение-подложка (сканированный план, фото обмера).",
+      "properties": {
+        "asset": {
+          "description": "Путь файла изображения внутри `.oplan`, например `assets/<id>.png`.",
+          "type": "string"
+        },
+        "heightPx": {
+          "description": "Высота изображения, пиксели.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "description": "Идентификатор.",
+          "type": "string"
+        },
+        "layer": {
+          "description": "Слой.",
+          "type": "string"
+        },
+        "mmPerPx": {
+          "description": "Масштаб: миллиметров плана в пикселе изображения.",
+          "format": "double",
+          "type": "number"
+        },
+        "name": {
+          "description": "Исходное имя файла.",
+          "type": "string"
+        },
+        "opacity": {
+          "description": "Непрозрачность, 0–1.",
+          "format": "double",
+          "type": "number"
+        },
+        "widthPx": {
+          "description": "Ширина изображения, пиксели.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "x": {
+          "description": "X левого верхнего угла, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "y": {
+          "description": "Y левого верхнего угла, мм.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "layer",
+        "asset",
+        "name",
+        "x",
+        "y",
+        "widthPx",
+        "heightPx",
+        "mmPerPx",
+        "opacity"
+      ],
+      "type": "object"
+    },
+    "Wall": {
+      "description": "Стена между двумя узлами.",
+      "properties": {
+        "a": {
+          "description": "Начальный узел.",
+          "type": "string"
+        },
+        "b": {
+          "description": "Конечный узел.",
+          "type": "string"
+        },
+        "height": {
+          "description": "Высота, мм; без значения — до потолка.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "Идентификатор.",
+          "type": "string"
+        },
+        "justification": {
+          "$ref": "#/$defs/Justification",
+          "description": "Линия привязки."
+        },
+        "layer": {
+          "description": "Слой.",
+          "type": "string"
+        },
+        "thickness": {
+          "description": "Толщина, мм.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "layer",
+        "a",
+        "b",
+        "thickness",
+        "justification"
+      ],
+      "type": "object"
     }
   },
   "$id": "https://github.com/kewldan/OpenPlanner/schema/model.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Документ проекта.\n\nНа стадии 0 содержит только сведения о проекте. Обмер, варианты, слои\nи объекты добавляются на следующих стадиях.",
+  "description": "Документ проекта.",
   "properties": {
     "defaultCeilingHeight": {
       "description": "Высота потолка по умолчанию, мм.",
       "format": "double",
       "type": "number"
     },
+    "dimensions": {
+      "description": "Размеры.",
+      "items": {
+        "$ref": "#/$defs/Dimension"
+      },
+      "type": "array"
+    },
+    "layers": {
+      "description": "Слои в порядке отрисовки (первый — снизу).",
+      "items": {
+        "$ref": "#/$defs/Layer"
+      },
+      "type": "array"
+    },
+    "leaders": {
+      "description": "Выноски.",
+      "items": {
+        "$ref": "#/$defs/Leader"
+      },
+      "type": "array"
+    },
     "meta": {
       "$ref": "#/$defs/ProjectMeta",
       "description": "Сведения о проекте."
+    },
+    "nodes": {
+      "description": "Узлы стен.",
+      "items": {
+        "$ref": "#/$defs/Node"
+      },
+      "type": "array"
+    },
+    "openings": {
+      "description": "Окна, двери, арки.",
+      "items": {
+        "$ref": "#/$defs/Opening"
+      },
+      "type": "array"
+    },
+    "rooms": {
+      "description": "Помещения.",
+      "items": {
+        "$ref": "#/$defs/Room"
+      },
+      "type": "array"
+    },
+    "underlays": {
+      "description": "Подложки.",
+      "items": {
+        "$ref": "#/$defs/Underlay"
+      },
+      "type": "array"
+    },
+    "walls": {
+      "description": "Стены.",
+      "items": {
+        "$ref": "#/$defs/Wall"
+      },
+      "type": "array"
     }
   },
   "required": [
     "meta",
-    "defaultCeilingHeight"
+    "defaultCeilingHeight",
+    "layers",
+    "nodes",
+    "walls",
+    "openings",
+    "rooms",
+    "dimensions",
+    "leaders",
+    "underlays"
   ],
   "title": "Модель проекта OpenPlanner (model.json)",
   "type": "object"

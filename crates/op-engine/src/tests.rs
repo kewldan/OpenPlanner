@@ -1,0 +1,609 @@
+//! Сценарии движка: ввод указателем и клавиатурой, как из UI.
+
+use glam::DVec2;
+use op_format::journal;
+use op_model::{Anchor, Command, Element, LayerKind};
+
+use crate::{
+    EngineState, UNTITLED,
+    protocol::{EngineEvents, FromEngine, PointerPhase, ToEngine, Tool, ToolStep},
+};
+
+fn state() -> EngineState {
+    EngineState::new(DVec2::new(1000.0, 800.0), 1.0)
+}
+
+fn screen(s: &EngineState, world: DVec2) -> DVec2 {
+    s.camera().world_to_screen(world, s.viewport())
+}
+
+fn pointer(s: &mut EngineState, phase: PointerPhase, world: DVec2, shift: bool) -> EngineEvents {
+    let p = screen(s, world);
+    s.handle(ToEngine::Pointer {
+        phase,
+        x: p.x,
+        y: p.y,
+        shift,
+        alt: false,
+    })
+}
+
+fn click(s: &mut EngineState, x: f64, y: f64) -> EngineEvents {
+    let p = DVec2::new(x, y);
+    pointer(s, PointerPhase::Move, p, false);
+    let mut events = pointer(s, PointerPhase::Down, p, false);
+    events
+        .events
+        .extend(pointer(s, PointerPhase::Up, p, false).events);
+    events
+}
+
+fn drag(s: &mut EngineState, from: DVec2, to: DVec2) -> EngineEvents {
+    pointer(s, PointerPhase::Down, from, false);
+    pointer(s, PointerPhase::Move, from.lerp(to, 0.5), false);
+    pointer(s, PointerPhase::Move, to, false);
+    pointer(s, PointerPhase::Up, to, false)
+}
+
+fn tool(s: &mut EngineState, tool: Tool) {
+    s.handle(ToEngine::SetTool { tool });
+}
+
+fn has_error(events: &EngineEvents) -> bool {
+    events
+        .events
+        .iter()
+        .any(|e| matches!(e, FromEngine::Error { .. }))
+}
+
+/// Прямоугольник стен по осям 3000 × 4000 мм от точки (1000, 1000).
+fn rectangle(s: &mut EngineState) {
+    tool(s, Tool::Wall);
+    for (x, y) in [
+        (1000.0, 1000.0),
+        (4000.0, 1000.0),
+        (4000.0, 5000.0),
+        (1000.0, 5000.0),
+        (1000.0, 1000.0),
+    ] {
+        assert!(!has_error(&click(s, x, y)));
+    }
+}
+
+fn room_area(events: &EngineEvents) -> Option<f64> {
+    events.events.iter().find_map(|e| match e {
+        FromEngine::DerivedChanged { rooms, .. } => rooms.first().map(|r| r.area),
+        _ => None,
+    })
+}
+
+#[test]
+fn draws_closed_chain_and_finds_room() {
+    let mut s = state();
+    rectangle(&mut s);
+    let doc = s.document();
+    assert_eq!(doc.walls.len(), 4);
+    assert_eq!(doc.nodes.len(), 4, "цепочка замкнулась на первом узле");
+    assert_eq!(s.step(), ToolStep::WallStart, "замыкание завершает цепочку");
+
+    let events = s.handle(ToEngine::FindRooms);
+    let area = room_area(&events).unwrap();
+    // Толщина 120 мм по оси: площадь по внутренним поверхностям.
+    assert!((area - 2.88 * 3.88).abs() < 1e-6, "{area}");
+    assert_eq!(s.document().rooms[0].name, "Помещение 1");
+    // Повторно контуров нет.
+    assert!(has_error(&s.handle(ToEngine::FindRooms)));
+}
+
+#[test]
+fn numeric_length_and_angle() {
+    let mut s = state();
+    tool(&mut s, Tool::Wall);
+    click(&mut s, 1000.0, 1000.0);
+    pointer(
+        &mut s,
+        PointerPhase::Move,
+        DVec2::new(2000.0, 1000.0),
+        false,
+    );
+    s.handle(ToEngine::NumericInput {
+        value: 3500.0,
+        angle: None,
+    });
+    s.handle(ToEngine::NumericInput {
+        value: 2000.0,
+        angle: Some(90.0),
+    });
+    let doc = s.document();
+    assert_eq!(doc.walls.len(), 2);
+    let last = doc.node(&doc.walls[1].b).unwrap();
+    assert!(
+        (last.x - 4500.0).abs() < 1e-6 && (last.y + 1000.0).abs() < 1e-6,
+        "{last:?}"
+    );
+    assert_eq!(s.step(), ToolStep::WallNext);
+    s.handle(ToEngine::Finish);
+    assert_eq!(s.step(), ToolStep::WallStart);
+    s.handle(ToEngine::Cancel);
+    assert!(matches!(
+        s.snapshot().events.last(),
+        Some(FromEngine::ToolChanged {
+            tool: Tool::Select,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn each_segment_is_one_undo_step() {
+    let mut s = state();
+    rectangle(&mut s);
+    s.handle(ToEngine::Undo);
+    assert_eq!(s.document().walls.len(), 3);
+    s.handle(ToEngine::Redo);
+    assert_eq!(s.document().walls.len(), 4);
+}
+
+#[test]
+fn t_junction_divides_room() {
+    let mut s = state();
+    rectangle(&mut s);
+    tool(&mut s, Tool::Wall);
+    // Перегородка от середины верхней стены к середине нижней.
+    click(&mut s, 2500.0, 1000.0);
+    click(&mut s, 2500.0, 5000.0);
+    s.handle(ToEngine::Finish);
+    let events = s.handle(ToEngine::FindRooms);
+    let rooms = events
+        .events
+        .iter()
+        .find_map(|e| match e {
+            FromEngine::DerivedChanged { rooms, .. } => Some(rooms.clone()),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(rooms.len(), 2);
+    for r in rooms {
+        assert!((r.area - 1.38 * 3.88).abs() < 1e-6, "{}", r.area);
+    }
+}
+
+#[test]
+fn openings_are_placed_on_walls() {
+    let mut s = state();
+    rectangle(&mut s);
+    tool(&mut s, Tool::Door);
+    assert!(!has_error(&click(&mut s, 2000.0, 1030.0)));
+    let o = &s.document().openings[0];
+    assert!((o.offset - 1000.0).abs() < 1e-6, "{}", o.offset);
+    assert_eq!(s.selection(), std::slice::from_ref(&o.id));
+    // Второй проём поверх первого — ошибка.
+    assert!(has_error(&click(&mut s, 2100.0, 1000.0)));
+    // Мимо стены — ошибка.
+    assert!(has_error(&click(&mut s, 2500.0, 3000.0)));
+    // Окно по центру стены притягивается к середине.
+    tool(&mut s, Tool::Window);
+    click(&mut s, 2540.0, 5000.0);
+    let w = &s.document().openings[1];
+    assert!((w.offset - 1500.0).abs() < 1e-6, "{}", w.offset);
+    // Проём не размыкает помещение.
+    let events = s.handle(ToEngine::FindRooms);
+    assert!(room_area(&events).is_some());
+}
+
+#[test]
+fn room_tool_needs_closed_contour() {
+    let mut s = state();
+    rectangle(&mut s);
+    tool(&mut s, Tool::Room);
+    assert!(has_error(&click(&mut s, 9000.0, 9000.0)));
+    let events = click(&mut s, 2500.0, 3000.0);
+    assert!(room_area(&events).is_some());
+    // Щелчок в то же помещение выделяет его, а не создаёт второе.
+    click(&mut s, 3000.0, 4000.0);
+    assert_eq!(s.document().rooms.len(), 1);
+    assert_eq!(s.selection(), [s.document().rooms[0].id.clone()]);
+}
+
+#[test]
+fn dimension_follows_wall_nodes() {
+    let mut s = state();
+    rectangle(&mut s);
+    tool(&mut s, Tool::Dimension);
+    click(&mut s, 1000.0, 1000.0);
+    click(&mut s, 4000.0, 1000.0);
+    click(&mut s, 2500.0, 500.0);
+    let d = s.document().dimensions[0].clone();
+    assert!(matches!(d.start, Anchor::Node { .. }) && matches!(d.end, Anchor::Node { .. }));
+    assert!((d.offset - 500.0).abs() < 1e-6, "{}", d.offset);
+
+    let wall = s
+        .document()
+        .walls
+        .iter()
+        .find(|w| {
+            s.document()
+                .node(&w.b)
+                .is_some_and(|n| (n.x - 4000.0).abs() < 1e-6 && (n.y - 1000.0).abs() < 1e-6)
+        })
+        .unwrap()
+        .id
+        .clone();
+    let events = s.handle(ToEngine::SetWallLength {
+        id: wall,
+        length: 3600.0,
+    });
+    let length = events
+        .events
+        .iter()
+        .find_map(|e| match e {
+            FromEngine::DerivedChanged { dimensions, .. } => dimensions.first().map(|d| d.length),
+            _ => None,
+        })
+        .unwrap();
+    assert!((length - 3600.0).abs() < 1e-6, "{length}");
+}
+
+#[test]
+fn drag_node_handle_and_merge() {
+    let mut s = state();
+    tool(&mut s, Tool::Wall);
+    click(&mut s, 1000.0, 1000.0);
+    click(&mut s, 3000.0, 1000.0);
+    click(&mut s, 3000.0, 3000.0);
+    s.handle(ToEngine::Finish);
+    tool(&mut s, Tool::Select);
+    click(&mut s, 3000.0, 2000.0);
+    assert_eq!(s.selection().len(), 1);
+    // Тянем конец второй стены на начало первой: узлы сливаются, контур — треугольник.
+    drag(
+        &mut s,
+        DVec2::new(3000.0, 3000.0),
+        DVec2::new(1000.0, 1000.0),
+    );
+    assert_eq!(s.document().nodes.len(), 2, "{:?}", s.document().nodes);
+    assert_eq!(s.document().walls.len(), 1, "стена-дубликат удалена");
+    s.handle(ToEngine::Undo);
+    assert_eq!(s.document().nodes.len(), 3);
+}
+
+#[test]
+fn drag_moves_selected_wall_with_snapping() {
+    let mut s = state();
+    rectangle(&mut s);
+    tool(&mut s, Tool::Select);
+    click(&mut s, 2500.0, 1000.0);
+    drag(
+        &mut s,
+        DVec2::new(2500.0, 1000.0),
+        DVec2::new(2520.0, 1480.0),
+    );
+    let ys: Vec<f64> = s.document().nodes.iter().map(|n| n.y).collect();
+    assert!(ys.iter().any(|y| (y - 1500.0).abs() < 1e-6), "{ys:?}");
+    assert_eq!(s.history_len_for_tests(), 5, "четыре стены и один перенос");
+}
+
+#[test]
+fn marquee_and_delete_cascade() {
+    let mut s = state();
+    rectangle(&mut s);
+    tool(&mut s, Tool::Door);
+    click(&mut s, 2000.0, 1000.0);
+    tool(&mut s, Tool::Select);
+    pointer(&mut s, PointerPhase::Down, DVec2::new(500.0, 500.0), false);
+    pointer(
+        &mut s,
+        PointerPhase::Move,
+        DVec2::new(4500.0, 1500.0),
+        false,
+    );
+    pointer(&mut s, PointerPhase::Up, DVec2::new(4500.0, 1500.0), false);
+    assert_eq!(s.selection().len(), 2, "верхняя стена и дверь");
+    s.handle(ToEngine::DeleteSelection);
+    let doc = s.document();
+    assert_eq!(doc.walls.len(), 3);
+    assert!(doc.openings.is_empty());
+    assert_eq!(doc.nodes.len(), 4, "узлы остальных стен на месте");
+    assert!(s.selection().is_empty());
+}
+
+#[test]
+fn hidden_and_locked_layers() {
+    let mut s = state();
+    rectangle(&mut s);
+    let mut layer = s.document().layer(LayerKind::Walls.id()).unwrap().clone();
+    layer.locked = true;
+    s.handle(ToEngine::Command {
+        command: Command::Put {
+            element: Element::Layer(layer.clone()),
+            index: None,
+        },
+    });
+    tool(&mut s, Tool::Select);
+    click(&mut s, 2500.0, 1000.0);
+    assert!(s.selection().is_empty(), "заблокированное не выделяется");
+
+    let (doc_scene, _) = s.take_scenes();
+    assert!(!doc_scene.unwrap().fill_indices.is_empty());
+    layer.visible = false;
+    s.handle(ToEngine::Command {
+        command: Command::Put {
+            element: Element::Layer(layer),
+            index: None,
+        },
+    });
+    let (doc_scene, _) = s.take_scenes();
+    assert!(
+        doc_scene.unwrap().fill_indices.is_empty(),
+        "скрытые стены не рисуются"
+    );
+}
+
+#[test]
+fn leader_asks_for_text() {
+    let mut s = state();
+    tool(&mut s, Tool::Leader);
+    click(&mut s, 1000.0, 1000.0);
+    let events = click(&mut s, 2000.0, 500.0);
+    let id = s.document().leaders[0].id.clone();
+    assert!(events.events.contains(&FromEngine::EditText { id }));
+}
+
+fn png(width: u32, height: u32) -> Vec<u8> {
+    let image = image::RgbaImage::from_pixel(width, height, image::Rgba([200, 30, 30, 255]));
+    let mut bytes = std::io::Cursor::new(Vec::new());
+    image.write_to(&mut bytes, image::ImageFormat::Png).unwrap();
+    bytes.into_inner()
+}
+
+#[test]
+fn underlay_calibration_file_and_journal() {
+    let mut s = state();
+    let header = journal::header_line().unwrap();
+    let mut log = header.clone();
+    let record = |events: &EngineEvents, log: &mut String| {
+        for e in &events.events {
+            if let FromEngine::Journal { line } = e {
+                log.push_str(line);
+            }
+        }
+    };
+    let events = s.add_underlay(png(100, 50), "план.png").unwrap();
+    record(&events, &mut log);
+    let u = s.document().underlays[0].clone();
+    assert_eq!((u.width_px, u.height_px), (100, 50));
+    assert_eq!(s.selection(), std::slice::from_ref(&u.id));
+    assert_eq!(s.take_image_uploads().len(), 1);
+    assert!(
+        s.take_image_uploads().is_empty(),
+        "изображение загружается один раз"
+    );
+
+    // Калибровка: две точки на расстоянии 10 px изображения = 10·k мм, настоящее — 1000 мм.
+    tool(&mut s, Tool::Calibrate);
+    let a = DVec2::new(u.x, u.y) + DVec2::new(10.0, 10.0) * u.mm_per_px;
+    let b = a + DVec2::new(10.0, 0.0) * u.mm_per_px;
+    let p = |s: &EngineState, w: DVec2| screen(s, w);
+    for w in [a, b] {
+        let sp = p(&s, w);
+        s.handle(ToEngine::Pointer {
+            phase: PointerPhase::Down,
+            x: sp.x,
+            y: sp.y,
+            shift: false,
+            alt: true,
+        });
+    }
+    assert_eq!(s.step(), ToolStep::CalibrateDistance);
+    let events = s.handle(ToEngine::NumericInput {
+        value: 1000.0,
+        angle: None,
+    });
+    record(&events, &mut log);
+    let calibrated = s.document().underlays[0].clone();
+    assert!(
+        (calibrated.mm_per_px - 100.0).abs() < 1e-6,
+        "{}",
+        calibrated.mm_per_px
+    );
+
+    // Файл: подложка и её изображение сохраняются.
+    let bytes = s.export_file("test").unwrap();
+    let mut other = state();
+    other.import_file(&bytes).unwrap();
+    assert_eq!(other.document().underlays, s.document().underlays);
+    assert_eq!(other.document().assets.len(), 1);
+    assert_eq!(other.take_image_uploads().len(), 1);
+
+    // Журнал восстанавливает подложку вместе с изображением.
+    let mut recovered = state();
+    recovered.replay_journal(&log).unwrap();
+    assert_eq!(recovered.document().underlays, s.document().underlays);
+    assert_eq!(recovered.document().assets, s.document().assets);
+}
+
+#[test]
+fn bad_image_is_rejected() {
+    let mut s = state();
+    assert!(s.add_underlay(b"not an image".to_vec(), "x.png").is_err());
+    assert!(s.document().underlays.is_empty());
+}
+
+#[test]
+fn scenes_contain_walls_and_labels() {
+    let mut s = state();
+    rectangle(&mut s);
+    s.handle(ToEngine::FindRooms);
+    let (doc, overlay) = s.take_scenes();
+    let doc = doc.unwrap();
+    assert!(!doc.fill_indices.is_empty());
+    assert!(!doc.glyphs.is_empty(), "подпись помещения");
+    assert!(overlay.is_some());
+    let (doc, overlay) = s.take_scenes();
+    assert!(
+        doc.is_none() && overlay.is_none(),
+        "без изменений сцены не пересобираются"
+    );
+}
+
+#[test]
+fn zoom_to_fit_frames_content() {
+    let mut s = state();
+    rectangle(&mut s);
+    s.handle(ToEngine::ZoomToFit);
+    let c = s.camera().center;
+    assert!(c.distance(DVec2::new(2500.0, 3000.0)) < 1e-6, "{c}");
+}
+
+// ---------- Протокол и история (стадия 0) ----------
+
+fn rename(s: &mut EngineState, title: &str) -> EngineEvents {
+    s.handle(ToEngine::Command {
+        command: Command::SetTitle {
+            title: title.into(),
+        },
+    })
+}
+
+fn title(events: &EngineEvents) -> &str {
+    events
+        .events
+        .iter()
+        .find_map(|e| match e {
+            FromEngine::DocumentChanged { document } => Some(document.meta.title.as_str()),
+            _ => None,
+        })
+        .unwrap()
+}
+
+#[test]
+fn command_then_undo() {
+    let mut s = state();
+    let events = rename(&mut s, "Комендантский пр.");
+    assert!(events.events.contains(&FromEngine::HistoryChanged {
+        can_undo: true,
+        can_redo: false,
+        dirty: true
+    }));
+    let events = s.handle(ToEngine::Undo);
+    assert_eq!(title(&events), UNTITLED);
+}
+
+#[test]
+fn invalid_command_reports_error() {
+    let mut s = state();
+    let events = s.handle(ToEngine::Command {
+        command: Command::SetDefaultCeilingHeight { height: 0.0 },
+    });
+    assert!(matches!(
+        events.events.as_slice(),
+        [FromEngine::Error { .. }]
+    ));
+}
+
+#[test]
+fn nothing_to_undo_emits_nothing() {
+    assert!(state().handle(ToEngine::Undo).events.is_empty());
+}
+
+#[test]
+fn zoom_to_scale() {
+    let mut s = state();
+    let events = s.handle(ToEngine::ZoomToScale { denominator: 50.0 });
+    let [FromEngine::ViewChanged { zoom_percent, .. }] = events.events.as_slice() else {
+        panic!("ожидалось ViewChanged");
+    };
+    assert!((zoom_percent - 100.0).abs() < 1e-9);
+}
+
+#[test]
+fn mark_saved_clears_dirty() {
+    let mut s = state();
+    rename(&mut s, "А");
+    let events = s.handle(ToEngine::MarkSaved);
+    assert_eq!(
+        events.events,
+        vec![FromEngine::HistoryChanged {
+            can_undo: true,
+            can_redo: false,
+            dirty: false
+        }]
+    );
+}
+
+#[test]
+fn journal_replay_restores_walls() {
+    let mut s = state();
+    let mut log = journal::header_line().unwrap();
+    tool(&mut s, Tool::Wall);
+    for (x, y) in [(0.0, 0.0), (2000.0, 0.0), (2000.0, 2000.0)] {
+        for e in click(&mut s, x, y).events {
+            if let FromEngine::Journal { line } = e {
+                log += &line;
+            }
+        }
+    }
+    let mut recovered = state();
+    recovered.replay_journal(&log).unwrap();
+    assert_eq!(recovered.document().walls, s.document().walls);
+    assert_eq!(recovered.document().nodes, s.document().nodes);
+}
+
+#[test]
+fn every_element_survives_json() {
+    // Журнал хранит команды в JSON: каждый вид элемента должен проходить круг без потерь.
+    let mut s = state();
+    rectangle(&mut s);
+    tool(&mut s, Tool::Door);
+    click(&mut s, 2000.0, 1000.0);
+    tool(&mut s, Tool::Room);
+    click(&mut s, 2500.0, 3000.0);
+    tool(&mut s, Tool::Dimension);
+    click(&mut s, 1000.0, 1000.0);
+    click(&mut s, 4000.0, 1000.0);
+    click(&mut s, 2500.0, 600.0);
+    tool(&mut s, Tool::Leader);
+    click(&mut s, 2000.0, 2000.0);
+    click(&mut s, 2500.0, 1500.0);
+    s.add_underlay(png(4, 4), "п.png").unwrap();
+    let doc = s.document();
+    let elements: Vec<Element> = doc
+        .layers
+        .iter()
+        .cloned()
+        .map(Element::Layer)
+        .chain(doc.nodes.iter().cloned().map(Element::Node))
+        .chain(doc.walls.iter().cloned().map(Element::Wall))
+        .chain(doc.openings.iter().cloned().map(Element::Opening))
+        .chain(doc.rooms.iter().cloned().map(Element::Room))
+        .chain(doc.dimensions.iter().cloned().map(Element::Dimension))
+        .chain(doc.leaders.iter().cloned().map(Element::Leader))
+        .chain(doc.underlays.iter().cloned().map(Element::Underlay))
+        .collect();
+    assert_eq!(elements.len(), 6 + 4 + 4 + 1 + 1 + 1 + 1 + 1);
+    for element in elements {
+        let command = Command::Put {
+            element,
+            index: None,
+        };
+        let json = serde_json::to_string(&command).unwrap();
+        let back: Command = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, command, "{json}");
+    }
+}
+
+#[test]
+fn protocol_json_shape() {
+    let json = serde_json::to_string(&ToEngine::Pointer {
+        phase: PointerPhase::Down,
+        x: 1.0,
+        y: 2.0,
+        shift: false,
+        alt: false,
+    })
+    .unwrap();
+    assert_eq!(
+        json,
+        r#"{"type":"pointer","phase":"down","x":1.0,"y":2.0,"shift":false,"alt":false}"#
+    );
+}

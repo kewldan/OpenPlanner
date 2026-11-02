@@ -139,7 +139,7 @@ async function main() {
   const manifest = JSON.parse(readZipEntry(PROJECT, "manifest.json"));
   assert(model.meta.title === "Комендантский пр.", "в файле правильное название");
   assert(
-    manifest.formatVersion === 1,
+    manifest.formatVersion === 2,
     `манифест: ${manifest.generator}, формат ${manifest.formatVersion}`,
   );
   assert(existsSync(JOURNAL), "рядом с файлом создан журнал");
@@ -200,6 +200,48 @@ async function main() {
     () => readFileSync(JOURNAL, "utf8").trim().split("\n").length === 1,
   );
   assert(true, "файл перезаписан, журнал очищен");
+
+  // ── 4. Обмер мышью в настоящем окне ─────────────────────────────────────────
+  step("стены мышью (события X) и поиск помещений");
+  const [left, top, width, height] = await session.execute(
+    "const r = document.querySelector('[data-testid=plan-canvas]').getBoundingClientRect(); return [r.x, r.y, r.width, r.height];",
+  );
+  const app = xdo("search", "--onlyvisible", "--name", "OpenPlanner").split("\n")[0];
+  // Камера по умолчанию: точка (4000, 3000) мм в центре холста, 0,1 px на мм.
+  const clickAt = async (x, y) => {
+    const sx = Math.round(left + width / 2 + (x - 4000) * 0.1);
+    const sy = Math.round(top + height / 2 + (y - 3000) * 0.1);
+    xdo("mousemove", "--window", app, String(sx), String(sy));
+    await sleep(150);
+    xdo("click", "1");
+    await sleep(250);
+  };
+  key("w");
+  for (const [x, y] of [
+    [1000, 1000],
+    [4000, 1000],
+    [4000, 5000],
+    [1000, 5000],
+    [1000, 1000],
+  ]) {
+    await clickAt(x, y);
+  }
+  key("Escape");
+  key("Escape");
+  await waitFor("четыре стены в дереве", async () => /Стены\s*4/.test(await session.text()));
+  assert(true, "стены нарисованы мышью");
+  await session.click(await session.find("//button[contains(., 'Найти помещения')]"));
+  await waitFor("площадь помещения", async () => (await session.text()).includes("11,17 м²"));
+  assert(true, "помещение найдено: 11,17 м²");
+  shot("07-survey");
+
+  step("⌘S: обмер в файле");
+  key("ctrl+s");
+  await waitFor("стены и помещение в файле", () => {
+    const saved = JSON.parse(readZipEntry(PROJECT, "model.json"));
+    return saved.walls.length === 4 && saved.rooms.length === 1;
+  });
+  assert(true, "в model.json четыре стены и помещение");
 
   await session.close();
   console.log("\nвсе проверки десктопа пройдены");

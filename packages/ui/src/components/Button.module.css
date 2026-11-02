@@ -54,3 +54,8 @@
   padding: 0;
   color: var(--text-2);
 }
+
+.button[aria-pressed="true"] {
+  background: var(--sel);
+  color: var(--accent-text);
+}

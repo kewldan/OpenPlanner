@@ -1,5 +1,19 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import type { Document } from "@openplanner/engine-client";
 import { useEditor } from "./editor";
+
+const document: Document = {
+  meta: { title: "Комендантский пр.", address: "" },
+  defaultCeilingHeight: 2700,
+  layers: [],
+  nodes: [],
+  walls: [],
+  openings: [],
+  rooms: [],
+  dimensions: [],
+  leaders: [],
+  underlays: [],
+};
 
 describe("useEditor.applyEvents", () => {
   beforeEach(() => {
@@ -8,10 +22,7 @@ describe("useEditor.applyEvents", () => {
 
   test("применяет пачку событий по порядку", () => {
     useEditor.getState().applyEvents([
-      {
-        type: "documentChanged",
-        document: { meta: { title: "Комендантский пр.", address: "" }, defaultCeilingHeight: 2700 },
-      },
+      { type: "documentChanged", document },
       { type: "historyChanged", canUndo: true, canRedo: false, dirty: true },
       { type: "viewChanged", scaleDenominator: 25, zoomPercent: 200 },
     ]);
@@ -29,5 +40,24 @@ describe("useEditor.applyEvents", () => {
       .getState()
       .applyEvents([{ type: "historyChanged", canUndo: false, canRedo: false, dirty: false }]);
     expect(useEditor.getState().lastError).toBe("плохо");
+  });
+
+  test("вычисленные величины индексируются по элементам", () => {
+    useEditor.getState().applyEvents([
+      {
+        type: "derivedChanged",
+        rooms: [{ id: "r", closed: true, area: 12.5, perimeter: 14 }],
+        walls: [{ id: "w", length: 3000 }],
+        dimensions: [],
+        freeRegions: 1,
+      },
+      { type: "selectionChanged", ids: ["w"] },
+      { type: "cursor", x: 1, y: 2, snap: "endpoint" },
+    ]);
+    const state = useEditor.getState();
+    expect(state.derived.rooms.r?.area).toBe(12.5);
+    expect(state.derived.walls.w).toBe(3000);
+    expect(state.selection).toEqual(["w"]);
+    expect(state.cursor).toEqual({ x: 1, y: 2, snap: "endpoint", length: null, angle: null });
   });
 });

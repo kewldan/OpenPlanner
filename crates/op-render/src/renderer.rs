@@ -1,4 +1,17 @@
-use crate::{Camera2D, grid::GridPipeline};
+use crate::{
+    Camera2D,
+    gpu::{GpuScene, Pipelines},
+    scene::Scene,
+};
+
+/// Слой сцены: документ меняется редко, оверлей инструмента — при каждом движении мыши.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SceneSlot {
+    /// Документ.
+    Document,
+    /// Превью инструмента, выделение, привязки.
+    Overlay,
+}
 
 /// Ошибки рендерера.
 #[derive(Debug, thiserror::Error)]
@@ -22,7 +35,9 @@ pub struct Renderer {
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
     backend: wgpu::Backend,
-    grid: GridPipeline,
+    pipelines: Pipelines,
+    document: GpuScene,
+    overlay: GpuScene,
 }
 
 impl Renderer {
@@ -69,7 +84,9 @@ impl Renderer {
         }
         surface.configure(&device, &config);
 
-        let grid = GridPipeline::new(&device, config.format);
+        let pipelines = Pipelines::new(&device, &queue, config.format);
+        let document = GpuScene::new(&device);
+        let overlay = GpuScene::new(&device);
         let backend = adapter.get_info().backend;
         log::info!("рендерер: бэкенд {backend:?}, формат {:?}", config.format);
 
@@ -79,7 +96,9 @@ impl Renderer {
             surface,
             config,
             backend,
-            grid,
+            pipelines,
+            document,
+            overlay,
         })
     }
 
@@ -98,6 +117,32 @@ impl Renderer {
         self.config.width = width;
         self.config.height = height;
         self.surface.configure(&self.device, &self.config);
+    }
+
+    /// Загружает сцену в слой.
+    pub fn set_scene(&mut self, slot: SceneSlot, scene: &Scene) {
+        let target = match slot {
+            SceneSlot::Document => &mut self.document,
+            SceneSlot::Overlay => &mut self.overlay,
+        };
+        target.upload(&self.device, &self.queue, scene);
+    }
+
+    /// Загружает изображение RGBA8 под ключом (для [`ImageQuad`](crate::scene::ImageQuad)).
+    pub fn set_image(&mut self, key: &str, width: u32, height: u32, rgba: &[u8]) {
+        self.pipelines
+            .set_image(&self.device, &self.queue, key, width, height, rgba);
+    }
+
+    /// Убирает изображение.
+    pub fn remove_image(&mut self, key: &str) {
+        self.pipelines.remove_image(key);
+    }
+
+    /// Загружено ли изображение.
+    #[must_use]
+    pub fn has_image(&self, key: &str) -> bool {
+        self.pipelines.has_image(key)
     }
 
     /// Рисует кадр.
@@ -123,7 +168,7 @@ impl Renderer {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        self.grid.prepare(
+        self.pipelines.prepare(
             &self.queue,
             camera,
             (self.config.width, self.config.height),
@@ -150,7 +195,8 @@ impl Renderer {
                 })],
                 ..Default::default()
             });
-            self.grid.draw(&mut pass);
+            self.pipelines
+                .draw(&mut pass, &[&self.document, &self.overlay]);
         }
         self.queue.submit([encoder.finish()]);
         self.queue.present(frame);

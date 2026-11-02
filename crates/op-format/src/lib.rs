@@ -5,7 +5,8 @@
 //! ```text
 //! manifest.json   версия формата, приложение
 //! model.json      документ проекта
-//! scan/ assets/ previews/ renders/ prices/   — появятся на следующих стадиях
+//! assets/         двоичные файлы проекта (изображения подложек)
+//! scan/ previews/ renders/ prices/   — появятся на следующих стадиях
 //! ```
 //!
 //! Крейт не зависит от модели приложения: документ передаётся как любой
@@ -22,12 +23,17 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
 
 /// Текущая версия формата.
-pub const FORMAT_VERSION: u32 = 1;
+pub const FORMAT_VERSION: u32 = 2;
 
 /// Имя файла манифеста внутри контейнера.
 pub const MANIFEST_PATH: &str = "manifest.json";
 /// Имя файла модели внутри контейнера.
 pub const MODEL_PATH: &str = "model.json";
+/// Папка двоичных файлов внутри контейнера.
+pub const ASSETS_DIR: &str = "assets/";
+
+/// Двоичный файл контейнера: путь внутри архива и содержимое.
+pub type Asset = (String, Vec<u8>);
 
 /// Ошибки чтения и записи `.oplan`.
 #[derive(Debug, thiserror::Error)]
@@ -82,15 +88,23 @@ impl Manifest {
     }
 }
 
-/// Записывает контейнер с манифестом и моделью.
+/// Записывает контейнер с манифестом, моделью и двоичными файлами.
+///
+/// Файлы с путями вне `assets/` пропускаются.
 ///
 /// # Errors
 ///
 /// Возвращает [`FormatError`] при ошибке сериализации или записи.
-pub fn write<W, M>(writer: W, manifest: &Manifest, model: &M) -> Result<W, FormatError>
+pub fn write<'a, W, M, A>(
+    writer: W,
+    manifest: &Manifest,
+    model: &M,
+    assets: A,
+) -> Result<W, FormatError>
 where
     W: Write + Seek,
     M: Serialize,
+    A: IntoIterator<Item = (&'a str, &'a [u8])>,
 {
     let mut zip = ZipWriter::new(writer);
     let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
@@ -100,16 +114,32 @@ where
     zip.start_file(MODEL_PATH, options)?;
     serde_json::to_writer_pretty(&mut zip, model)?;
 
+    // Изображения уже сжаты — храним без повторного сжатия.
+    let stored = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    for (path, bytes) in assets {
+        if !is_asset_path(path) {
+            continue;
+        }
+        zip.start_file(path, stored)?;
+        zip.write_all(bytes)?;
+    }
+
     Ok(zip.finish()?)
 }
 
-/// Читает контейнер и возвращает манифест и модель.
+/// Путь допустим для двоичного файла: внутри `assets/`, без выхода наверх.
+#[must_use]
+pub fn is_asset_path(path: &str) -> bool {
+    path.starts_with(ASSETS_DIR) && path.len() > ASSETS_DIR.len() && !path.contains("..")
+}
+
+/// Читает контейнер и возвращает манифест, модель и двоичные файлы.
 ///
 /// # Errors
 ///
 /// Возвращает [`FormatError`], если файл повреждён, не является проектом
 /// или создан более новой версией формата.
-pub fn read<R, M>(reader: R) -> Result<(Manifest, M), FormatError>
+pub fn read<R, M>(reader: R) -> Result<(Manifest, M, Vec<Asset>), FormatError>
 where
     R: Read + Seek,
     M: DeserializeOwned,
@@ -124,7 +154,21 @@ where
     }
     let raw: serde_json::Value = read_json(&mut zip, MODEL_PATH)?;
     let model = serde_json::from_value(migrate::migrate(raw, manifest.format_version)?)?;
-    Ok((manifest, model))
+
+    let paths: Vec<String> = zip
+        .file_names()
+        .filter_map(Result::ok)
+        .filter(|name| is_asset_path(name))
+        .map(std::borrow::Cow::into_owned)
+        .collect();
+    let mut assets = Vec::with_capacity(paths.len());
+    for path in paths {
+        let mut file = zip.by_name(&path)?;
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes)?;
+        assets.push((path, bytes));
+    }
+    Ok((manifest, model, assets))
 }
 
 fn read_json<R: Read + Seek, T: DeserializeOwned>(
@@ -154,13 +198,21 @@ mod tests {
             title: "Комендантский пр.".into(),
         };
         let manifest = Manifest::current("OpenPlanner test");
-        let bytes = write(Cursor::new(Vec::new()), &manifest, &model)
-            .unwrap()
-            .into_inner();
+        let image: &[u8] = &[1, 2, 3];
+        let bytes = write(
+            Cursor::new(Vec::new()),
+            &manifest,
+            &model,
+            [("assets/a.png", image), ("../evil", image)],
+        )
+        .unwrap()
+        .into_inner();
 
-        let (read_manifest, read_model): (Manifest, Model) = read(Cursor::new(bytes)).unwrap();
+        let (read_manifest, read_model, assets): (Manifest, Model, _) =
+            read(Cursor::new(bytes)).unwrap();
         assert_eq!(read_manifest, manifest);
         assert_eq!(read_model, model);
+        assert_eq!(assets, vec![("assets/a.png".to_owned(), vec![1, 2, 3])]);
     }
 
     #[test]
@@ -175,10 +227,11 @@ mod tests {
             &Model {
                 title: String::new(),
             },
+            [],
         )
         .unwrap()
         .into_inner();
-        let result: Result<(Manifest, Model), _> = read(Cursor::new(bytes));
+        let result: Result<(Manifest, Model, _), _> = read(Cursor::new(bytes));
         assert!(matches!(
             result,
             Err(FormatError::UnsupportedVersion { .. })
@@ -187,7 +240,7 @@ mod tests {
 
     #[test]
     fn rejects_garbage() {
-        let result: Result<(Manifest, Model), _> = read(Cursor::new(b"not a zip".to_vec()));
+        let result: Result<(Manifest, Model, _), _> = read(Cursor::new(b"not a zip".to_vec()));
         assert!(matches!(result, Err(FormatError::Zip(_))));
     }
 }

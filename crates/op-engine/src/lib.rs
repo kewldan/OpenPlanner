@@ -1,14 +1,22 @@
-//! WASM-движок OpenPlanner.
+//! Движок OpenPlanner для Web Worker: ядро модели, инструменты холста и рендерер.
 //!
-//! Работает в Web Worker: владеет документом ([`op_model::History`]) и
-//! рендерером ([`op_render::Renderer`]), принимает сообщения UI
-//! ([`protocol::ToEngine`]) и отвечает событиями ([`protocol::FromEngine`]).
+//! Нативная часть ([`EngineState`]) не зависит от GPU и тестируется обычным
+//! `cargo test`; WASM-обёртка связывает её с рендерером и `OffscreenCanvas`.
 
+pub mod derived;
+pub mod draw;
+pub mod edit;
+pub mod geometry;
+pub mod hit;
+pub mod ids;
+mod overlay;
 pub mod protocol;
-
+pub mod snap;
 mod state;
-
+#[cfg(test)]
+mod tests;
+pub mod tools;
 #[cfg(target_arch = "wasm32")]
 mod wasm;
 
-pub use state::EngineState;
+pub use state::{DecodedImage, EngineState, ImageUpload, UNTITLED, decode_image};

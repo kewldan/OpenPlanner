@@ -1,7 +1,7 @@
 //! WASM-обёртка: связывает [`EngineState`] с рендерером и `OffscreenCanvas`.
 
 use glam::DVec2;
-use op_render::Renderer;
+use op_render::{Renderer, SceneSlot};
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
 
@@ -50,7 +50,24 @@ impl Engine {
             .await
             .map_err(|err| JsError::new(&err.to_string()))?;
 
-        Ok(Self { state, renderer })
+        let mut engine = Self { state, renderer };
+        engine.sync();
+        Ok(engine)
+    }
+
+    /// Передаёт рендереру изменившиеся сцены и новые изображения.
+    fn sync(&mut self) {
+        for (key, image) in self.state.take_image_uploads() {
+            self.renderer
+                .set_image(&key, image.width, image.height, &image.rgba);
+        }
+        let (document, overlay) = self.state.take_scenes();
+        if let Some(scene) = document {
+            self.renderer.set_scene(SceneSlot::Document, &scene);
+        }
+        if let Some(scene) = overlay {
+            self.renderer.set_scene(SceneSlot::Overlay, &scene);
+        }
     }
 
     /// Графический бэкенд: `BrowserWebGpu` или `Gl`.
@@ -105,6 +122,24 @@ impl Engine {
         Ok(self.state.import_file(bytes)?.into_ts()?)
     }
 
+    /// Добавляет изображение-подложку (PNG или JPEG).
+    ///
+    /// # Errors
+    ///
+    /// Ошибка, если файл не читается как изображение.
+    #[wasm_bindgen(js_name = addUnderlay)]
+    pub fn add_underlay(
+        &mut self,
+        bytes: Vec<u8>,
+        name: &str,
+    ) -> Result<Ts<EngineEvents>, JsError> {
+        let events = self
+            .state
+            .add_underlay(bytes, name)
+            .map_err(|err| JsError::new(&err))?;
+        Ok(events.into_ts()?)
+    }
+
     /// Воспроизводит журнал автосохранения поверх текущего документа.
     ///
     /// # Errors
@@ -127,6 +162,7 @@ impl Engine {
 
     /// Рисует кадр.
     pub fn render(&mut self) {
+        self.sync();
         self.renderer
             .render(self.state.camera(), self.state.device_pixel_ratio());
     }

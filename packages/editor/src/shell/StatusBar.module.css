@@ -22,3 +22,20 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.snap {
+  color: var(--accent-text);
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.link:hover {
+  color: var(--text);
+}
