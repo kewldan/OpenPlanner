@@ -39,6 +39,10 @@ export class Session {
     return Object.values(value)[0];
   }
 
+  async click(element) {
+    await request("POST", `/session/${this.id}/element/${element}/click`, {});
+  }
+
   async type(element, text) {
     await request("POST", `/session/${this.id}/element/${element}/clear`, {});
     await request("POST", `/session/${this.id}/element/${element}/value`, { text });

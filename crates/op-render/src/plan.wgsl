@@ -182,21 +182,50 @@ fn glyph_vs(
     return out;
 }
 
+// Расстояние до контура в пикселях экрана (положительно внутри глифа).
+fn glyph_distance(uv: vec2<f32>, px_per_texel: f32) -> f32 {
+    let d = textureSample(tex, samp, uv).r;
+    return (d - 0.5) * 2.0 * SPREAD * px_per_texel;
+}
+
+// Покрытие и среднее расстояние по четырём точкам внутри пикселя: атлас при мелком
+// тексте сильно уменьшен, и без усреднения тонкие штрихи пропадают.
+fn glyph_coverage(in: GlyphOut) -> vec2<f32> {
+    let dx = dpdx(in.uv) * 0.25;
+    let dy = dpdy(in.uv) * 0.25;
+    let k = in.params.x;
+    let d0 = glyph_distance(in.uv - dx - dy, k);
+    let d1 = glyph_distance(in.uv + dx - dy, k);
+    let d2 = glyph_distance(in.uv - dx + dy, k);
+    let d3 = glyph_distance(in.uv + dx + dy, k);
+    let cov = (clamp(d0 + 0.5, 0.0, 1.0) + clamp(d1 + 0.5, 0.0, 1.0)
+        + clamp(d2 + 0.5, 0.0, 1.0) + clamp(d3 + 0.5, 0.0, 1.0)) * 0.25;
+    return vec2<f32>(cov, (d0 + d1 + d2 + d3) * 0.25);
+}
+
+// Первый проход: светлая обводка под всеми буквами (иначе обводка следующей
+// буквы закрывала бы край предыдущей).
 @fragment
-fn glyph_fs(in: GlyphOut) -> @location(0) vec4<f32> {
-    let d = textureSample(tex, samp, in.uv).r;
-    let dist = (d - 0.5) * 2.0 * SPREAD * in.params.x;
-    let text_a = clamp(dist + 0.5, 0.0, 1.0) * in.color.a;
-    var halo_a = 0.0;
+fn glyph_halo_fs(in: GlyphOut) -> @location(0) vec4<f32> {
+    let c = glyph_coverage(in);
+    var a = 0.0;
     if (in.params.y > 0.0) {
-        halo_a = clamp(dist + in.params.y + 0.5, 0.0, 1.0) * 0.92;
+        a = clamp(c.y + in.params.y + 0.5, 0.0, 1.0) * 0.92;
     }
-    let a = text_a + halo_a * (1.0 - text_a);
     if (a <= 0.0) {
         discard;
     }
-    let rgb = (in.color.rgb * text_a + vec3<f32>(0.984, 0.984, 0.973) * halo_a * (1.0 - text_a)) / a;
-    return out_color(vec4<f32>(rgb, a));
+    return out_color(vec4<f32>(0.984, 0.984, 0.973, a));
+}
+
+// Второй проход: сами буквы.
+@fragment
+fn glyph_fs(in: GlyphOut) -> @location(0) vec4<f32> {
+    let a = glyph_coverage(in).x * in.color.a;
+    if (a <= 0.0) {
+        discard;
+    }
+    return out_color(vec4<f32>(in.color.rgb, a));
 }
 
 // ---------- Изображения ----------

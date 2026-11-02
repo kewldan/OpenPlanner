@@ -170,6 +170,7 @@ pub(crate) struct Pipelines {
     fill: wgpu::RenderPipeline,
     line: wgpu::RenderPipeline,
     glyph: wgpu::RenderPipeline,
+    glyph_halo: wgpu::RenderPipeline,
     image: wgpu::RenderPipeline,
     atlas: Option<GpuImage>,
     images: HashMap<String, GpuImage>,
@@ -358,6 +359,30 @@ impl Pipelines {
             })],
             Some(BLEND),
         );
+        let glyph_halo = make(
+            "glyph halo",
+            &plan,
+            "glyph_vs",
+            "glyph_halo_fs",
+            &textured_layout,
+            &[Some(wgpu::VertexBufferLayout {
+                array_stride: size_of::<GlyphInstance>() as wgpu::BufferAddress,
+                step_mode: wgpu::VertexStepMode::Instance,
+                attributes: &[
+                    attr(0, 0, wgpu::VertexFormat::Float32x2),
+                    attr(1, 8, wgpu::VertexFormat::Float32),
+                    attr(2, 12, wgpu::VertexFormat::Float32),
+                    attr(3, 16, wgpu::VertexFormat::Float32x2),
+                    attr(4, 24, wgpu::VertexFormat::Float32x2),
+                    attr(5, 32, wgpu::VertexFormat::Float32x2),
+                    attr(6, 40, wgpu::VertexFormat::Float32x2),
+                    attr(7, 48, wgpu::VertexFormat::Float32),
+                    attr(8, 52, wgpu::VertexFormat::Float32),
+                    attr(9, 64, wgpu::VertexFormat::Float32x4),
+                ],
+            })],
+            Some(BLEND),
+        );
         let image = make(
             "image",
             &plan,
@@ -381,6 +406,7 @@ impl Pipelines {
             fill,
             line,
             glyph,
+            glyph_halo,
             image,
             atlas: None,
             images: HashMap::new(),
@@ -537,9 +563,11 @@ impl Pipelines {
             if scene.glyph_count > 0
                 && let Some(atlas) = &self.atlas
             {
-                pass.set_pipeline(&self.glyph);
                 pass.set_bind_group(1, &atlas.bind_group, &[]);
                 pass.set_vertex_buffer(0, scene.glyphs.buffer.slice(..));
+                pass.set_pipeline(&self.glyph_halo);
+                pass.draw(0..6, 0..scene.glyph_count);
+                pass.set_pipeline(&self.glyph);
                 pass.draw(0..6, 0..scene.glyph_count);
             }
         }

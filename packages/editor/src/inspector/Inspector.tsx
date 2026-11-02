@@ -86,7 +86,9 @@ export function Inspector() {
   return (
     <aside className={styles.root} aria-label={t("inspector.project")} data-testid="inspector">
       {tool === "wall" && <WallToolSection />}
-      {single && document && <ElementSection selected={single} document={document} />}
+      {single && document && (
+        <ElementSection key={single.element.id} selected={single} document={document} />
+      )}
       {selection.length > 1 && (
         <Section title={t("inspector.selection", { count: selection.length })}>
           <DeleteButton />
@@ -166,7 +168,7 @@ function WallToolSection() {
           sendToEngine({ type: "setToolOptions", options: { ...options, wallThickness } }),
         )}
       />
-      <Row label={t("inspector.justification")}>
+      <Row label={t("inspector.justification")} stack>
         <Segmented
           label={t("inspector.justification")}
           value={options.justification}
@@ -180,9 +182,9 @@ function WallToolSection() {
   );
 }
 
-function Row({ label, children }: { label: string; children: ReactNode }) {
+function Row({ label, children, stack }: { label: string; children: ReactNode; stack?: boolean }) {
   return (
-    <div className={styles.row}>
+    <div className={[styles.row, stack && styles.stack].filter(Boolean).join(" ")}>
       <span className={styles.label}>{label}</span>
       <div className={styles.control}>{children}</div>
     </div>
@@ -254,7 +256,7 @@ function WallSection({ wall, document }: { wall: Wall; document: Document }) {
         value={String(wall.thickness)}
         onCommit={numberCommit((thickness) => put({ type: "wall", ...wall, thickness }))}
       />
-      <Row label={t("inspector.justification")}>
+      <Row label={t("inspector.justification")} stack>
         <Segmented
           label={t("inspector.justification")}
           value={wall.justification}
@@ -288,7 +290,7 @@ function OpeningSection({ opening, document }: { opening: Opening; document: Doc
   const fromStart = opening.offset - opening.width / 2;
   return (
     <Section title={t(`opening.${opening.kind}`)}>
-      <Row label={t("inspector.kind")}>
+      <Row label={t("inspector.kind")} stack>
         <Segmented
           label={t("inspector.kind")}
           value={opening.kind}

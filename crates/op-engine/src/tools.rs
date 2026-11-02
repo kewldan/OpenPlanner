@@ -174,6 +174,7 @@ impl EngineState {
         self.tool = tool;
         self.reset_interaction();
         self.hover = None;
+        self.cursor = None;
         let mut events = vec![self.tool_event()];
         if tool == Tool::Calibrate {
             events.extend(self.start_calibration_hint());
@@ -283,8 +284,9 @@ impl EngineState {
             snap: snap.kind,
             length: segment.map(DVec2::length),
             angle: segment.map(|d| {
-                let deg = (-d.y).atan2(d.x).to_degrees();
-                if deg < 0.0 { deg + 360.0 } else { deg }
+                // Десятые доли градуса, 0 ≤ угол < 360, без «−0».
+                let deg = ((-d.y).atan2(d.x).to_degrees() * 10.0).round() / 10.0;
+                deg.rem_euclid(360.0) + 0.0
             }),
         }
     }
@@ -300,6 +302,7 @@ impl EngineState {
         alt: bool,
     ) -> Vec<FromEngine> {
         let font = Font::shared();
+        self.cursor = None;
         let mut events = vec![FromEngine::Cursor {
             x: p.x,
             y: p.y,
