@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { baseName, fileNameFor } from "./types";
+import { baseName, exportExtension, fileNameFor } from "./types";
 
 describe("имена файлов", () => {
   test("baseName убирает папки и расширение", () => {
@@ -13,5 +13,12 @@ describe("имена файлов", () => {
     expect(fileNameFor("   ")).toBe("Проект.oplan");
     expect(fileNameFor("Комендантский пр.")).toBe("Комендантский пр.oplan");
     expect(fileNameFor("...")).toBe("Проект.oplan");
+  });
+
+  test("exportExtension пропускает только форматы экспорта", () => {
+    expect(exportExtension("Кв — Вариант А.PDF")).toBe("pdf");
+    expect(exportExtension("листы.zip")).toBe("zip");
+    expect(exportExtension("кв.oplan")).toBeNull();
+    expect(exportExtension("без расширения")).toBeNull();
   });
 });
