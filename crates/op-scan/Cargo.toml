@@ -7,7 +7,22 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+# TS-типы для WASM-моста (tsify).
+wasm = ["dep:tsify", "dep:wasm-bindgen", "op-model/wasm"]
+
 [dependencies]
+glam.workspace = true
+op-geom.workspace = true
+op-model.workspace = true
+png.workspace = true
+serde.workspace = true
+serde_bytes.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tsify = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }
+zip.workspace = true
 
 [lints]
 workspace = true
