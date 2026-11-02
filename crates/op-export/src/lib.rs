@@ -10,6 +10,7 @@ pub mod frame;
 pub mod hatch;
 pub mod pdf;
 pub mod sheet;
+pub mod svg;
 pub mod table;
 
 pub use frame::TitleBlock;
