@@ -33,7 +33,7 @@ export default defineConfig({
     {
       // Тот же движок на бэкенде WebGPU: программный адаптер SwiftShader (Vulkan на CPU).
       name: "webgpu",
-      testMatch: "canvas.spec.ts",
+      testMatch: /(canvas|view3d)\.spec\.ts/,
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 1440, height: 900 },
