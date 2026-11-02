@@ -241,6 +241,14 @@ export const actions: readonly Action[] = [
     run: () => void addUnderlay(),
   },
   {
+    id: "file.share",
+    title: "Поделиться ссылкой…",
+    group: "file",
+    keywords: "ссылка гость просмотр поделиться отправить веб",
+    enabled: notBusy,
+    run: () => useEditor.getState().setDialog("share"),
+  },
+  {
     id: "view.render",
     title: "Фотореалистичный рендер…",
     group: "view",

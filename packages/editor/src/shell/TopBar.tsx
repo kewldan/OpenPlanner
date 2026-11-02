@@ -35,6 +35,7 @@ const redo = action("edit.redo");
 const palette = action("help.palette");
 const drawings = action("file.drawings");
 const estimate = action("file.estimate");
+const share = action("file.share");
 
 function label(id: string): string {
   const found = action(id);
@@ -45,6 +46,7 @@ function label(id: string): string {
 export function TopBar() {
   const fileName = useProject((s) => s.name) ?? t("project.untitled");
   const dirty = useEditor((s) => s.dirty);
+  const guest = useProject((s) => s.guest);
   const mode = useEditor((s) => s.mode);
   const view = useEditor((s) => s.view);
   const viewName = useEditor((s) => {
@@ -92,6 +94,11 @@ export function TopBar() {
             title={t("project.unsaved")}
           />
         )}
+        {guest && (
+          <span className={styles.guest} data-testid="guest">
+            {t("guest.badge")}
+          </span>
+        )}
         <span className={styles.variant} data-testid="view-name" data-view={view.type}>
           / {viewName}
         </span>
@@ -121,6 +128,9 @@ export function TopBar() {
         </Button>
         <Button onClick={drawings.run} aria-label={label(drawings.id)}>
           {t("action.drawings")}
+        </Button>
+        <Button onClick={share.run} aria-label={label(share.id)}>
+          {t("action.share")}
         </Button>
         <Button onClick={estimate.run} aria-label={label(estimate.id)}>
           {t("action.estimate")}

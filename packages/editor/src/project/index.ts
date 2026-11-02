@@ -2,6 +2,7 @@ import { useStore } from "zustand";
 import { callEngine, onEngineEvents, onEngineReady, sendToEngine } from "../engine";
 import { t } from "../i18n";
 import { platform } from "../platform";
+import { guestProject } from "../share/guest";
 import { useEditor } from "../store/editor";
 import { AUTOSAVE_INTERVAL_MS, ProjectController, type ProjectState } from "./controller";
 
@@ -26,9 +27,16 @@ export function installProject(): void {
   if (installed) return;
   installed = true;
 
-  onEngineReady(() => void project.start());
+  // Гостевая ссылка открывает проект из адреса только для просмотра.
+  const guest = guestProject(window.location.hash);
+  onEngineReady(() => void (guest ? project.openGuest(guest) : project.start()));
+  // Файл в облачной папке мог измениться на другом устройстве.
+  window.addEventListener("focus", () => void project.checkExternal());
   onEngineEvents((events) => project.onEngineEvents(events));
-  setInterval(() => void project.autosave(), AUTOSAVE_INTERVAL_MS);
+  setInterval(
+    () => void project.checkExternal().then(() => project.autosave()),
+    AUTOSAVE_INTERVAL_MS,
+  );
 
   // При сворачивании или закрытии окна журнал дописывается сразу.
   document.addEventListener("visibilitychange", () => {

@@ -71,6 +71,10 @@ function call(current: Engine, request: EngineCall): { value: unknown; transfer:
         events: current.addRender(request.bytes, request.name, request.passes, request.date).events,
       });
       return { value: undefined, transfer: [] };
+    case "exportGuest": {
+      const bytes = current.exportGuest(request.generator);
+      return { value: bytes, transfer: [bytes.buffer] };
+    }
     case "assetBytes":
       return { value: current.assetBytes(request.path), transfer: [] };
     case "dxfInfo":

@@ -21,6 +21,8 @@ export interface ProjectState {
   savedAt: number | null;
   /** Идёт сохранение или открытие. */
   busy: boolean;
+  /** Гостевой просмотр по ссылке: только чтение, без журнала и сохранения. */
+  guest: boolean;
 }
 
 /** Что контроллеру нужно от движка. */
@@ -34,6 +36,15 @@ export interface EngineApi {
 /** Интервал автосохранения проекта, у которого есть файл. */
 export const AUTOSAVE_INTERVAL_MS = 30_000;
 const UNTITLED_KEY_NAME = "untitled";
+
+/** Копия своих правок при конфликте: «Кв (конфликт 2026-11-02 14-05).oplan» рядом с файлом. */
+export function conflictCopy(path: string, name: string, now: Date): SavedFile {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}-${pad(now.getMinutes())}`;
+  const copy = `${name} (конфликт ${stamp})`;
+  const slash = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return { path: `${path.slice(0, slash + 1)}${copy}.oplan`, name: copy };
+}
 
 function hasEntries(journal: string | null): journal is string {
   if (!journal) return false;
@@ -57,6 +68,8 @@ export class ProjectController {
   #paused = 0;
   /** Запуск (проверка журнала восстановления). Команды пользователя ждут его окончания. */
   #starting: Promise<unknown> = Promise.resolve();
+  /** Отметка файла на момент открытия или сохранения (облачная папка). */
+  #stamp: string | null = null;
 
   constructor(
     private readonly platform: Platform,
@@ -68,6 +81,7 @@ export class ProjectController {
       journalKey: null,
       savedAt: null,
       busy: false,
+      guest: false,
     }));
   }
 
@@ -126,8 +140,63 @@ export class ProjectController {
       this.#pendingLines = "";
       const key = await this.platform.journal.locate(file.path, file.name);
       await this.#recoverOrReset(key, t("recovery.file", { name: file.name }));
+      this.#stamp = file.path ? await this.platform.fileStamp(file.path) : null;
       this.store.setState({ path: file.path, name: file.name, journalKey: key, savedAt: null });
     });
+  }
+
+  /** Гостевой просмотр: проект из ссылки только для чтения, без журнала. */
+  async openGuest(bytes: Uint8Array): Promise<void> {
+    this.#starting = this.#exclusive(async () => {
+      await this.engine.call({ type: "importFile", bytes });
+      this.engine.send({ type: "setReadOnly", readOnly: true });
+      this.#pendingLines = "";
+      this.store.setState({
+        path: null,
+        name: t("guest.name"),
+        journalKey: null,
+        savedAt: null,
+        guest: true,
+      });
+    }, false);
+    await this.#starting;
+  }
+
+  /**
+   * Файл проекта изменили на другом устройстве (облачная папка): предлагает
+   * открыть новую версию; несохранённые правки при этом сохраняются копией рядом.
+   */
+  async checkExternal(): Promise<void> {
+    await this.#exclusive(async () => {
+      const { path, name } = this.store.getState();
+      if (!path || this.#stamp === null) return;
+      const stamp = await this.platform.fileStamp(path);
+      if (stamp === null || stamp === this.#stamp) return;
+      const dirty = this.engine.isDirty();
+      const open = await this.platform.confirm(
+        t(dirty ? "sync.changedDirty" : "sync.changed", { name: name ?? "" }),
+        {
+          title: t("sync.title"),
+          okLabel: t("sync.open"),
+          cancelLabel: t("sync.keep"),
+        },
+      );
+      if (!open) {
+        // Своя версия остаётся и при сохранении заменит файл; больше не спрашиваем.
+        this.#stamp = stamp;
+        return;
+      }
+      if (dirty) {
+        const mine = await this.engine.call({ type: "exportFile", generator: GENERATOR });
+        await this.platform.writeProject(mine, conflictCopy(path, name ?? "", new Date()));
+      }
+      const bytes = await this.platform.readProject(path);
+      await this.engine.call({ type: "importFile", bytes });
+      this.#pendingLines = "";
+      const key = this.store.getState().journalKey;
+      if (key) await this.#resetJournal(key);
+      this.#stamp = stamp;
+    }, false);
   }
 
   /** Сохранить; для проекта без файла — спросить, куда. */
@@ -142,13 +211,29 @@ export class ProjectController {
 
   /** Автосохранение: только для проекта с файлом и только если есть изменения. */
   async autosave(): Promise<void> {
-    const { path, busy } = this.store.getState();
-    if (!path || busy || !this.engine.isDirty()) return;
+    const { path, busy, guest } = this.store.getState();
+    if (!path || busy || guest || !this.engine.isDirty()) return;
     await this.save();
   }
 
   async #save(forceChoose: boolean): Promise<boolean> {
     const state = this.store.getState();
+    if (state.guest) return false;
+    // Файл изменили на другом устройстве после открытия — перезаписать только с согласия.
+    if (state.path && !forceChoose && this.#stamp !== null) {
+      const stamp = await this.platform.fileStamp(state.path);
+      if (stamp !== null && stamp !== this.#stamp) {
+        const overwrite = await this.platform.confirm(
+          t("sync.overwrite", { name: state.name ?? "" }),
+          {
+            title: t("sync.title"),
+            okLabel: t("sync.overwriteOk"),
+            cancelLabel: t("confirm.cancel"),
+          },
+        );
+        if (!overwrite) return false;
+      }
+    }
     let target: SavedFile | null =
       state.path && !forceChoose ? { path: state.path, name: state.name ?? "" } : null;
     if (!target) {
@@ -162,6 +247,7 @@ export class ProjectController {
     this.#pendingLines = "";
     await this.platform.writeProject(bytes, target);
     this.engine.send({ type: "markSaved" });
+    this.#stamp = target.path ? await this.platform.fileStamp(target.path) : null;
 
     const key = await this.platform.journal.locate(target.path, target.name);
     if (state.journalKey && state.journalKey !== key) {

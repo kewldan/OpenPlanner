@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { EngineCall, FromEngine, ToEngine } from "@openplanner/engine-client";
 import type { OpenedFile, Platform, SavedFile } from "../platform/types";
-import { type EngineApi, ProjectController } from "./controller";
+import { conflictCopy, type EngineApi, ProjectController } from "./controller";
 
 const HEADER = '{"formatVersion":1}\n';
 
@@ -13,6 +13,7 @@ function setup(
   const sent: ToEngine[] = [];
   const calls: EngineCall["type"][] = [];
   const confirms: string[] = [];
+  const stamps = new Map<string, string>();
   let dirty = false;
   let controller: ProjectController | null = null;
   /** События, которые «движок» выдаст во время следующей выгрузки файла. */
@@ -24,6 +25,8 @@ function setup(
     openModel: async () => null,
     openTable: async () => null,
     openDrawing: async () => null,
+    fileStamp: async (path) => stamps.get(path) ?? "0:0",
+    readProject: async () => new Uint8Array([9]),
     kind: "browser",
     openProject: async () => options.opened ?? null,
     chooseSaveTarget: async (name) =>
@@ -88,6 +91,7 @@ function setup(
     sent,
     calls,
     confirms,
+    stamps,
     setDirty: (value: boolean) => {
       dirty = value;
     },
@@ -217,5 +221,41 @@ describe("ProjectController", () => {
     s.setDirty(true);
     await s.controller.autosave();
     expect(s.written).toHaveLength(0);
+  });
+
+  test("файл, изменённый на другом устройстве, открывается заново с копией своих правок", async () => {
+    const s = setup({ confirm: true });
+    await s.controller.start();
+    s.setDirty(true);
+    await s.controller.save();
+    const path = s.written[0]?.target.path ?? "";
+    // Файл не меняли — вопроса нет; потом его изменили на другом устройстве.
+    await s.controller.checkExternal();
+    expect(s.confirms).toHaveLength(0);
+    s.stamps.set(path, "2:20");
+    s.setDirty(true);
+    await s.controller.checkExternal();
+    expect(s.confirms).toHaveLength(1);
+    // Свои правки — копией рядом, затем открыта версия с диска.
+    expect(s.written.at(-1)?.target.name).toMatch(/конфликт/);
+    expect(s.calls.filter((c) => c === "importFile")).toHaveLength(1);
+  });
+
+  test("гостевой проект открывается только для просмотра и не сохраняется", async () => {
+    const s = setup();
+    await s.controller.openGuest(new Uint8Array([1]));
+    expect(s.sent).toContainEqual({ type: "setReadOnly", readOnly: true });
+    expect(s.controller.store.getState().guest).toBe(true);
+    s.setDirty(true);
+    expect(await s.controller.save()).toBe(false);
+    expect(s.written).toHaveLength(0);
+  });
+
+  test("копия при конфликте — рядом с файлом", () => {
+    const copy = conflictCopy("/d/Кв.oplan", "Кв", new Date(2026, 10, 2, 14, 5));
+    expect(copy).toEqual({
+      path: "/d/Кв (конфликт 2026-11-02 14-05).oplan",
+      name: "Кв (конфликт 2026-11-02 14-05)",
+    });
   });
 });

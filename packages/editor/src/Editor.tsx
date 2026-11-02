@@ -8,6 +8,7 @@ import { CommandPalette } from "./palette/CommandPalette";
 import { ShortcutsDialog } from "./palette/ShortcutsDialog";
 import { RenderDialog } from "./render/RenderDialog";
 import { ScanWizard } from "./scan/ScanWizard";
+import { ShareDialog } from "./share/ShareDialog";
 import { Sidebar, Toolbar } from "./shell/Sidebar";
 import { StatusBar } from "./shell/StatusBar";
 import { useShortcuts } from "./shell/shortcuts";
@@ -35,6 +36,7 @@ export function Editor() {
       <EstimateDialog />
       <DxfDialog />
       <RenderDialog />
+      <ShareDialog />
     </div>
   );
 }

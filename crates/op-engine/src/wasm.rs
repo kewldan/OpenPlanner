@@ -254,6 +254,16 @@ impl Engine {
             .map_err(|err| JsError::new(&err.to_string()))
     }
 
+    /// Проект для гостевой ссылки: `.oplan` без двоичных файлов.
+    ///
+    /// # Errors
+    ///
+    /// Ошибка упаковки.
+    #[wasm_bindgen(js_name = exportGuest)]
+    pub fn export_guest(&self, generator: &str) -> Result<Vec<u8>, JsError> {
+        Ok(self.state.export_guest(generator)?)
+    }
+
     /// Файл сметы текущего вида (XLSX или CSV).
     ///
     /// # Errors

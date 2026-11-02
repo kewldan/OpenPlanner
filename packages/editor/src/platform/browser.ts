@@ -90,6 +90,14 @@ export const browserPlatform: Platform = {
     return { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) };
   },
 
+  async fileStamp() {
+    return null;
+  },
+
+  async readProject() {
+    throw new Error("в браузере у проекта нет пути на диске");
+  },
+
   async chooseSaveTarget(suggestedName) {
     return { path: null, name: baseName(suggestedName) };
   },

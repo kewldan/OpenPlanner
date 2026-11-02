@@ -72,6 +72,15 @@ jobs:
           name: playwright-traces
           path: apps/desktop/test-results/
           retention-days: 7
+      # Веб-версия для хостинга (любая папка сайта: пути относительные).
+      - name: Веб-версия (WASM в релизной сборке)
+        run: bun run build:web
+        working-directory: apps/desktop
+      - uses: actions/upload-artifact@v7
+        with:
+          name: OpenPlanner-Web
+          path: apps/desktop/dist/
+          retention-days: 14
 
   desktop:
     name: Desktop · ${{ matrix.os }}

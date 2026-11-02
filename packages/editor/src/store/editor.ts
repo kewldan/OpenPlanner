@@ -42,6 +42,7 @@ export type EditorDialog =
   | "drawings"
   | "estimate"
   | "render"
+  | "share"
   | null;
 
 /** Вкладка левой панели. */

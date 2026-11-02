@@ -116,6 +116,7 @@ pub fn run() {
             files::read_image,
             files::read_scan,
             files::read_table,
+            files::file_stamp,
             files::write_project,
             files::write_export,
             files::journal_path,

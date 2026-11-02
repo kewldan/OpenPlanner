@@ -2969,3 +2969,27 @@ fn render_queue_input_and_shots_in_the_project() {
     assert!(other.asset_bytes(&shot.asset).is_some());
     assert!(s.add_render(b"not png".to_vec(), "x", 1, "").is_err());
 }
+
+// ---------------------------------------------------------------- гостевой просмотр
+
+#[test]
+fn guest_copy_is_small_and_read_only() {
+    let mut s = state();
+    two_rooms(&mut s);
+    s.add_underlay(png(400, 400), "план.png").unwrap();
+    let full = s.export_file("t").unwrap();
+    let guest = s.export_guest("t").unwrap();
+    assert!(guest.len() < full.len());
+    let mut other = state();
+    other.import_file(&guest).unwrap();
+    assert_eq!(other.document().walls.len(), s.document().walls.len());
+    assert!(other.document().assets.is_empty());
+    other.handle(ToEngine::SetReadOnly { read_only: true });
+    let events = other.handle(ToEngine::FindRooms);
+    let walls = other.document().walls.len();
+    tool(&mut other, Tool::Wall);
+    click(&mut other, 6000.0, 6000.0);
+    click(&mut other, 8000.0, 6000.0);
+    assert_eq!(other.document().walls.len(), walls);
+    assert!(has_error(&events) || other.document().rooms.len() == s.document().rooms.len());
+}

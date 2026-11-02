@@ -114,6 +114,22 @@ pub fn read_project(path: PathBuf) -> CmdResult<Response> {
         .map_err(|err| io_error("прочитать", &path, &err))
 }
 
+/// Отметка файла проекта: время изменения (мс) и размер — по ней видно, что файл
+/// изменили на другом устройстве (облачная папка). `None` — файла нет.
+#[tauri::command]
+pub fn file_stamp(path: PathBuf) -> CmdResult<Option<String>> {
+    check(&path, is_project)?;
+    let Ok(meta) = fs::metadata(&path) else {
+        return Ok(None);
+    };
+    let modified = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |d| d.as_millis());
+    Ok(Some(format!("{modified}:{}", meta.len())))
+}
+
 /// Читает изображение для подложки (PNG или JPEG).
 #[tauri::command]
 pub fn read_image(path: PathBuf) -> CmdResult<Response> {
@@ -312,5 +328,18 @@ mod tests {
     fn rejects_foreign_paths() {
         assert!(read_project(PathBuf::from("/etc/passwd")).is_err());
         assert!(journal_append(PathBuf::from("/tmp/x.txt"), String::new()).is_err());
+    }
+
+    #[test]
+    fn stamp_changes_when_the_file_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("кв.oplan");
+        assert_eq!(file_stamp(path.clone()).unwrap(), None);
+        fs::write(&path, b"1").unwrap();
+        let a = file_stamp(path.clone()).unwrap().unwrap();
+        fs::write(&path, b"22").unwrap();
+        let b = file_stamp(path.clone()).unwrap().unwrap();
+        assert_ne!(a, b);
+        assert!(file_stamp(dir.path().join("x.txt")).is_err());
     }
 }

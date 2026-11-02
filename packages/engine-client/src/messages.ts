@@ -152,7 +152,8 @@ export type EngineCall =
   | { type: "importDxf"; bytes: Uint8Array; name: string; options: DxfImport }
   | { type: "renderInput"; view?: string }
   | { type: "addRender"; bytes: Uint8Array; name: string; passes: number; date: string }
-  | { type: "assetBytes"; path: string };
+  | { type: "assetBytes"; path: string }
+  | { type: "exportGuest"; generator: string };
 
 /** Тип результата вызова. */
 export interface EngineCallResult {
@@ -175,6 +176,7 @@ export interface EngineCallResult {
   renderInput: Uint8Array;
   addRender: undefined;
   assetBytes: Uint8Array | undefined;
+  exportGuest: Uint8Array;
 }
 
 /** UI → воркер. */

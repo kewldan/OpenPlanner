@@ -96,6 +96,8 @@ pub struct EngineState {
     pub(crate) pipe: (op_model::PipeSystem, f64),
     /// Показывать раскладку отделки пола на плане.
     pub(crate) show_finishes: bool,
+    /// Только просмотр (гостевая ссылка): правки отклоняются.
+    pub(crate) read_only: bool,
     images: HashMap<String, DecodedImage>,
     uploaded: HashSet<String>,
 }
@@ -138,6 +140,7 @@ impl EngineState {
             plumbing_item: "outlet-cold".into(),
             pipe: (op_model::PipeSystem::Cold, 20.0),
             show_finishes: false,
+            read_only: false,
             images: HashMap::new(),
             uploaded: HashSet::new(),
         }
@@ -551,6 +554,10 @@ impl EngineState {
                 }
             }
             ToEngine::DeleteRender { id } => self.delete_render(&id),
+            ToEngine::SetReadOnly { read_only } => {
+                self.read_only = read_only;
+                vec![]
+            }
             ToEngine::SetLevel { level } => self.set_level(level),
             ToEngine::AddLevel { name } => self.add_level(name),
             ToEngine::DeleteLevel { id } => self.delete_level(&id),
@@ -722,6 +729,23 @@ impl EngineState {
             &Manifest::current(generator),
             doc,
             doc.assets.iter().map(|(k, v)| (k.as_str(), v.as_slice())),
+        )?;
+        Ok(cursor.into_inner())
+    }
+
+    /// Проект для гостевой ссылки: `.oplan` без двоичных файлов (подложек,
+    /// моделей, кадров) — только модель, чтобы ссылка была короткой.
+    ///
+    /// # Errors
+    ///
+    /// Ошибка упаковки.
+    pub fn export_guest(&self, generator: &str) -> Result<Vec<u8>, FormatError> {
+        let doc = self.history.document();
+        let cursor = op_format::write(
+            std::io::Cursor::new(Vec::new()),
+            &Manifest::current(generator),
+            doc,
+            std::iter::empty(),
         )?;
         Ok(cursor.into_inner())
     }
@@ -1303,6 +1327,12 @@ impl EngineState {
     }
 
     fn apply(&mut self, op: HistoryOp) -> Vec<FromEngine> {
+        if self.read_only {
+            self.clear_preview();
+            return vec![FromEngine::Error {
+                message: "Гостевой просмотр: проект открыт только для просмотра".into(),
+            }];
+        }
         let line = journal::entry_line(&op);
         match self.history.apply(op) {
             Ok(true) => {

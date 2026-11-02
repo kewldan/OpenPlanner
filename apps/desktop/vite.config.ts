@@ -5,6 +5,8 @@ import { defineConfig } from "vite";
 const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({
+  // Относительные пути: веб-версию можно выложить в любую папку сайта (например, GitHub Pages).
+  base: "./",
   plugins: [react()],
   clearScreen: false,
   server: {

@@ -98,6 +98,15 @@ export const desktopPlatform: Platform = {
     return { name: fileName(path), bytes: new Uint8Array(buffer) };
   },
 
+  async fileStamp(path) {
+    return invoke<string | null>("file_stamp", { path });
+  },
+
+  async readProject(path) {
+    const buffer = await invoke<ArrayBuffer>("read_project", { path });
+    return new Uint8Array(buffer);
+  },
+
   async chooseSaveTarget(suggestedName) {
     const chosen = await save({ title: "Сохранить проект", defaultPath: suggestedName, filters });
     if (!chosen) return null;

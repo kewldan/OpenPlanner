@@ -58,3 +58,11 @@
   color: var(--text);
   font: inherit;
 }
+
+.guest {
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--sel);
+  color: var(--accent-text);
+  font-size: var(--text-xs);
+}

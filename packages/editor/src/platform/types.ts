@@ -53,6 +53,13 @@ export interface Platform {
   openTable(): Promise<PickedImage | null>;
   /** Выбрать чертёж DXF. `null` — пользователь передумал. */
   openDrawing(): Promise<PickedImage | null>;
+  /**
+   * Отметка файла проекта (время изменения и размер): по ней видно, что файл
+   * изменили на другом устройстве. `null` — путей нет (браузер) или файла нет.
+   */
+  fileStamp(path: string): Promise<string | null>;
+  /** Прочитать проект по известному пути (для синхронизации). */
+  readProject(path: string): Promise<Uint8Array>;
   /** Спросить, куда сохранить проект. `null` — пользователь отменил выбор. */
   chooseSaveTarget(suggestedName: string): Promise<SavedFile | null>;
   /** Записать проект туда, куда выбрал пользователь. */
