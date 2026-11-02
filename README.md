@@ -8,7 +8,7 @@
 ![License: AGPL-3.0](https://img.shields.io/badge/app-AGPL--3.0-blue)
 ![File format: MIT](https://img.shields.io/badge/.oplan%20format-MIT-green)
 ![Platforms](https://img.shields.io/badge/macOS%20·%20Windows%20·%20Linux-desktop-lightgrey)
-![Stage](https://img.shields.io/badge/stage%205%203D-done-brightgreen)
+![Stage](https://img.shields.io/badge/stage%206%20furniture-done-brightgreen)
 
 <img src="docs/images/survey.png" alt="OpenPlanner survey: walls, doors, windows, rooms with areas, dimensions and a leader" width="860">
 
@@ -18,7 +18,7 @@
 
 Most room planners stop at a pretty 3D picture. OpenPlanner is built around what a renovation crew actually needs: **one model of the apartment** that turns into themed drawing sheets — survey, demolition, new partitions, furniture, electrical, plumbing, finishes — plus an estimate whose quantities come straight from the model. Exporting your own project will never be paywalled. 🆓
 
-> 🚧 **Status: Stages 0–5 are complete.** Measure the apartment by hand or import a LiDAR scan, sketch replanning variants on top of the survey, get the working drawings (survey, demolition, partitions, rooms, wall elevations) as PDF, DXF, SVG, PNG or XLSX, and walk through the result in 3D with real sunlight. Next up: furniture (Stage 6). See the [roadmap](#-roadmap).
+> 🚧 **Status: Stages 0–6 are complete.** Measure the apartment by hand or import a LiDAR scan, sketch replanning variants on top of the survey, furnish it from the catalog or your own GLB models, get the working drawings (survey, demolition, partitions, rooms, furniture layout, wall elevations) as PDF, DXF, SVG, PNG or XLSX, and walk through the result in 3D with real sunlight. Next up: electrical and lighting (Stage 7). See the [roadmap](#-roadmap).
 
 ## ✨ Highlights
 
@@ -27,6 +27,7 @@ Most room planners stop at a pretty 3D picture. OpenPlanner is built around what
 | 📡 **Scan to plan**                  | Drop in a LiDAR scan — Polycam GLB, OBJ, PLY, ZIP or Apple RoomPlan room data. OpenPlanner finds the floor, ceiling, walls (with measured thickness where both faces were scanned), doors and windows, asks about doubtful spots with a confidence score, and imports the plan with room areas as a single undoable step. Recognition runs locally, in a background worker. |
 | 🧱 **Replanning variants**           | The survey stays the single “as is” plan; each variant marks what to demolish and adds new partitions with a material (aerated concrete, drywall, brick). A survey edit shows up in every variant at once. Compare two variants by room areas, demolished and new wall lengths and areas, or side by side on the plan.                                                      |
 | 🗂️ **Drawings from the model**       | The survey, demolition, partition and room plans and the wall elevations are built from the same model, the plans at one scale, with a ГОСТ title block, room schedule, demolition and partition statements and a legend. Export a vector PDF with layers and searchable Cyrillic text, DXF by layers, SVG, PNG, XLSX — or a single “crew pack” ZIP.                        |
+| 🛋️ **Furniture that snaps to walls** | Pick from a searchable catalog (bedroom, living room, kitchen, bathroom, storage, workplace) or drop in your own GLB model. Click or drag items onto the plan — near a wall they turn their back to it. Rotate, mirror and resize; furniture shows up in 3D, on wall elevations and on a furniture layout sheet with a specification.                                       |
 | 🧊 **3D with real sunlight**         | Switch the plan to 3D: orbit around the apartment or walk through it with WASD, cut the walls at any height, hide ceilings, show a white model or material colours, and save camera views in the project. Set the date, time and the plan’s orientation to north — the sun casts real shadows through your windows.                                                         |
 | 📏 **Survey tools**                  | Wall chains with snapping (ends, midpoints, perpendicular, axes, grid) or exact lengths and angles from the keyboard, mitered corners and T-junctions, doors / windows / arches, node-anchored dimensions, leaders, layers you can hide or lock, and an image underlay you calibrate with one known distance.                                                               |
 | 📐 **Rooms that compute themselves** | Click inside a closed contour (or let _Find rooms_ do it): area and perimeter are measured along the wall faces and stay correct when you move, split or extend walls.                                                                                                                                                                                                      |
@@ -66,7 +67,7 @@ Development goes in stages. Each stage ships fully working; there is no throwawa
 | 3 · Replanning            | Existing / demolish / new status, partitions, design variants and comparison                          | ✅ Done    |
 | 4 · Drawings              | Sheet set with title block, wall elevations, vector PDF, DXF by layers                                | ✅ Done    |
 | 5 · 3D                    | Orbit, walkthrough, saved views, section cut, sun and shadows                                         | ✅ Done    |
-| 6 · Furniture             | Catalog, drag and drop, GLB import                                                                    | 📋 Planned |
+| 6 · Furniture             | Catalog, drag and drop, wall snapping, GLB import, furniture layout sheet                             | ✅ Done    |
 | 7 · Electrical & lighting | Outlets, switches, panel groups, cable runs, illuminance                                              | 📋 Planned |
 | 8 · Plumbing              | Fixtures, outlets, auto-routing, slope checks                                                         | 📋 Planned |
 | 9 · Finishes              | Surfaces, tile layout with cuts, wall elevations                                                      | 📋 Planned |
