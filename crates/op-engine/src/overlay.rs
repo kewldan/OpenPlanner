@@ -64,6 +64,10 @@ fn outline(
         );
         return true;
     }
+    if let Some(d) = doc.device(id) {
+        draw::device_symbol(scene, d, color, width);
+        return true;
+    }
     if let Some(f) = doc.furniture_item(id) {
         scene.polyline(&crate::furniture::corners(f), true, width, color);
         return true;
@@ -197,6 +201,11 @@ impl EngineState {
                     }
                 }
                 scene.handle(a, 9.0, accent);
+            }
+            (Tool::Device, _) => {
+                if let Some(d) = self.device_candidate(p, false) {
+                    draw::device_symbol(&mut scene, &d, accent, 1.5);
+                }
             }
             (Tool::Furniture, _) => {
                 if let Some(f) = self.furniture_candidate(p, false) {

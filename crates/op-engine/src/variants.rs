@@ -299,6 +299,27 @@ pub fn create(
         f.variant.clone_from(&new_variant);
         commands.push(put(Element::Furniture(f)));
     }
+    // Электроточки: ссылки клавиш на светильники копии переходят на новые светильники.
+    let lights: Vec<String> = doc
+        .devices
+        .iter()
+        .filter(|e| mine(&e.variant))
+        .map(|e| e.id.clone())
+        .collect();
+    for id in &lights {
+        fresh(&mut map, id, ids);
+    }
+    for d in doc.devices.iter().filter(|e| mine(&e.variant)) {
+        let mut d = d.clone();
+        d.id = re(&d.id, &map);
+        for key in &mut d.keys {
+            for l in key.iter_mut() {
+                *l = re(l, &map);
+            }
+        }
+        d.variant.clone_from(&new_variant);
+        commands.push(put(Element::Device(d)));
+    }
     (commands, id)
 }
 
@@ -321,6 +342,10 @@ pub fn delete(doc: &Document, variant: &str) -> Vec<Command> {
         .filter(|e| mine(&e.variant))
         .for_each(|e| remove(&e.id));
     doc.furniture
+        .iter()
+        .filter(|e| mine(&e.variant))
+        .for_each(|e| remove(&e.id));
+    doc.devices
         .iter()
         .filter(|e| mine(&e.variant))
         .for_each(|e| remove(&e.id));
@@ -459,6 +484,10 @@ pub fn translate(doc: &mut Document, d: DVec2) {
     for f in &mut doc.furniture {
         f.x += d.x;
         f.y += d.y;
+    }
+    for dev in &mut doc.devices {
+        dev.x += d.x;
+        dev.y += d.y;
     }
     for dim in &mut doc.dimensions {
         for a in [&mut dim.start, &mut dim.end] {

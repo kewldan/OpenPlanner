@@ -7,6 +7,7 @@ pub mod camera3d;
 pub mod derived;
 pub mod draw;
 pub mod edit;
+pub mod electric;
 pub mod furniture;
 pub mod geometry;
 pub mod hit;

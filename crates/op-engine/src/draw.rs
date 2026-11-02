@@ -41,6 +41,11 @@ pub mod palette {
     pub fn accent() -> Color {
         Color::hex(0x0A7C4E, 1.0)
     }
+    /// Электрика.
+    #[must_use]
+    pub fn electric() -> Color {
+        Color::hex(0x1D4ED8, 1.0)
+    }
     /// Ошибка и демонтаж.
     #[must_use]
     pub fn danger() -> Color {
@@ -170,6 +175,20 @@ pub fn furniture_symbol(
     }
 }
 
+/// Обозначение электроточки.
+pub fn device_symbol(scene: &mut Scene, d: &op_model::Device, color: Color, width: f32) {
+    for m in crate::electric::plan_marks(d) {
+        if m.dashed {
+            let n = m.points.len();
+            for i in 0..n {
+                scene.dashed(m.points[i], m.points[(i + 1) % n], width, 4.0, color);
+            }
+        } else {
+            scene.polyline(&m.points, m.closed, width, color);
+        }
+    }
+}
+
 /// Сцена документа: подложки, помещения, мебель, стены, проёмы, размеры, выноски.
 #[must_use]
 pub fn document(
@@ -277,6 +296,10 @@ pub fn document(
             };
             scene.text(font, area_at, &text, world_text(ROOM_AREA_SIZE, color));
         }
+    }
+
+    for d in doc.devices.iter().filter(|d| shown(&d.layer)) {
+        device_symbol(&mut scene, d, palette::electric(), 1.2);
     }
 
     for d in doc.dimensions.iter().filter(|d| shown(&d.layer)) {

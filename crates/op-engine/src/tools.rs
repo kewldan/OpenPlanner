@@ -10,7 +10,7 @@ use op_render::text::Font;
 
 use crate::{
     edit::{self, WallEnd},
-    furniture, geometry,
+    electric, furniture, geometry,
     hit::{self, HandleKind},
     protocol::{FromEngine, PointerPhase, SnapKind, Tool, ToolStep},
     snap::{self, Snap, SnapInput},
@@ -23,6 +23,8 @@ const DRAG_THRESHOLD_PX: f64 = 3.0;
 const HANDLE_RADIUS_PX: f64 = 7.0;
 /// Расстояние, на котором мебель притягивается к стене, CSS-пиксели.
 const FURNITURE_SNAP_PX: f64 = 24.0;
+/// Расстояние, на котором электроточка притягивается к грани стены, CSS-пиксели.
+const DEVICE_SNAP_PX: f64 = 40.0;
 /// Радиус попадания по линии, CSS-пиксели.
 const HIT_RADIUS_PX: f64 = 5.0;
 
@@ -87,6 +89,7 @@ impl ToolData {
             (Tool::Select, _) => ToolStep::Idle,
             (Tool::Demolish, _) => ToolStep::DemolishPick,
             (Tool::Furniture, _) => ToolStep::FurniturePlace,
+            (Tool::Device, _) => ToolStep::DevicePlace,
         }
     }
 }
@@ -292,6 +295,7 @@ impl EngineState {
             Tool::Leader => self.leader_pointer(phase, p, shift, alt),
             Tool::Calibrate => self.calibrate_pointer(phase, p, alt),
             Tool::Furniture => self.furniture_pointer(phase, p, alt),
+            Tool::Device => self.device_pointer(phase, p, alt),
         }
     }
 
@@ -465,6 +469,9 @@ impl EngineState {
         if let Some(f) = doc.furniture_item(id) {
             return Some(DVec2::new(f.x, f.y));
         }
+        if let Some(d) = doc.device(id) {
+            return Some(DVec2::new(d.x, d.y));
+        }
         None
     }
 
@@ -503,6 +510,29 @@ impl EngineState {
                         }
                     }
                     return vec![put(Element::Furniture(f))];
+                }
+                // Одна настенная электроточка: скользит по граням стен.
+                if let [id] = self.selection.as_slice()
+                    && let Some(d) = doc.device(id)
+                    && electric::on_wall(d.kind)
+                    && !alt
+                {
+                    let target = *grab + (p - drag.start_world);
+                    let mut d = d.clone();
+                    if let Some((at, rotation)) = electric::snap_to_face(
+                        doc,
+                        &self.derived,
+                        target,
+                        DEVICE_SNAP_PX / self.px(),
+                    ) {
+                        d.x = at.x;
+                        d.y = at.y;
+                        d.rotation = rotation;
+                    } else {
+                        d.x = round_to(target.x, 10.0);
+                        d.y = round_to(target.y, 10.0);
+                    }
+                    return vec![put(Element::Device(d))];
                 }
                 let exclude: Vec<String> = doc
                     .walls
@@ -648,6 +678,61 @@ impl EngineState {
         };
         f.id = self.ids.generate();
         self.execute_all(vec![put(Element::Furniture(f))])
+    }
+
+    // ---------- Электроточки ----------
+
+    /// Точка инструмента «Электроточка» в точке `p`: настенная — на грани стены.
+    pub(crate) fn device_candidate(&self, p: DVec2, alt: bool) -> Option<op_model::Device> {
+        let item = electric::item(self.device_kind)?;
+        let wall = electric::on_wall(item.kind);
+        let snapped = (wall && !alt)
+            .then(|| {
+                electric::snap_to_face(self.doc(), &self.derived, p, DEVICE_SNAP_PX / self.px())
+            })
+            .flatten();
+        let (at, rotation) =
+            snapped.unwrap_or((DVec2::new(round_to(p.x, 10.0), round_to(p.y, 10.0)), 0.0));
+        // Потолочные точки — на высоте потолка.
+        let height = if wall || item.kind == op_model::DeviceKind::FloorOutlet {
+            item.height
+        } else {
+            self.doc().default_ceiling_height
+        };
+        Some(op_model::Device {
+            id: String::new(),
+            layer: LayerKind::Electrical.id().into(),
+            variant: None,
+            kind: item.kind,
+            x: at.x,
+            y: at.y,
+            rotation,
+            height,
+            label: String::new(),
+            power: item.power,
+            flux: item.flux,
+            circuit: None,
+            keys: vec![Vec::new(); item.kind.keys()],
+        })
+    }
+
+    fn device_pointer(&mut self, phase: PointerPhase, p: DVec2, alt: bool) -> Vec<FromEngine> {
+        self.cursor = Some(Snap {
+            point: p,
+            kind: None,
+            node: None,
+            wall: None,
+            guides: Vec::new(),
+        });
+        self.overlay_dirty = true;
+        if phase != PointerPhase::Down {
+            return vec![];
+        }
+        let Some(mut d) = self.device_candidate(p, alt) else {
+            return vec![];
+        };
+        d.id = self.ids.generate();
+        self.execute_all(vec![put(Element::Device(d))])
     }
 
     // ---------- Демонтаж ----------

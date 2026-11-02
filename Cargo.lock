@@ -2533,6 +2533,7 @@ dependencies = [
  "image",
  "js-sys",
  "log",
+ "op-calc",
  "op-export",
  "op-format",
  "op-geom",

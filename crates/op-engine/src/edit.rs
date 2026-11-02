@@ -143,6 +143,35 @@ pub fn delete(doc: &Document, derived: &Derived, ids: &[String]) -> Vec<Command>
             removed_assets.insert(u.asset.as_str());
         }
     }
+    // Электроточки; удалённые светильники уходят из клавиш выключателей и сценариев.
+    let lights: HashSet<&str> = doc
+        .devices
+        .iter()
+        .filter(|d| selected.contains(d.id.as_str()) && d.kind.is_light())
+        .map(|d| d.id.as_str())
+        .collect();
+    for d in &doc.devices {
+        if selected.contains(d.id.as_str()) {
+            commands.push(Command::Remove { id: d.id.clone() });
+        } else if d.keys.iter().flatten().any(|l| lights.contains(l.as_str())) {
+            let mut d = d.clone();
+            for key in &mut d.keys {
+                key.retain(|l| !lights.contains(l.as_str()));
+            }
+            commands.push(put(Element::Device(d)));
+        }
+    }
+    if doc
+        .scenes
+        .iter()
+        .any(|s| s.lights.iter().any(|l| lights.contains(l.as_str())))
+    {
+        let mut scenes = doc.scenes.clone();
+        for s in &mut scenes {
+            s.lights.retain(|l| !lights.contains(l.as_str()));
+        }
+        commands.push(Command::SetScenes { scenes });
+    }
     for f in &doc.furniture {
         if selected.contains(f.id.as_str()) {
             commands.push(Command::Remove { id: f.id.clone() });
@@ -223,6 +252,14 @@ pub fn translate(doc: &Document, ids: &[String], delta: DVec2) -> Vec<Command> {
             f.x += delta.x;
             f.y += delta.y;
             commands.push(put(Element::Furniture(f)));
+        }
+    }
+    for d in &doc.devices {
+        if selected.contains(d.id.as_str()) {
+            let mut d = d.clone();
+            d.x += delta.x;
+            d.y += delta.y;
+            commands.push(put(Element::Device(d)));
         }
     }
     for d in &doc.dimensions {

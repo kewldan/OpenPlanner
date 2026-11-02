@@ -80,6 +80,8 @@ pub struct EngineState {
     pub(crate) scene_3d_dirty: bool,
     /// Камера 3D уже наведена на модель этого документа.
     pub(crate) camera_3d_fitted: bool,
+    /// Вид точки для инструмента «Электроточка».
+    pub(crate) device_kind: op_model::DeviceKind,
     /// Позиция каталога для инструмента «Мебель».
     pub(crate) furniture_item: String,
     /// Поворот предмета инструмента «Мебель», градусы.
@@ -120,6 +122,7 @@ impl EngineState {
             camera_3d: crate::camera3d::Camera3d::default(),
             scene_3d_dirty: true,
             camera_3d_fitted: false,
+            device_kind: op_model::DeviceKind::Socket,
             furniture_item: "sofa".into(),
             furniture_rotation: 0.0,
             models: HashMap::new(),
@@ -206,6 +209,10 @@ impl EngineState {
                 FromEngine::Catalog {
                     items: crate::furniture::catalog_entries(),
                 },
+                FromEngine::DeviceCatalog {
+                    items: crate::electric::catalog_entries(),
+                },
+                self.electrical_event(),
             ],
         }
     }
@@ -252,6 +259,7 @@ impl EngineState {
             self.selection_event(),
             self.tool_event(),
             self.view_event(),
+            self.electrical_event(),
         ]
     }
 
@@ -417,6 +425,24 @@ impl EngineState {
                 }
                 self.furniture_item = item;
                 self.set_tool(Tool::Furniture)
+            }
+            ToEngine::DeviceTool { kind } => {
+                self.device_kind = kind;
+                self.set_tool(Tool::Device)
+            }
+            ToEngine::AutoCircuits => {
+                let (circuits, devices) = {
+                    let ids = &mut self.ids;
+                    crate::electric::auto_circuits(&self.projected, &self.derived, || {
+                        ids.generate()
+                    })
+                };
+                let mut commands = vec![Command::SetCircuits { circuits }];
+                commands.extend(devices.into_iter().map(|d| Command::Put {
+                    element: Element::Device(d),
+                    index: None,
+                }));
+                self.execute_all(commands)
             }
             ToEngine::TransformFurniture { rotate, mirror } => {
                 self.transform_furniture(rotate, mirror)
@@ -642,6 +668,13 @@ impl EngineState {
         Ok(EngineEvents { events })
     }
 
+    /// Расчёт электрики текущего вида.
+    pub(crate) fn electrical_event(&self) -> FromEngine {
+        FromEngine::Electrical {
+            report: crate::electric::report(&self.projected, &self.derived),
+        }
+    }
+
     /// Добавляет свою модель мебели (GLB) в центр видимой области и выделяет её.
     ///
     /// # Errors
@@ -863,6 +896,7 @@ impl EngineState {
                     self.history_event(),
                     self.summary_event(),
                     self.view_mode_event(),
+                    self.electrical_event(),
                 ];
                 if before != self.selection {
                     events.push(self.selection_event());
@@ -1099,6 +1133,7 @@ fn all_ids(doc: &Document) -> HashSet<&str> {
         .chain(doc.leaders.iter().map(|e| e.id.as_str()))
         .chain(doc.underlays.iter().map(|e| e.id.as_str()))
         .chain(doc.furniture.iter().map(|e| e.id.as_str()))
+        .chain(doc.devices.iter().map(|e| e.id.as_str()))
         .collect()
 }
 

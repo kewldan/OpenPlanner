@@ -134,6 +134,68 @@ fn furniture(
     }
 }
 
+/// Электроточка: накладка на стене, щит, светильник на потолке или подвес.
+fn device(mesh: &mut Mesh, d: &op_model::Device, ceiling: f64, options: &Options3d) {
+    use op_model::DeviceKind as K;
+    let top = options.cut.unwrap_or(f64::INFINITY);
+    let face = -crate::electric::SYMBOL / 2.0;
+    // Брусок в локальных осях точки: x, y (стена на −Y), высота.
+    let mut part = |x: f64, y0: f64, y1: f64, z0: f64, z1: f64, color: u32| {
+        let z1 = z1.min(top);
+        if z1 <= z0 {
+            return;
+        }
+        let place = |px: f64, py: f64| from_plan(crate::electric::to_plan(d, DVec2::new(px, py)));
+        let rect = [place(-x, y0), place(x, y0), place(x, y1), place(-x, y1)];
+        mesh.block(rect, z0, z1, Color::hex(color, 1.0));
+    };
+    let plate = 0xF7F7F5;
+    let glow = 0xFFF1C2;
+    match d.kind {
+        K::CeilingLight => part(200.0, -200.0, 200.0, ceiling - 60.0, ceiling, glow),
+        K::Pendant => {
+            part(150.0, -150.0, 150.0, ceiling - 750.0, ceiling - 600.0, glow);
+            part(6.0, -6.0, 6.0, ceiling - 600.0, ceiling, 0x555555);
+        }
+        K::Spot => part(45.0, -45.0, 45.0, ceiling - 10.0, ceiling, glow),
+        K::LedStrip => part(500.0, -10.0, 10.0, ceiling - 10.0, ceiling, glow),
+        K::CeilingOutlet => part(60.0, -60.0, 60.0, ceiling - 20.0, ceiling, plate),
+        K::FloorOutlet => part(60.0, -60.0, 60.0, 0.0, 10.0, plate),
+        K::WallLight => part(
+            100.0,
+            face,
+            face + 120.0,
+            d.height - 75.0,
+            d.height + 75.0,
+            glow,
+        ),
+        K::Panel => part(
+            250.0,
+            face,
+            face + 120.0,
+            d.height - 250.0,
+            d.height + 250.0,
+            0xE3E3E0,
+        ),
+        K::JunctionBox => part(
+            40.0,
+            face,
+            face + 30.0,
+            d.height - 40.0,
+            d.height + 40.0,
+            plate,
+        ),
+        _ => part(
+            40.0,
+            face,
+            face + 15.0,
+            d.height - 40.0,
+            d.height + 40.0,
+            plate,
+        ),
+    }
+}
+
 /// Солнце для настроек: положение (в том числе под горизонтом) и свет для сцены.
 #[must_use]
 pub fn sun(doc: &Document, options: &Options3d) -> Option<(SunPosition, Option<Sun>)> {
@@ -269,6 +331,9 @@ pub fn build(doc: &Document, derived: &Derived, options: &Options3d, models: &Mo
 
     for f in doc.furniture.iter().filter(|f| shown(&f.layer)) {
         furniture(&mut opaque, f, models, options, &palette);
+    }
+    for d in doc.devices.iter().filter(|d| shown(&d.layer)) {
+        device(&mut opaque, d, doc.default_ceiling_height, options);
     }
 
     // Полы и потолки помещений (метки в одной области — одно помещение).

@@ -1,6 +1,6 @@
 //! Протокол UI ↔ воркер. TS-типы генерируются через tsify.
 
-use op_model::{Command, Document, Justification, WallMaterial};
+use op_model::{Command, DeviceKind, Document, Justification, WallMaterial};
 use op_scan::{ScanAnswer, ScanParams, ScanResult};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
@@ -32,6 +32,8 @@ pub enum Tool {
     Demolish,
     /// Мебель: позиция каталога ставится щелчком, у стены — спинкой к ней.
     Furniture,
+    /// Электроточка или светильник: на стене — на её грани, иначе — где щёлкнули.
+    Device,
 }
 
 /// Шаг инструмента — по нему UI показывает подсказку.
@@ -70,6 +72,8 @@ pub enum ToolStep {
     Unavailable,
     /// Мебель: щелчок ставит предмет.
     FurniturePlace,
+    /// Электроточка: щелчок ставит точку.
+    DevicePlace,
 }
 
 /// Фаза ввода указателя (левая кнопка).
@@ -301,6 +305,118 @@ pub struct CatalogEntry {
     pub icon: String,
 }
 
+/// Позиция каталога электроточек для UI.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceEntry {
+    /// Вид.
+    pub kind: DeviceKind,
+    /// Название.
+    pub name: String,
+    /// Раздел: «Розетки», «Выключатели», «Светильники»…
+    pub group: String,
+    /// Светильник или выключатель — показывается в режиме «Освещение».
+    pub lighting: bool,
+    /// Ставится на стену (иначе — на потолок или пол).
+    pub on_wall: bool,
+    /// Высота установки по умолчанию, мм.
+    pub height: f64,
+    /// Мощность по умолчанию, Вт.
+    pub power: f64,
+    /// Световой поток по умолчанию, лм.
+    pub flux: f64,
+    /// Условное обозначение в квадрате 100 × 100: путь SVG.
+    pub icon: String,
+}
+
+/// Расчёт группы щита.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct CircuitReport {
+    /// Группа.
+    pub id: String,
+    /// Обозначение.
+    pub name: String,
+    /// Назначение.
+    pub purpose: String,
+    /// Электроточек в группе.
+    pub devices: u32,
+    /// Установленная мощность, Вт.
+    pub installed: f64,
+    /// Расчётная мощность, Вт.
+    pub demand: f64,
+    /// Расчётный ток, А.
+    pub current: f64,
+    /// Длина кабеля по трассе с запасом, м.
+    pub length: f64,
+    /// Падение напряжения, %.
+    pub drop: f64,
+    /// Допустимый ток кабеля, А.
+    pub ampacity: f64,
+    /// Нарушения, понятные пользователю.
+    pub warnings: Vec<String>,
+}
+
+/// Аппарат щита.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct PanelItemInfo {
+    /// Название.
+    pub name: String,
+    /// Модулей DIN на аппарат.
+    pub modules: u32,
+    /// Количество.
+    pub count: u32,
+}
+
+/// Состав щита.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct PanelReport {
+    /// Аппараты.
+    pub items: Vec<PanelItemInfo>,
+    /// Занято модулей.
+    pub modules: u32,
+    /// Корпус, модулей.
+    pub enclosure: u32,
+    /// Ввод трёхфазный.
+    pub three_phase: bool,
+    /// Вводной автомат, А.
+    pub main_breaker: f64,
+}
+
+/// Освещённость помещения.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct RoomLighting {
+    /// Помещение.
+    pub id: String,
+    /// Название.
+    pub name: String,
+    /// Площадь, м².
+    pub area: f64,
+    /// Световой поток светильников, лм.
+    pub flux: f64,
+    /// Средняя освещённость, лк.
+    pub lux: f64,
+    /// Норма, лк.
+    pub norm: f64,
+}
+
+/// Расчёт электрики текущего вида.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct ElectricalReport {
+    /// Группы.
+    pub circuits: Vec<CircuitReport>,
+    /// Щит.
+    pub panel: PanelReport,
+    /// Освещённость по помещениям.
+    pub rooms: Vec<RoomLighting>,
+    /// Потребители без группы.
+    pub unassigned: u32,
+}
+
 /// Длина и площадь стен одного материала.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]
@@ -506,6 +622,13 @@ pub enum ToEngine {
         /// Позиция каталога.
         item: String,
     },
+    /// Инструмент «Электроточка» с видом точки.
+    DeviceTool {
+        /// Вид.
+        kind: DeviceKind,
+    },
+    /// Распределить электроточки по группам щита (группы создаются заново).
+    AutoCircuits,
     /// Повернуть и (или) отразить выделенную мебель или предмет инструмента.
     TransformFurniture {
         /// Поворот по часовой стрелке, градусы.
@@ -635,6 +758,16 @@ pub enum FromEngine {
     Catalog {
         /// Позиции.
         items: Vec<CatalogEntry>,
+    },
+    /// Каталог электроточек и светильников (один раз при запуске).
+    DeviceCatalog {
+        /// Позиции.
+        items: Vec<DeviceEntry>,
+    },
+    /// Расчёт электрики и освещённости текущего вида.
+    Electrical {
+        /// Расчёт.
+        report: ElectricalReport,
     },
     /// Сводка обмера и всех вариантов: площади и изменения.
     VariantsSummary {

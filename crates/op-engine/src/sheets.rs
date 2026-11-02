@@ -33,6 +33,7 @@ use op_model::{
 use crate::{
     derived::Derived,
     draw::{Pen, opening_lines},
+    electric,
     geometry::{self, DimensionGeometry},
     protocol::{DrawingFormat, DrawingSetInfo, ExportNames, SheetPreview},
     variants::view_name,
@@ -82,6 +83,7 @@ const LAYER_NOTES: &str = "Выноски";
 const LAYER_DEMOLITION: &str = "Демонтаж";
 const LAYER_CONSTRUCTION: &str = "Монтаж";
 const LAYER_FURNITURE: &str = "Мебель";
+const LAYER_ELECTRIC: &str = "Электрика";
 
 /// Лист комплекта.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,6 +93,10 @@ enum Kind {
     Construction,
     Rooms,
     Furniture,
+    Sockets,
+    Lighting,
+    Switches,
+    Wiring,
 }
 
 impl Kind {
@@ -101,6 +107,10 @@ impl Kind {
             Self::Construction => "План монтажа перегородок",
             Self::Rooms => "План помещений",
             Self::Furniture => "План расстановки мебели",
+            Self::Sockets => "План розеток и выводов",
+            Self::Lighting => "План освещения",
+            Self::Switches => "План выключателей",
+            Self::Wiring => "План электропроводки",
         }
     }
 }
@@ -141,6 +151,26 @@ pub fn build(doc: &Document, variant: Option<&str>, date: &str) -> SheetSet {
     }
     if !views.furniture_rows().is_empty() {
         kinds.push(Kind::Furniture);
+    }
+    {
+        let (doc, derived) = views.final_view();
+        let has = |f: &dyn Fn(op_model::DeviceKind) -> bool| {
+            doc.devices
+                .iter()
+                .any(|d| derived.visible.contains(&d.layer) && f(d.kind))
+        };
+        if has(&electric::is_outlet) {
+            kinds.push(Kind::Sockets);
+        }
+        if has(&op_model::DeviceKind::is_light) {
+            kinds.push(Kind::Lighting);
+        }
+        if has(&electric::is_switch) {
+            kinds.push(Kind::Switches);
+        }
+        if !doc.circuits.is_empty() && has(&|_| true) {
+            kinds.push(Kind::Wiring);
+        }
     }
 
     let size = {
@@ -976,8 +1006,246 @@ impl<'a> Views<'a> {
                 ));
             }
             Kind::Furniture => out.push(furniture_table(&self.furniture_rows())),
+            Kind::Sockets => out.push(self.outlets_table()),
+            Kind::Lighting => {
+                out.push(self.lights_table());
+                out.push(illuminance_table(&self.electrical().rooms));
+            }
+            Kind::Switches => {
+                out.push(self.switches_table());
+                out.extend(self.links_table());
+                out.extend(self.scenes_table());
+            }
+            Kind::Wiring => {
+                let report = self.electrical();
+                out.push(circuits_table(self.final_view().0, &report));
+                out.push(panel_table(&report.panel));
+            }
         }
         out
+    }
+
+    /// Расчёт электрики итогового вида.
+    fn electrical(&self) -> crate::protocol::ElectricalReport {
+        let (doc, derived) = self.final_view();
+        electric::report(doc, derived)
+    }
+
+    /// Видимые электроточки итогового вида, отобранные `keep`.
+    fn devices(&self, keep: impl Fn(op_model::DeviceKind) -> bool) -> Vec<&op_model::Device> {
+        let (doc, derived) = self.final_view();
+        doc.devices
+            .iter()
+            .filter(|d| derived.visible.contains(&d.layer) && keep(d.kind))
+            .collect()
+    }
+
+    /// Марки светильников «С1…» и выключателей «В1…» в порядке документа.
+    fn device_marks(&self) -> HashMap<String, String> {
+        let mut marks = HashMap::new();
+        let (mut lights, mut switches) = (0, 0);
+        for d in self.devices(|_| true) {
+            if d.kind.is_light() {
+                lights += 1;
+                marks.insert(d.id.clone(), format!("С{lights}"));
+            } else if electric::is_switch(d.kind) {
+                switches += 1;
+                marks.insert(d.id.clone(), format!("В{switches}"));
+            }
+        }
+        marks
+    }
+
+    fn room_name(&self, d: &op_model::Device) -> String {
+        let (doc, derived) = self.final_view();
+        shapes::region_at(&derived.regions, DVec2::new(d.x, d.y))
+            .and_then(|i| {
+                doc.rooms
+                    .iter()
+                    .find(|r| derived.room_regions.get(&r.id) == Some(&i))
+            })
+            .map_or_else(|| "—".to_owned(), |r| r.name.clone())
+    }
+
+    fn outlets_table(&self) -> Table {
+        let mut rows: Vec<(String, String, f64, String, usize)> = Vec::new();
+        for d in self.devices(electric::is_outlet) {
+            let key = (
+                self.room_name(d),
+                electric::kind_name(d.kind).to_owned(),
+                d.height.round(),
+                d.label.clone(),
+            );
+            match rows
+                .iter_mut()
+                .find(|r| r.0 == key.0 && r.1 == key.1 && (r.2 - key.2).abs() < 0.5 && r.3 == key.3)
+            {
+                Some(r) => r.4 += 1,
+                None => rows.push((key.0, key.1, key.2, key.3, 1)),
+            }
+        }
+        let count: usize = rows.iter().map(|r| r.4).sum();
+        Table {
+            title: "Ведомость розеток и выводов".into(),
+            columns: vec![
+                Column::new("Помещение", 45.0, Align::Left),
+                Column::new("Тип", 58.0, Align::Left),
+                Column::new("H, мм", 18.0, Align::Right),
+                Column::new("Назначение", 46.0, Align::Left),
+                Column::new("Кол.", 18.0, Align::Right),
+            ],
+            rows: rows
+                .into_iter()
+                .map(|r| {
+                    vec![
+                        Cell::text(r.0),
+                        Cell::text(r.1),
+                        Cell::number(r.2, 0),
+                        Cell::text(r.3),
+                        Cell::text(r.4.to_string()),
+                    ]
+                })
+                .collect(),
+            footer: Some(vec![
+                Cell::text("Итого"),
+                Cell::text(""),
+                Cell::text(""),
+                Cell::text(""),
+                Cell::text(count.to_string()),
+            ]),
+        }
+    }
+
+    fn lights_table(&self) -> Table {
+        let mut rows: Vec<(String, f64, f64, usize)> = Vec::new();
+        for d in self.devices(op_model::DeviceKind::is_light) {
+            let name = electric::kind_name(d.kind).to_owned();
+            match rows
+                .iter_mut()
+                .find(|r| r.0 == name && (r.1 - d.flux).abs() < 0.5 && (r.2 - d.power).abs() < 0.05)
+            {
+                Some(r) => r.3 += 1,
+                None => rows.push((name, d.flux, d.power, 1)),
+            }
+        }
+        #[allow(clippy::cast_precision_loss)] // светильников — единицы и десятки
+        let power: f64 = rows.iter().map(|r| r.2 * r.3 as f64).sum();
+        Table {
+            title: "Светильники".into(),
+            columns: vec![
+                Column::new("Тип", 95.0, Align::Left),
+                Column::new("Φ, лм", 30.0, Align::Right),
+                Column::new("P, Вт", 30.0, Align::Right),
+                Column::new("Кол.", 30.0, Align::Right),
+            ],
+            rows: rows
+                .iter()
+                .map(|r| {
+                    vec![
+                        Cell::text(r.0.clone()),
+                        Cell::number(r.1, 0),
+                        Cell::number(r.2, 0),
+                        Cell::text(r.3.to_string()),
+                    ]
+                })
+                .collect(),
+            footer: Some(vec![
+                Cell::text("Итого, Вт"),
+                Cell::text(""),
+                Cell::number(power, 0),
+                Cell::text(rows.iter().map(|r| r.3).sum::<usize>().to_string()),
+            ]),
+        }
+    }
+
+    fn switches_table(&self) -> Table {
+        let mut rows: Vec<(String, f64, usize)> = Vec::new();
+        for d in self.devices(electric::is_switch) {
+            let name = electric::kind_name(d.kind).to_owned();
+            match rows
+                .iter_mut()
+                .find(|r| r.0 == name && (r.1 - d.height).abs() < 0.5)
+            {
+                Some(r) => r.2 += 1,
+                None => rows.push((name, d.height.round(), 1)),
+            }
+        }
+        Table {
+            title: "Выключатели".into(),
+            columns: vec![
+                Column::new("Тип", 115.0, Align::Left),
+                Column::new("H, мм", 35.0, Align::Right),
+                Column::new("Кол.", 35.0, Align::Right),
+            ],
+            rows: rows
+                .into_iter()
+                .map(|r| {
+                    vec![
+                        Cell::text(r.0),
+                        Cell::number(r.1, 0),
+                        Cell::text(r.2.to_string()),
+                    ]
+                })
+                .collect(),
+            footer: None,
+        }
+    }
+
+    /// Какие светильники включает каждая клавиша.
+    fn links_table(&self) -> Option<Table> {
+        let marks = self.device_marks();
+        let mut rows = Vec::new();
+        for d in self.devices(electric::is_switch) {
+            for (k, key) in d.keys.iter().enumerate() {
+                let lights: Vec<&str> = key
+                    .iter()
+                    .filter_map(|l| marks.get(l).map(String::as_str))
+                    .collect();
+                if lights.is_empty() {
+                    continue;
+                }
+                rows.push(vec![
+                    Cell::text(marks.get(&d.id).cloned().unwrap_or_default()),
+                    Cell::text((k + 1).to_string()),
+                    Cell::text(lights.join(", ")),
+                ]);
+            }
+        }
+        (!rows.is_empty()).then(|| Table {
+            title: "Управление светом".into(),
+            columns: vec![
+                Column::new("Выключатель", 35.0, Align::Center),
+                Column::new("Клавиша", 30.0, Align::Center),
+                Column::new("Светильники", 120.0, Align::Left),
+            ],
+            rows,
+            footer: None,
+        })
+    }
+
+    fn scenes_table(&self) -> Option<Table> {
+        let (doc, _) = self.final_view();
+        let marks = self.device_marks();
+        (!doc.scenes.is_empty()).then(|| Table {
+            title: "Сценарии освещения".into(),
+            columns: vec![
+                Column::new("Сценарий", 65.0, Align::Left),
+                Column::new("Светильники", 120.0, Align::Left),
+            ],
+            rows: doc
+                .scenes
+                .iter()
+                .map(|s| {
+                    let lights: Vec<&str> = s
+                        .lights
+                        .iter()
+                        .filter_map(|l| marks.get(l).map(String::as_str))
+                        .collect();
+                    vec![Cell::text(s.name.clone()), Cell::text(lights.join(", "))]
+                })
+                .collect(),
+            footer: None,
+        })
     }
 
     /// Итоговый вид: вариант, если он выбран, иначе обмер.
@@ -1059,12 +1327,69 @@ impl<'a> Views<'a> {
                 tables: vec![furniture_table(&furniture)],
             });
         }
+        if !self.devices(|_| true).is_empty() {
+            let report = self.electrical();
+            let mut tables = Vec::new();
+            if !self.devices(electric::is_outlet).is_empty() {
+                tables.push(self.outlets_table());
+            }
+            if !self.devices(op_model::DeviceKind::is_light).is_empty() {
+                tables.push(self.lights_table());
+                tables.push(illuminance_table(&report.rooms));
+            }
+            if !self.final_view().0.circuits.is_empty() {
+                tables.push(circuits_table(self.final_view().0, &report));
+                tables.push(panel_table(&report.panel));
+            }
+            out.push(Worksheet {
+                name: "Электрика".into(),
+                tables,
+            });
+        }
         out
     }
 
     /// План листа.
     fn draw(&self, kind: Kind, plot: &mut Plot<'_>) {
         match (kind, &self.variant) {
+            (Kind::Sockets | Kind::Lighting | Kind::Switches | Kind::Wiring, _) => {
+                let (doc, derived) = self.final_view();
+                let rooms = match &self.variant {
+                    Some(_) => self.variant_rooms(),
+                    None => self.survey_rooms(),
+                };
+                plot.walls(LAYER_WALLS, &walls_where(doc, derived, |_| true));
+                plot.openings(doc, derived, |_| true);
+                plot.room_labels(doc, &rooms, false);
+                let marks = self.device_marks();
+                match kind {
+                    Kind::Sockets => {
+                        plot.devices(&self.devices(electric::is_outlet), |d| {
+                            Some(geometry::format_length(d.height))
+                        });
+                    }
+                    Kind::Lighting => {
+                        plot.devices(&self.devices(op_model::DeviceKind::is_light), |d| {
+                            marks.get(&d.id).cloned()
+                        });
+                    }
+                    Kind::Switches => {
+                        let switches = self.devices(electric::is_switch);
+                        let lights = self.devices(op_model::DeviceKind::is_light);
+                        plot.switch_links(&switches, &lights);
+                        plot.devices(&lights, |d| marks.get(&d.id).cloned());
+                        plot.devices(&switches, |d| marks.get(&d.id).cloned());
+                    }
+                    _ => {
+                        let all = self.devices(|_| true);
+                        for c in &doc.circuits {
+                            let (path, _) = electric::route(doc, &c.id);
+                            plot.route(&path, &c.name);
+                        }
+                        plot.devices(&all, |_| None);
+                    }
+                }
+            }
             (Kind::Furniture, _) => {
                 let (doc, derived) = self.final_view();
                 let rooms = match &self.variant {
@@ -1300,6 +1625,116 @@ fn construction_table(rows: &[Row]) -> Table {
             Cell::text(""),
             Cell::text(""),
             Cell::number(area, 2),
+        ]),
+    }
+}
+
+fn illuminance_table(rooms: &[crate::protocol::RoomLighting]) -> Table {
+    Table {
+        title: "Освещённость помещений".into(),
+        columns: vec![
+            Column::new("Помещение", 55.0, Align::Left),
+            Column::new("S, м²", 22.0, Align::Right),
+            Column::new("Φ, лм", 24.0, Align::Right),
+            Column::new("E, лк", 22.0, Align::Right),
+            Column::new("Норма, лк", 24.0, Align::Right),
+            Column::new("Вывод", 38.0, Align::Left),
+        ],
+        rows: rooms
+            .iter()
+            .map(|r| {
+                vec![
+                    Cell::text(r.name.clone()),
+                    Cell::number(r.area, 2),
+                    Cell::number(r.flux, 0),
+                    Cell::number(r.lux, 0),
+                    Cell::number(r.norm, 0),
+                    Cell::text(if r.lux + 1e-9 >= r.norm {
+                        "соответствует"
+                    } else {
+                        "ниже нормы"
+                    }),
+                ]
+            })
+            .collect(),
+        footer: None,
+    }
+}
+
+fn circuits_table(doc: &Document, report: &crate::protocol::ElectricalReport) -> Table {
+    Table {
+        title: "Группы щита".into(),
+        columns: vec![
+            Column::new("Гр.", 13.0, Align::Center),
+            Column::new("Назначение", 43.0, Align::Left),
+            Column::new("Аппарат", 30.0, Align::Left),
+            Column::new("Кабель", 22.0, Align::Left),
+            Column::new("L, м", 13.0, Align::Right),
+            Column::new("Pр, кВт", 16.0, Align::Right),
+            Column::new("I, А", 14.0, Align::Right),
+            Column::new("ΔU, %", 14.0, Align::Right),
+            Column::new("Кс", 10.0, Align::Right),
+            Column::new("!", 10.0, Align::Center),
+        ],
+        rows: report
+            .circuits
+            .iter()
+            .filter_map(|r| {
+                let c = doc.circuits.iter().find(|c| c.id == r.id)?;
+                let apparatus = format!(
+                    "{} C{:.0}",
+                    if c.rcd {
+                        "Дифавт."
+                    } else {
+                        "Автомат"
+                    },
+                    c.breaker
+                );
+                let cores = if c.phases == 3 { 5 } else { 3 };
+                Some(vec![
+                    Cell::text(c.name.clone()),
+                    Cell::text(c.purpose.clone()),
+                    Cell::text(apparatus),
+                    Cell::text(format!(
+                        "{cores}×{}",
+                        c.section.to_string().replace('.', ",")
+                    )),
+                    Cell::number(r.length, 1),
+                    Cell::number(r.demand / 1000.0, 2),
+                    Cell::number(r.current, 1),
+                    Cell::number(r.drop, 1),
+                    Cell::number(c.demand, 1),
+                    Cell::text(if r.warnings.is_empty() { "" } else { "!" }),
+                ])
+            })
+            .collect(),
+        footer: None,
+    }
+}
+
+fn panel_table(panel: &crate::protocol::PanelReport) -> Table {
+    Table {
+        title: "Состав щита".into(),
+        columns: vec![
+            Column::new("Аппарат", 135.0, Align::Left),
+            Column::new("Модулей", 25.0, Align::Right),
+            Column::new("Кол.", 25.0, Align::Right),
+        ],
+        rows: panel
+            .items
+            .iter()
+            .map(|i| {
+                vec![
+                    Cell::text(i.name.clone()),
+                    Cell::text(i.modules.to_string()),
+                    Cell::text(i.count.to_string()),
+                ]
+            })
+            .collect(),
+        footer: Some(vec![
+            Cell::text(format!("Итого; корпус на {} модулей", panel.enclosure)),
+            Cell::text(panel.modules.to_string()),
+            Cell::text(""),
         ]),
     }
 }
@@ -1790,6 +2225,85 @@ impl Plot<'_> {
                 },
             ));
         }
+    }
+
+    /// Электроточки с подписями рядом (высота, марка).
+    fn devices(
+        &mut self,
+        devices: &[&op_model::Device],
+        label: impl Fn(&op_model::Device) -> Option<String>,
+    ) {
+        let layer = self.sheet.layer(LAYER_ELECTRIC);
+        for d in devices {
+            for m in electric::plan_marks(d) {
+                self.items.push(Item {
+                    layer,
+                    shape: Mark::Stroke {
+                        points: m.points,
+                        closed: m.closed,
+                        width: SYMBOL_LINE,
+                        color: Rgb::BLACK,
+                        dash: m.dashed.then_some((1.5, 1.0)),
+                    },
+                });
+            }
+            if let Some(text) = label(d) {
+                let at = electric::to_plan(d, DVec2::new(0.0, electric::SYMBOL * 0.9));
+                self.text(
+                    layer,
+                    at,
+                    &text,
+                    SMALL_HEIGHT * 0.8,
+                    Align::Center,
+                    Rgb::BLACK,
+                );
+            }
+        }
+    }
+
+    /// Связи выключателей со светильниками: тонкие штриховые линии.
+    fn switch_links(&mut self, switches: &[&op_model::Device], lights: &[&op_model::Device]) {
+        let layer = self.sheet.layer(LAYER_ELECTRIC);
+        for s in switches {
+            for id in s.keys.iter().flatten() {
+                if let Some(l) = lights.iter().find(|l| &l.id == id) {
+                    self.items.push(Item {
+                        layer,
+                        shape: Mark::Stroke {
+                            points: vec![DVec2::new(s.x, s.y), DVec2::new(l.x, l.y)],
+                            closed: false,
+                            width: THIN,
+                            color: Rgb::BLACK,
+                            dash: Some((2.0, 1.0)),
+                        },
+                    });
+                }
+            }
+        }
+    }
+
+    /// Трасса группы и её обозначение у начала.
+    fn route(&mut self, path: &[DVec2], name: &str) {
+        if path.len() < 2 {
+            return;
+        }
+        let layer = self.sheet.layer(LAYER_ELECTRIC);
+        self.items.push(Item::polyline(
+            layer,
+            path.to_vec(),
+            false,
+            0.35,
+            Rgb::hex(0x1D4ED8),
+        ));
+        let at = path[0].midpoint(path[1]) + DVec2::new(0.0, -SMALL_HEIGHT * self.k);
+        self.text(
+            layer,
+            at,
+            name,
+            SMALL_HEIGHT * 0.8,
+            Align::Center,
+            Rgb::hex(0x1D4ED8),
+        );
     }
 
     /// Мебель: обозначения и номера позиций спецификации в центрах предметов.

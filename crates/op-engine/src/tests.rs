@@ -570,6 +570,10 @@ fn every_element_survives_json() {
         item: "bed-double".into(),
     });
     click(&mut s, 2500.0, 3000.0);
+    s.handle(ToEngine::DeviceTool {
+        kind: op_model::DeviceKind::Switch2,
+    });
+    click(&mut s, 1500.0, 1100.0);
     let doc = s.document();
     let elements: Vec<Element> = doc
         .layers
@@ -584,8 +588,9 @@ fn every_element_survives_json() {
         .chain(doc.leaders.iter().cloned().map(Element::Leader))
         .chain(doc.underlays.iter().cloned().map(Element::Underlay))
         .chain(doc.furniture.iter().cloned().map(Element::Furniture))
+        .chain(doc.devices.iter().cloned().map(Element::Device))
         .collect();
-    assert_eq!(elements.len(), 8 + 4 + 4 + 1 + 1 + 1 + 1 + 1 + 1);
+    assert_eq!(elements.len(), 9 + 4 + 4 + 1 + 1 + 1 + 1 + 1 + 1 + 1);
     for element in elements {
         let command = Command::Put {
             element,
@@ -1736,4 +1741,285 @@ fn furniture_belongs_to_variants_and_drawings() {
     let copy = variant_id(&s);
     s.handle(ToEngine::DeleteVariant { id: copy });
     assert_eq!(s.document().furniture.len(), 2);
+}
+
+// ---------------------------------------------------------------- электрика
+
+fn device_tool(s: &mut EngineState, kind: op_model::DeviceKind) {
+    assert!(!has_error(&s.handle(ToEngine::DeviceTool { kind })));
+}
+
+fn electrical(events: &EngineEvents) -> crate::protocol::ElectricalReport {
+    events
+        .events
+        .iter()
+        .rev()
+        .find_map(|e| match e {
+            FromEngine::Electrical { report } => Some(report.clone()),
+            _ => None,
+        })
+        .unwrap()
+}
+
+/// Две комнаты: розетки, плита 380 В, светильники, двухклавишный выключатель и щит.
+fn wired(s: &mut EngineState) -> (String, String, String) {
+    use op_model::DeviceKind as K;
+    two_rooms(s);
+    device_tool(s, K::Panel);
+    click(s, 1100.0, 4500.0);
+    device_tool(s, K::Socket);
+    click(s, 1700.0, 1100.0);
+    click(s, 3200.0, 1100.0);
+    device_tool(s, K::SocketPower);
+    click(s, 3900.0, 3000.0);
+    device_tool(s, K::CeilingLight);
+    click(s, 1750.0, 3000.0);
+    let a = s.document().devices.last().unwrap().id.clone();
+    click(s, 3250.0, 3000.0);
+    let b = s.document().devices.last().unwrap().id.clone();
+    device_tool(s, K::Switch2);
+    click(s, 2440.0, 4600.0);
+    let switch = s.document().devices.last().unwrap().clone();
+    tool(s, Tool::Select);
+    let mut linked = switch.clone();
+    linked.keys = vec![vec![a.clone()], vec![b.clone()]];
+    assert!(!has_error(&s.handle(ToEngine::Command {
+        command: Command::Put {
+            element: Element::Device(linked),
+            index: None,
+        },
+    })));
+    (switch.id, a, b)
+}
+
+#[test]
+fn devices_sit_on_wall_faces_and_ceilings() {
+    use op_model::DeviceKind as K;
+    let mut s = state();
+    two_rooms(&mut s);
+    // Розетка у верхней стены (грань y = 1060): центр на половину обозначения от грани.
+    device_tool(&mut s, K::Socket);
+    assert_eq!(s.step(), ToolStep::DevicePlace);
+    click(&mut s, 1700.0, 1150.0);
+    let socket = s.document().devices[0].clone();
+    assert!(
+        (socket.y - (1060.0 + crate::electric::SYMBOL / 2.0)).abs() < 1e-6,
+        "{socket:?}"
+    );
+    assert!(socket.rotation.abs() < 1e-6);
+    assert!((socket.height - 300.0).abs() < 1e-9 && (socket.power - 300.0).abs() < 1e-9);
+    // Светильник — где щёлкнули, на высоте потолка, с потоком по умолчанию.
+    device_tool(&mut s, K::CeilingLight);
+    click(&mut s, 1750.0, 3000.0);
+    let light = s.document().devices[1].clone();
+    assert!((light.x - 1750.0).abs() < 1e-6 && (light.height - 2700.0).abs() < 1e-9);
+    assert!(light.flux > 0.0);
+    // Выключатель с двумя клавишами.
+    device_tool(&mut s, K::Switch2);
+    click(&mut s, 1100.0, 4000.0);
+    let switch = s.document().devices[2].clone();
+    assert_eq!(switch.keys.len(), 2);
+    assert!(
+        (switch.rotation - 270.0).abs() < 1e-6,
+        "лицом вправо от левой стены"
+    );
+}
+
+#[test]
+fn circuits_are_allocated_and_calculated() {
+    let mut s = state();
+    wired(&mut s);
+    let events = s.handle(ToEngine::AutoCircuits);
+    assert!(!has_error(&events));
+    let doc = s.document();
+    let purposes: Vec<&str> = doc.circuits.iter().map(|c| c.purpose.as_str()).collect();
+    assert_eq!(purposes[0], "Освещение");
+    assert!(purposes.contains(&"Розетка 380 В"), "{purposes:?}");
+    assert!(
+        purposes.iter().any(|p| p.starts_with("Розетки")),
+        "{purposes:?}"
+    );
+    let power = doc
+        .circuits
+        .iter()
+        .find(|c| c.purpose == "Розетка 380 В")
+        .unwrap();
+    assert_eq!(power.phases, 3);
+    // Щит, выключатель — без группы; потребители распределены.
+    let report = electrical(&events);
+    assert_eq!(report.unassigned, 0);
+    let lighting = &report.circuits[0];
+    assert!((lighting.installed - 80.0).abs() < 1e-9);
+    assert!(
+        lighting.length > 1.0 && lighting.warnings.is_empty(),
+        "{lighting:?}"
+    );
+    // Трёхфазный ввод: в щите вводной автомат 3P.
+    assert!(report.panel.three_phase);
+    assert!(
+        report
+            .panel
+            .items
+            .iter()
+            .any(|i| i.name.starts_with("Вводной автомат 3P"))
+    );
+    assert!(report.panel.enclosure >= report.panel.modules);
+    // Освещённость: по светильнику 3500 лм на комнату ≈ 5 м².
+    assert_eq!(report.rooms.len(), 2);
+    assert!(
+        report
+            .rooms
+            .iter()
+            .all(|r| r.lux > 100.0 && (r.norm - 150.0).abs() < 1e-9)
+    );
+
+    // Перегруз: розетка на 7 кВт в группе на 16 А — предупреждение.
+    let socket = s
+        .document()
+        .devices
+        .iter()
+        .find(|d| d.kind == op_model::DeviceKind::Socket)
+        .unwrap()
+        .clone();
+    let events = s.handle(ToEngine::Command {
+        command: Command::Put {
+            element: Element::Device(op_model::Device {
+                power: 7000.0,
+                ..socket.clone()
+            }),
+            index: None,
+        },
+    });
+    let report = electrical(&events);
+    let group = report
+        .circuits
+        .iter()
+        .find(|c| Some(&c.id) == socket.circuit.as_ref())
+        .unwrap();
+    assert!(
+        group
+            .warnings
+            .iter()
+            .any(|w| w.contains("больше тока автомата")),
+        "{group:?}"
+    );
+}
+
+#[test]
+fn deleting_a_light_unlinks_switches_and_scenes() {
+    let mut s = state();
+    let (switch, a, b) = wired(&mut s);
+    s.handle(ToEngine::Command {
+        command: Command::SetScenes {
+            scenes: vec![op_model::LightScene {
+                id: "scene".into(),
+                name: "Вечер".into(),
+                lights: vec![a.clone(), b.clone()],
+            }],
+        },
+    });
+    s.handle(ToEngine::Select {
+        ids: vec![a.clone()],
+    });
+    s.handle(ToEngine::DeleteSelection);
+    let doc = s.document();
+    assert!(doc.device(&a).is_none());
+    assert_eq!(
+        doc.device(&switch).unwrap().keys,
+        vec![vec![], vec![b.clone()]]
+    );
+    assert_eq!(doc.scenes[0].lights, vec![b]);
+    // Одна отмена возвращает всё.
+    s.handle(ToEngine::Undo);
+    assert_eq!(s.document().device(&switch).unwrap().keys[0], vec![a]);
+}
+
+#[test]
+fn electrical_sheets_and_3d() {
+    let mut s = state();
+    wired(&mut s);
+    s.handle(ToEngine::AutoCircuits);
+    let set = s.drawings(&request(None));
+    let titles: Vec<&str> = set.sheets.iter().map(|s| s.title.as_str()).collect();
+    for expected in [
+        "План розеток и выводов",
+        "План освещения",
+        "План выключателей",
+        "План электропроводки",
+    ] {
+        assert!(titles.contains(&expected), "{titles:?}");
+    }
+    let switches = set
+        .sheets
+        .iter()
+        .find(|s| s.title == "План выключателей")
+        .unwrap();
+    let texts = sheet_texts(switches);
+    assert!(texts.iter().any(|t| t == "Управление светом"));
+    assert!(texts.iter().any(|t| t == "С1"), "{texts:?}");
+    let wiring = set
+        .sheets
+        .iter()
+        .find(|s| s.title == "План электропроводки")
+        .unwrap();
+    let texts = sheet_texts(wiring);
+    assert!(texts.iter().any(|t| t == "Состав щита") && texts.iter().any(|t| t == "Гр.1"));
+    let book = set
+        .worksheets
+        .iter()
+        .find(|w| w.name == "Электрика")
+        .unwrap();
+    assert!(book.tables.len() >= 4);
+    // В 3D — светильники под потолком.
+    enable_3d(&mut s);
+    let scene = s.take_scene_3d().unwrap();
+    let glow = op_render::scene::Color::hex(0xFFF1C2, 1.0).0;
+    let same = |a: [f32; 4]| a.iter().zip(glow).all(|(x, y)| (x - y).abs() < 1e-6);
+    assert!(
+        scene
+            .opaque
+            .vertices
+            .iter()
+            .any(|v| same(v.color) && (f64::from(v.pos[2]) - 2700.0).abs() < 1.0)
+    );
+}
+
+#[test]
+fn variant_copy_keeps_switch_links() {
+    let mut s = state();
+    two_rooms(&mut s);
+    s.handle(ToEngine::CreateVariant {
+        name: "А".into(),
+        copy_of: None,
+    });
+    let v = variant_id(&s);
+    device_tool(&mut s, op_model::DeviceKind::CeilingLight);
+    click(&mut s, 1750.0, 3000.0);
+    let light = s.document().devices[0].id.clone();
+    device_tool(&mut s, op_model::DeviceKind::Switch1);
+    click(&mut s, 1100.0, 4000.0);
+    let mut switch = s.document().devices[1].clone();
+    switch.keys = vec![vec![light.clone()]];
+    s.handle(ToEngine::Command {
+        command: Command::Put {
+            element: Element::Device(switch),
+            index: None,
+        },
+    });
+    s.handle(ToEngine::CreateVariant {
+        name: "Б".into(),
+        copy_of: Some(v),
+    });
+    let copy = variant_id(&s);
+    let doc = s.document();
+    let copied: Vec<&op_model::Device> = doc
+        .devices
+        .iter()
+        .filter(|d| d.variant.as_deref() == Some(copy.as_str()))
+        .collect();
+    assert_eq!(copied.len(), 2);
+    let new_light = copied.iter().find(|d| d.kind.is_light()).unwrap();
+    let new_switch = copied.iter().find(|d| !d.kind.is_light()).unwrap();
+    assert_ne!(new_light.id, light);
+    assert_eq!(new_switch.keys, vec![vec![new_light.id.clone()]]);
 }
