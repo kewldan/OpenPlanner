@@ -155,6 +155,124 @@ pub enum View {
     },
 }
 
+/// Режим камеры 3D-вида.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub enum CameraMode {
+    /// Орбита вокруг точки: обзор квартиры сверху и сбоку.
+    #[default]
+    Orbit,
+    /// Прогулка на высоте глаз (WASD).
+    Walk,
+}
+
+/// Дата и время для солнца.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct SunTime {
+    /// День года, 1–365.
+    pub day: u32,
+    /// Местное время, часы (13,5 — 13:30).
+    pub hour: f64,
+}
+
+/// Настройки 3D-вида (состояние окна, в документ не входят).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct Options3d {
+    /// Холст показывает 3D.
+    pub enabled: bool,
+    /// Режим камеры.
+    pub mode: CameraMode,
+    /// Потолки (снаружи и сверху их не видно — рисуется только нижняя сторона).
+    pub ceiling: bool,
+    /// Белая модель вместо цветов материалов.
+    pub white: bool,
+    /// Срез стен по высоте, мм; без значения — стены целиком.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub cut: Option<f64>,
+    /// Солнце с тенями; без значения — рассеянный свет.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub sun: Option<SunTime>,
+}
+
+impl Default for Options3d {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            mode: CameraMode::Orbit,
+            ceiling: true,
+            white: false,
+            cut: None,
+            sun: None,
+        }
+    }
+}
+
+/// Действие с камерой 3D-вида.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum CameraAction {
+    /// Поворот: орбита вокруг точки или взгляд по сторонам; CSS-пиксели перетаскивания.
+    Rotate {
+        /// По горизонтали.
+        dx: f64,
+        /// По вертикали.
+        dy: f64,
+    },
+    /// Сдвиг точки обзора в плоскости экрана; CSS-пиксели.
+    Pan {
+        /// По горизонтали.
+        dx: f64,
+        /// По вертикали.
+        dy: f64,
+    },
+    /// Приближение (> 1) или отдаление; в прогулке — шаг вперёд или назад.
+    Zoom {
+        /// Множитель.
+        factor: f64,
+    },
+    /// Перемещение по горизонтали относительно взгляда и по высоте, мм.
+    Move {
+        /// Вперёд.
+        forward: f64,
+        /// Вправо.
+        right: f64,
+        /// Вверх.
+        up: f64,
+    },
+}
+
+/// Камера 3D-вида для UI: точки в координатах плана (мм, Y вниз) и высота.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct CameraInfo {
+    /// Режим.
+    pub mode: CameraMode,
+    /// Глаз: x, y, высота.
+    pub eye: [f64; 3],
+    /// Точка взгляда: x, y, высота.
+    pub target: [f64; 3],
+    /// Направление взгляда: градусы по часовой стрелке от верха листа.
+    pub heading: f64,
+}
+
+/// Солнце для UI.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct SunInfo {
+    /// Азимут от севера по часовой стрелке, градусы.
+    pub azimuth: f64,
+    /// Высота над горизонтом, градусы.
+    pub altitude: f64,
+}
+
 /// Длина и площадь стен одного материала.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]
@@ -333,6 +451,28 @@ pub enum ToEngine {
         /// Вариант.
         id: String,
     },
+    /// Настройки 3D-вида: включение, режим камеры, потолки, белая модель, срез, солнце.
+    Set3d {
+        /// Настройки.
+        options: Options3d,
+    },
+    /// Действие с камерой 3D-вида.
+    Camera3d {
+        /// Действие.
+        action: CameraAction,
+    },
+    /// Показать всю квартиру в 3D (орбита).
+    ResetCamera3d,
+    /// Сохранить текущий ракурс в проекте.
+    SaveView3d {
+        /// Название.
+        name: String,
+    },
+    /// Перейти к сохранённому ракурсу.
+    ApplyView3d {
+        /// Ракурс.
+        id: String,
+    },
     /// Отметить или снять демонтаж элементов обмера в текущем варианте.
     SetDemolished {
         /// Элементы.
@@ -455,6 +595,17 @@ pub enum FromEngine {
     VariantsSummary {
         /// Обмер первым, затем варианты по порядку.
         views: Vec<ViewSummary>,
+    },
+    /// Изменились настройки или камера 3D-вида.
+    View3dChanged {
+        /// Настройки.
+        options: Options3d,
+        /// Камера.
+        camera: CameraInfo,
+        /// Солнце (если включено), в том числе за горизонтом.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        sun: Option<SunInfo>,
     },
     /// Новый элемент ждёт ввода текста (выноска): UI ставит фокус в поле.
     EditText {

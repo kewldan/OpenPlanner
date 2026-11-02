@@ -70,8 +70,16 @@ pub struct EngineState {
     pub(crate) hover: Option<String>,
     pub(crate) cursor: Option<Snap>,
     pub(crate) drag: Option<Drag>,
-    document_dirty: bool,
+    pub(crate) document_dirty: bool,
     pub(crate) overlay_dirty: bool,
+    /// Настройки 3D-вида.
+    pub(crate) options_3d: crate::protocol::Options3d,
+    /// Камера 3D-вида.
+    pub(crate) camera_3d: crate::camera3d::Camera3d,
+    /// 3D-сцену надо пересобрать.
+    pub(crate) scene_3d_dirty: bool,
+    /// Камера 3D уже наведена на модель этого документа.
+    pub(crate) camera_3d_fitted: bool,
     images: HashMap<String, DecodedImage>,
     uploaded: HashSet<String>,
 }
@@ -102,6 +110,10 @@ impl EngineState {
             drag: None,
             document_dirty: true,
             overlay_dirty: true,
+            options_3d: crate::protocol::Options3d::default(),
+            camera_3d: crate::camera3d::Camera3d::default(),
+            scene_3d_dirty: true,
+            camera_3d_fitted: false,
             images: HashMap::new(),
             uploaded: HashSet::new(),
         }
@@ -181,6 +193,7 @@ impl EngineState {
                 self.tool_event(),
                 self.summary_event(),
                 self.view_mode_event(),
+                self.view_3d_event(),
             ],
         }
     }
@@ -372,6 +385,17 @@ impl EngineState {
             }
             ToEngine::SetWallLength { id, length } => self.set_wall_length(&id, length),
             ToEngine::FindRooms => self.find_rooms(),
+            ToEngine::Set3d { options } => self.set_3d(options),
+            ToEngine::Camera3d { action } => {
+                self.camera_3d.apply(action);
+                vec![self.view_3d_event()]
+            }
+            ToEngine::ResetCamera3d => {
+                self.fit_camera_3d();
+                vec![self.view_3d_event()]
+            }
+            ToEngine::SaveView3d { name } => self.save_view_3d(name),
+            ToEngine::ApplyView3d { id } => self.apply_view_3d(&id),
         };
         EngineEvents { events }
     }
@@ -621,7 +645,11 @@ impl EngineState {
         self.data = ToolData::None;
         self.images.clear();
         self.uploaded.clear();
+        self.camera_3d_fitted = false;
         self.document_changed();
+        if self.options_3d.enabled {
+            self.fit_camera_3d();
+        }
     }
 
     /// Пересчитывает проекцию вида и производные данные после изменения документа.
@@ -673,6 +701,7 @@ impl EngineState {
         }
         self.document_dirty = true;
         self.overlay_dirty = true;
+        self.scene_3d_dirty = true;
     }
 
     /// Показывает превью правки (документ не меняется).

@@ -1,0 +1,426 @@
+//! 3D-модель вида: стены с вырезами проёмов, перемычки и подоконные части,
+//! дверные полотна, стёкла, полы и потолки помещений.
+//!
+//! Стена — призма своего контура со стыками минус проёмы, на свою высоту; над
+//! проёмом — перемычка, под окном — подоконная часть. Срез по высоте обрезает
+//! всё выше отметки и закрашивает срез тёмным, как на плане.
+
+use std::collections::HashSet;
+
+use glam::DVec2;
+use op_geom::shapes;
+use op_model::{Document, OpeningKind, Side, WallMaterial};
+use op_render::{
+    scene::Color,
+    three::{Mesh, Scene3D, Sun, from_plan},
+};
+
+use crate::{
+    derived::Derived,
+    geometry,
+    protocol::Options3d,
+    sun::{self, SunPosition},
+};
+
+/// Толщина дверного полотна, мм.
+const LEAF: f64 = 40.0;
+/// Толщина стекла, мм.
+const GLASS: f64 = 12.0;
+
+/// Цвета модели: материалы или белая модель.
+struct Palette {
+    wall: Color,
+    floor: Color,
+    ceiling: Color,
+    door: Color,
+    section: Color,
+    glass: Color,
+    white: bool,
+}
+
+impl Palette {
+    fn new(white: bool) -> Self {
+        let c = |rgb: u32| Color::hex(rgb, 1.0);
+        Self {
+            wall: c(if white { 0xF2F2F0 } else { 0xEDE9E2 }),
+            floor: c(if white { 0xE4E4E1 } else { 0xCDB08A }),
+            ceiling: c(0xF7F7F5),
+            door: c(if white { 0xE9E9E6 } else { 0xB89A76 }),
+            section: c(0x3B3B37),
+            glass: Color::hex(0xA9C6DA, 0.35),
+            white,
+        }
+    }
+
+    /// Новые стены варианта — светлый оттенок цвета материала.
+    fn wall(&self, material: Option<WallMaterial>, new: bool) -> Color {
+        if self.white || !new {
+            return self.wall;
+        }
+        Color::hex(
+            match material {
+                Some(WallMaterial::AeratedConcrete) => 0xC9D4E0,
+                Some(WallMaterial::Gypsum) => 0xEDE1BE,
+                Some(WallMaterial::Brick) => 0xD9A08C,
+                None => 0xCFE5D8,
+            },
+            1.0,
+        )
+    }
+}
+
+fn to3(points: &[DVec2]) -> Vec<DVec2> {
+    points.iter().map(|p| from_plan(*p)).collect()
+}
+
+fn rings(shape: &shapes::Shape) -> Vec<Vec<DVec2>> {
+    std::iter::once(to3(&shape.outer))
+        .chain(shape.holes.iter().map(|h| to3(h)))
+        .collect()
+}
+
+/// Солнце для настроек: положение (в том числе под горизонтом) и свет для сцены.
+#[must_use]
+pub fn sun(doc: &Document, options: &Options3d) -> Option<(SunPosition, Option<Sun>)> {
+    let time = options.sun?;
+    let position = sun::position(&doc.site, time.day, time.hour);
+    let light = (position.altitude > 0.0).then(|| Sun {
+        direction: sun::direction(&doc.site, position),
+        // У горизонта свет слабеет.
+        intensity: (position.altitude.to_radians().sin() * 4.0).clamp(0.0, 1.0),
+    });
+    Some((position, light))
+}
+
+/// 3D-сцена вида `doc` (обмер или проекция варианта) с его производными данными.
+#[must_use]
+pub fn build(doc: &Document, derived: &Derived, options: &Options3d) -> Scene3D {
+    let palette = Palette::new(options.white);
+    let mut opaque = Mesh::default();
+    let mut glass = Mesh::default();
+    let shown = |layer: &str| derived.visible.contains(layer);
+    let default_height = doc.default_ceiling_height;
+    let clip = |z: f64| options.cut.map_or(z, |c| z.min(c.max(1.0)));
+    let top_color = |c: Color| {
+        if options.cut.is_some() {
+            palette.section
+        } else {
+            c
+        }
+    };
+
+    for w in doc.walls.iter().filter(|w| shown(&w.layer)) {
+        let Some(outline) = derived.wall_outlines.get(&w.id).filter(|o| !o.is_empty()) else {
+            continue;
+        };
+        let height = w.height.unwrap_or(default_height);
+        let top = clip(height);
+        let color = palette.wall(w.material, w.variant.is_some());
+        let openings: Vec<_> = doc
+            .openings
+            .iter()
+            .filter(|o| o.wall == w.id && shown(&o.layer))
+            .filter_map(|o| Some((o, geometry::opening(doc, derived, o)?)))
+            .collect();
+        let cuts: Vec<Vec<DVec2>> = openings.iter().map(|(_, g)| g.rect.clone()).collect();
+        for shape in shapes::difference(std::slice::from_ref(outline), &cuts) {
+            opaque.prism(
+                &rings(&shape),
+                0.0,
+                top,
+                color,
+                Some(top_color(color)),
+                false,
+            );
+        }
+        for (o, g) in &openings {
+            let rect = to3(&g.rect);
+            let bottom = if o.kind == OpeningKind::Window {
+                o.sill
+            } else {
+                0.0
+            };
+            let head = (bottom + o.height).min(height);
+            // Перемычка над проёмом и подоконная часть под окном.
+            if head < top {
+                opaque.prism(
+                    std::slice::from_ref(&rect),
+                    head,
+                    top,
+                    color,
+                    Some(top_color(color)),
+                    true,
+                );
+            }
+            if bottom > 0.0 {
+                let sill = clip(bottom);
+                opaque.prism(
+                    std::slice::from_ref(&rect),
+                    0.0,
+                    sill,
+                    color,
+                    Some(top_color(color)),
+                    false,
+                );
+            }
+            match o.kind {
+                OpeningKind::Door => {
+                    // Полотно открыто на 90°, как на плане.
+                    let (n, l, r) = (g.normal, g.left, g.right);
+                    let side = if o.swing == Side::Left { 1.0 } else { -1.0 };
+                    let face = if o.swing == Side::Left { l } else { r };
+                    let (hinge, free) = if o.hinge_at_end {
+                        (g.end, g.start)
+                    } else {
+                        (g.start, g.end)
+                    };
+                    let along = (free - hinge).normalize_or_zero();
+                    let hinge = hinge + n * side * face;
+                    let open = hinge + n * side * hinge.distance(free + n * side * face);
+                    let leaf = [hinge, open, open + along * LEAF, hinge + along * LEAF];
+                    let leaf_top = clip(o.height.min(height));
+                    opaque.prism(
+                        &[to3(&leaf)],
+                        0.0,
+                        leaf_top,
+                        palette.door,
+                        Some(palette.door),
+                        false,
+                    );
+                }
+                OpeningKind::Window if bottom < top => {
+                    let mid = g.normal * (g.left - g.right) / 2.0;
+                    let half = g.normal * GLASS / 2.0;
+                    let pane = [
+                        g.start + mid - half,
+                        g.end + mid - half,
+                        g.end + mid + half,
+                        g.start + mid + half,
+                    ];
+                    glass.prism(
+                        &[to3(&pane)],
+                        bottom,
+                        clip(head),
+                        palette.glass,
+                        Some(palette.glass),
+                        true,
+                    );
+                }
+                OpeningKind::Window | OpeningKind::Arch => {}
+            }
+        }
+    }
+
+    // Полы и потолки помещений (метки в одной области — одно помещение).
+    let mut used = HashSet::new();
+    for r in doc.rooms.iter().filter(|r| shown(&r.layer)) {
+        let Some(&i) = derived.room_regions.get(&r.id) else {
+            continue;
+        };
+        if !used.insert(i) {
+            continue;
+        }
+        let region = &derived.regions[i];
+        let contours: Vec<Vec<DVec2>> = std::iter::once(to3(&region.contour))
+            .chain(region.islands.iter().map(|p| to3(p)))
+            .collect();
+        opaque.cap(&contours, 0.0, true, palette.floor);
+        if options.ceiling && options.cut.is_none() {
+            let height = r.ceiling_height.unwrap_or(default_height);
+            opaque.cap(&contours, height, false, palette.ceiling);
+        }
+    }
+
+    Scene3D {
+        opaque,
+        glass,
+        sun: sun(doc, options).and_then(|(_, light)| light),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use op_model::{
+        Command, Element, Justification, LayerKind, Node, Opening, Room, Wall, view::project,
+    };
+
+    use super::*;
+    use crate::protocol::SunTime;
+
+    fn put(element: Element) -> Command {
+        Command::Put {
+            element,
+            index: None,
+        }
+    }
+
+    /// Комната 4000 × 3000 по осям, окно в верхней стене и дверь в нижней.
+    fn room() -> Document {
+        let mut doc = Document::new("Кв");
+        let mut commands = Vec::new();
+        for (i, (x, y)) in [(0.0, 0.0), (4000.0, 0.0), (4000.0, 3000.0), (0.0, 3000.0)]
+            .iter()
+            .enumerate()
+        {
+            commands.push(put(Element::Node(Node {
+                id: format!("n{i}"),
+                variant: None,
+                x: *x,
+                y: *y,
+            })));
+        }
+        for i in 0..4 {
+            commands.push(put(Element::Wall(Wall {
+                id: format!("w{i}"),
+                layer: LayerKind::Walls.id().into(),
+                variant: None,
+                a: format!("n{i}"),
+                b: format!("n{}", (i + 1) % 4),
+                thickness: 200.0,
+                justification: Justification::Center,
+                height: None,
+                material: None,
+            })));
+        }
+        for (id, wall, kind, width, height, sill) in [
+            ("win", "w0", OpeningKind::Window, 1200.0, 1400.0, 850.0),
+            ("door", "w2", OpeningKind::Door, 800.0, 2100.0, 0.0),
+        ] {
+            commands.push(put(Element::Opening(Opening {
+                id: id.into(),
+                layer: LayerKind::Openings.id().into(),
+                variant: None,
+                wall: wall.into(),
+                kind,
+                offset: 2000.0,
+                width,
+                height,
+                sill,
+                hinge_at_end: false,
+                swing: Side::Left,
+            })));
+        }
+        commands.push(put(Element::Room(Room {
+            id: "r".into(),
+            layer: LayerKind::Rooms.id().into(),
+            variant: None,
+            name: "Комната".into(),
+            x: 2000.0,
+            y: 1500.0,
+            ceiling_height: None,
+        })));
+        for c in commands {
+            c.apply(&mut doc).unwrap();
+        }
+        doc
+    }
+
+    fn scene(doc: &Document, options: Options3d) -> Scene3D {
+        let doc = project(doc, None);
+        build(&doc, &Derived::new(&doc), &options)
+    }
+
+    #[test]
+    fn walls_rise_to_the_ceiling_with_openings_cut() {
+        let doc = room();
+        let s = scene(&doc, Options3d::default());
+        let (lo, hi) = s.opaque.bounds().unwrap();
+        assert!((hi.z - 2700.0).abs() < 1e-3 && lo.z.abs() < 1e-3);
+        // Габарит по наружным граням стен; Y плана — вниз, в сцене — вверх.
+        assert!(
+            (lo.x + 100.0).abs() < 1e-3 && (hi.x - 4100.0).abs() < 1e-3,
+            "{lo} {hi}"
+        );
+        // Снизу (по плану) за стену выходит открытое наружу полотно двери; вырез
+        // проёма шире стены на 1 мм с каждой стороны — перемычка повторяет его.
+        assert!(
+            (hi.y - 100.0).abs() < 1.5 && lo.y < -3100.0 + 1e-3,
+            "{lo} {hi}"
+        );
+        assert!(!s.glass.is_empty(), "стекло окна");
+        // Проём окна: на высоте 1500 над серединой окна стены нет, на 2400 — перемычка.
+        let at = |x: f64, y: f64, z: f64| {
+            s.opaque.vertices.iter().any(|v| {
+                (f64::from(v.pos[0]) - x).abs() < 1.0
+                    && (f64::from(v.pos[1]) - y).abs() < 102.0
+                    && (f64::from(v.pos[2]) - z).abs() < 1.0
+            })
+        };
+        assert!(at(1400.0, 0.0, 2250.0), "низ перемычки над окном");
+        assert!(at(1400.0, 0.0, 850.0), "верх подоконной части");
+        assert!(s.sun.is_none());
+    }
+
+    #[test]
+    fn cut_lowers_walls_and_hides_ceilings() {
+        let doc = room();
+        let full = scene(&doc, Options3d::default());
+        let cut = scene(
+            &doc,
+            Options3d {
+                cut: Some(1200.0),
+                ..Options3d::default()
+            },
+        );
+        let (_, hi) = cut.opaque.bounds().unwrap();
+        assert!((hi.z - 1200.0).abs() < 1e-3);
+        // Тёмный срез сверху стен.
+        assert!(cut.opaque.vertices.iter().any(|v| {
+            (f64::from(v.pos[2]) - 1200.0).abs() < 1e-3 && v.normal[2] > 0.5 && v.color[0] < 0.3
+        }));
+        let ceilings = |s: &Scene3D| {
+            s.opaque
+                .vertices
+                .iter()
+                .filter(|v| v.normal[2] < -0.5)
+                .count()
+        };
+        assert!(ceilings(&full) > 0 && ceilings(&cut) == 0);
+        let no_ceiling = scene(
+            &doc,
+            Options3d {
+                ceiling: false,
+                ..Options3d::default()
+            },
+        );
+        assert!(ceilings(&no_ceiling) < ceilings(&full));
+    }
+
+    #[test]
+    fn white_model_and_sun() {
+        let doc = room();
+        let white = scene(
+            &doc,
+            Options3d {
+                white: true,
+                sun: Some(SunTime {
+                    day: sun::day_of_year(6, 21),
+                    hour: 13.0,
+                }),
+                ..Options3d::default()
+            },
+        );
+        // Пол белой модели — серый, а не цвета дерева.
+        let floor = white
+            .opaque
+            .vertices
+            .iter()
+            .find(|v| v.normal[2] > 0.5 && v.pos[2].abs() < 1e-3)
+            .unwrap();
+        assert!((floor.color[0] - floor.color[2]).abs() < 0.02);
+        let sun = white.sun.unwrap();
+        assert!(sun.direction.z > 0.5 && sun.intensity > 0.9);
+        // Ночью солнце за горизонтом — света нет.
+        let night = scene(
+            &doc,
+            Options3d {
+                sun: Some(SunTime {
+                    day: 172,
+                    hour: 1.0,
+                }),
+                ..Options3d::default()
+            },
+        );
+        assert!(night.sun.is_none());
+    }
+}

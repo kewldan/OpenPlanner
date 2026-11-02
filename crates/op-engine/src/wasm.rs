@@ -91,6 +91,9 @@ impl Engine {
         if let Some(scene) = overlay {
             self.renderer.set_scene(SceneSlot::Overlay, &scene);
         }
+        if let Some(scene) = self.state.take_scene_3d() {
+            self.renderer.set_scene_3d(&scene);
+        }
     }
 
     /// Графический бэкенд: `BrowserWebGpu` или `Gl`.
@@ -255,8 +258,12 @@ impl Engine {
     /// Рисует кадр.
     pub fn render(&mut self) {
         self.sync();
-        self.renderer
-            .render(self.state.camera(), self.state.device_pixel_ratio());
+        if self.state.three_d() {
+            self.renderer.render_3d(&self.state.camera_3d());
+        } else {
+            self.renderer
+                .render(self.state.camera(), self.state.device_pixel_ratio());
+        }
     }
 }
 

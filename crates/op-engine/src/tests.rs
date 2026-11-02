@@ -1352,3 +1352,184 @@ fn wall_elevations_show_openings_and_wall_areas() {
         op_export::table::format_number(door.width * door.height / 1e6, 2)
     );
 }
+
+// ---------------------------------------------------------------- 3D
+
+fn camera_info(events: &EngineEvents) -> crate::protocol::CameraInfo {
+    events
+        .events
+        .iter()
+        .rev()
+        .find_map(|e| match e {
+            FromEngine::View3dChanged { camera, .. } => Some(*camera),
+            _ => None,
+        })
+        .unwrap()
+}
+
+fn enable_3d(s: &mut EngineState) -> EngineEvents {
+    s.handle(ToEngine::Set3d {
+        options: crate::protocol::Options3d {
+            enabled: true,
+            ..crate::protocol::Options3d::default()
+        },
+    })
+}
+
+#[test]
+fn three_d_view_fits_the_model_and_rebuilds_after_edits() {
+    let mut s = state();
+    two_rooms(&mut s);
+    assert!(s.take_scene_3d().is_none(), "в 2D 3D-сцена не строится");
+    let events = enable_3d(&mut s);
+    assert!(s.three_d());
+    // Орбита наведена на середину квартиры (1000–4000 × 1000–5000).
+    let info = camera_info(&events);
+    assert!((info.target[0] - 2500.0).abs() < 50.0 && (info.target[1] - 3000.0).abs() < 50.0);
+    let scene = s.take_scene_3d().unwrap();
+    assert!(scene.opaque.triangles() > 50);
+    assert!(
+        s.take_scene_3d().is_none(),
+        "без изменений сцена не пересобирается"
+    );
+    // Правка документа — новая сцена.
+    tool(&mut s, Tool::Door);
+    click(&mut s, 2500.0, 3000.0);
+    assert!(s.take_scene_3d().is_some());
+}
+
+#[test]
+fn camera_moves_and_saved_views_are_undoable() {
+    let mut s = state();
+    two_rooms(&mut s);
+    let before = camera_info(&enable_3d(&mut s));
+    let after = camera_info(&s.handle(ToEngine::Camera3d {
+        action: crate::protocol::CameraAction::Rotate { dx: 100.0, dy: 0.0 },
+    }));
+    assert!((before.eye[0] - after.eye[0]).abs() > 100.0);
+
+    // Прогулка: WASD двигает глаз на высоте 1,6 м.
+    s.handle(ToEngine::Set3d {
+        options: crate::protocol::Options3d {
+            enabled: true,
+            mode: crate::protocol::CameraMode::Walk,
+            ..crate::protocol::Options3d::default()
+        },
+    });
+    let walk = camera_info(&s.handle(ToEngine::Camera3d {
+        action: crate::protocol::CameraAction::Move {
+            forward: 1000.0,
+            right: 0.0,
+            up: 0.0,
+        },
+    }));
+    assert_eq!(walk.mode, crate::protocol::CameraMode::Walk);
+    assert!((walk.eye[2] - crate::camera3d::EYE_HEIGHT).abs() < 1e-9);
+
+    // Ракурс сохраняется в проекте одной отменяемой правкой.
+    assert!(!has_error(&s.handle(ToEngine::SaveView3d {
+        name: "Кухня".into()
+    })));
+    let saved = s.document().views[0].clone();
+    assert_eq!(saved.name, "Кухня");
+    assert!(saved.walk);
+    s.handle(ToEngine::Camera3d {
+        action: crate::protocol::CameraAction::Rotate {
+            dx: 300.0,
+            dy: 50.0,
+        },
+    });
+    let restored = camera_info(&s.handle(ToEngine::ApplyView3d {
+        id: saved.id.clone(),
+    }));
+    for (a, b) in restored.eye.iter().zip(saved.eye) {
+        assert!((a - b).abs() < 1e-6);
+    }
+    s.handle(ToEngine::Undo);
+    assert!(s.document().views.is_empty());
+    assert!(has_error(&s.handle(ToEngine::ApplyView3d { id: saved.id })));
+
+    // Ракурсы и привязка к местности — в файле.
+    s.handle(ToEngine::Redo);
+    let mut site = s.document().site;
+    site.north = 30.0;
+    s.handle(ToEngine::Command {
+        command: Command::SetSite { site },
+    });
+    let bytes = s.export_file("test").unwrap();
+    let mut t = state();
+    t.import_file(&bytes).unwrap();
+    assert_eq!(t.document().views.len(), 1);
+    assert!((t.document().site.north - 30.0).abs() < 1e-9);
+}
+
+#[test]
+fn three_d_shows_the_variant_and_reports_the_sun() {
+    let mut s = state();
+    let v = replanned(&mut s);
+    s.handle(ToEngine::SetView {
+        view: crate::protocol::View::Variant { id: v },
+    });
+    let events = s.handle(ToEngine::Set3d {
+        options: crate::protocol::Options3d {
+            enabled: true,
+            sun: Some(crate::protocol::SunTime {
+                day: crate::sun::day_of_year(6, 21),
+                hour: 13.0,
+            }),
+            ..crate::protocol::Options3d::default()
+        },
+    });
+    let sun = events
+        .events
+        .iter()
+        .find_map(|e| match e {
+            FromEngine::View3dChanged { sun, .. } => *sun,
+            _ => None,
+        })
+        .unwrap();
+    assert!(sun.altitude > 50.0, "{sun:?}");
+    let scene = s.take_scene_3d().unwrap();
+    assert!(scene.sun.is_some());
+    // Новая перегородка из ГКЛ — своего цвета.
+    let gypsum = op_render::scene::Color::hex(0xEDE1BE, 1.0).0;
+    let same = |a: [f32; 4]| a.iter().zip(gypsum).all(|(x, y)| (x - y).abs() < 1e-6);
+    assert!(scene.opaque.vertices.iter().any(|v| same(v.color)));
+    // Сравнение — только на плане.
+    let compare = s.handle(ToEngine::SetView {
+        view: crate::protocol::View::Compare {
+            left: None,
+            right: None,
+        },
+    });
+    assert!(!has_error(&compare));
+    s.handle(ToEngine::Set3d {
+        options: crate::protocol::Options3d {
+            enabled: true,
+            ..crate::protocol::Options3d::default()
+        },
+    });
+    assert!(!s.three_d());
+}
+
+#[test]
+fn walk_starts_inside_the_nearest_room() {
+    let mut s = state();
+    two_rooms(&mut s);
+    enable_3d(&mut s);
+    let walk = camera_info(&s.handle(ToEngine::Set3d {
+        options: crate::protocol::Options3d {
+            enabled: true,
+            mode: crate::protocol::CameraMode::Walk,
+            ..crate::protocol::Options3d::default()
+        },
+    }));
+    // Середина квартиры — на перегородке x = 2500; глаз встаёт в подпись помещения.
+    let rooms: Vec<(f64, f64)> = s.document().rooms.iter().map(|r| (r.x, r.y)).collect();
+    assert!(
+        rooms
+            .iter()
+            .any(|(x, y)| (walk.eye[0] - x).abs() < 1e-6 && (walk.eye[1] - y).abs() < 1e-6),
+        "{walk:?} {rooms:?}"
+    );
+}
