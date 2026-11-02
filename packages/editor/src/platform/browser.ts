@@ -1,4 +1,4 @@
-import { baseName, type Platform, PROJECT_EXTENSION } from "./types";
+import { baseName, IMAGE_EXTENSIONS, type Platform, PROJECT_EXTENSION } from "./types";
 
 const JOURNAL_PREFIX = "openplanner.journal:";
 
@@ -10,11 +10,11 @@ function storage(): Storage | null {
   }
 }
 
-function pickFile(): Promise<File | null> {
+function pickFile(accept: string): Promise<File | null> {
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = `.${PROJECT_EXTENSION}`;
+    input.accept = accept;
     input.addEventListener("change", () => resolve(input.files?.[0] ?? null), { once: true });
     input.addEventListener("cancel", () => resolve(null), { once: true });
     input.click();
@@ -42,13 +42,19 @@ export const browserPlatform: Platform = {
   kind: "browser",
 
   async openProject() {
-    const file = await pickFile();
+    const file = await pickFile(`.${PROJECT_EXTENSION}`);
     if (!file) return null;
     return {
       path: null,
       name: baseName(file.name),
       bytes: new Uint8Array(await file.arrayBuffer()),
     };
+  },
+
+  async openImage() {
+    const file = await pickFile(IMAGE_EXTENSIONS.map((ext) => `.${ext}`).join(","));
+    if (!file) return null;
+    return { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) };
   },
 
   async chooseSaveTarget(suggestedName) {

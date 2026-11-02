@@ -12,7 +12,37 @@ use crate::{FORMAT_VERSION, FormatError};
 pub(crate) type Migration = fn(Value) -> Result<Value, String>;
 
 /// `MIGRATIONS[i]` переводит формат `i + 1` в `i + 2`.
-const MIGRATIONS: &[Migration] = &[];
+const MIGRATIONS: &[Migration] = &[v1_to_v2];
+
+/// Формат 2 (стадия 1): слои и элементы обмера.
+fn v1_to_v2(mut model: Value) -> Result<Value, String> {
+    let object = model.as_object_mut().ok_or("ожидался объект модели")?;
+    let layer = |id: &str, name: &str, kind: &str| serde_json::json!({ "id": id, "name": name, "visible": true, "locked": false, "system": kind });
+    object.entry("layers").or_insert_with(|| {
+        Value::Array(vec![
+            layer("layer-underlays", "Подложка", "underlays"),
+            layer("layer-rooms", "Помещения", "rooms"),
+            layer("layer-walls", "Стены", "walls"),
+            layer("layer-openings", "Проёмы", "openings"),
+            layer("layer-dimensions", "Размеры", "dimensions"),
+            layer("layer-leaders", "Выноски", "leaders"),
+        ])
+    });
+    for key in [
+        "nodes",
+        "walls",
+        "openings",
+        "rooms",
+        "dimensions",
+        "leaders",
+        "underlays",
+    ] {
+        object
+            .entry(key)
+            .or_insert_with(|| Value::Array(Vec::new()));
+    }
+    Ok(model)
+}
 
 const _: () = assert!(
     MIGRATIONS.len() + 1 == FORMAT_VERSION as usize,
@@ -76,6 +106,16 @@ mod tests {
         let model = json!({ "meta": { "title": "Кв." } });
         let migrated = migrate_with(model, 2, CHAIN).unwrap();
         assert_eq!(migrated["defaultCeilingHeight"], json!(2700.0));
+    }
+
+    #[test]
+    fn v1_gets_system_layers_and_empty_lists() {
+        let model =
+            json!({ "meta": { "title": "Кв.", "address": "" }, "defaultCeilingHeight": 2700.0 });
+        let migrated = migrate(model, 1).unwrap();
+        assert_eq!(migrated["layers"].as_array().map(Vec::len), Some(6));
+        assert_eq!(migrated["walls"], json!([]));
+        assert_eq!(migrated["meta"]["title"], json!("Кв."));
     }
 
     #[test]

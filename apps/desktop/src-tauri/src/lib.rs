@@ -113,6 +113,7 @@ pub fn run() {
             selftest_step,
             selftest_report,
             files::read_project,
+            files::read_image,
             files::write_project,
             files::journal_path,
             files::journal_read,
