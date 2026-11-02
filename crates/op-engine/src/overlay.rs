@@ -41,19 +41,10 @@ fn outline(
         }
         return;
     }
-    if let Some(r) = doc.room(id) {
+    if doc.room(id).is_some() {
         if let Some(&i) = derived.room_regions.get(id) {
             scene.polyline(&derived.regions[i].contour, true, width, color);
         }
-        let (name, _) = geometry::room_label_points(r);
-        let (lo, hi) = geometry::text_box(font, &r.name, name, geometry::ROOM_NAME_SIZE, true);
-        scene.dashed(
-            DVec2::new(lo.x, hi.y + 20.0),
-            DVec2::new(hi.x, hi.y + 20.0),
-            width,
-            3.0,
-            color,
-        );
         return;
     }
     if let Some(d) = doc.dimension(id) {

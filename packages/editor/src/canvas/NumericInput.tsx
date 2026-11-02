@@ -15,29 +15,36 @@ export function NumericInput() {
   const [length, setLength] = useState("");
   const [angle, setAngle] = useState("");
   const lengthRef = useRef<HTMLInputElement>(null);
+  // Открыто ли поле — синхронно, пока React не перерисовал: быстрые цифры подряд не теряются.
+  const openRef = useRef(false);
   const wall = step === "wallNext";
   const calibrate = step === "calibrateDistance";
   const visible = calibrate || (wall && open);
 
   // Цифра на холсте открывает поле длины с этой цифрой.
   useEffect(() => {
-    if (!wall || open) return;
-    const onKeyDown = (event: KeyboardEvent | globalThis.KeyboardEvent) => {
+    if (!wall) return;
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.closest("input, textarea, select")) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (!/^[0-9]$/.test(event.key)) return;
+      if (!/^[0-9.,]$/.test(event.key)) return;
       event.preventDefault();
-      setLength(event.key);
-      setAngle("");
+      const first = !openRef.current;
+      openRef.current = true;
+      setLength((previous) => (first ? event.key : previous + event.key));
+      if (first) setAngle("");
       setOpen(true);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [wall, open]);
+  }, [wall]);
 
   useEffect(() => {
-    if (!wall && !calibrate) setOpen(false);
+    if (!wall && !calibrate) {
+      openRef.current = false;
+      setOpen(false);
+    }
   }, [wall, calibrate]);
 
   useEffect(() => {
@@ -52,6 +59,7 @@ export function NumericInput() {
   if (!visible) return null;
 
   const close = () => {
+    openRef.current = false;
     setOpen(false);
     setLength("");
     setAngle("");
