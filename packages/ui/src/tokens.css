@@ -1,0 +1,113 @@
+/*
+ * Дизайн-токены OpenPlanner (плотный стиль).
+ * Тема: атрибут data-theme="light" | "dark" на <html>; без атрибута — по системе.
+ * Холст плана всегда светлый: --canvas-* не зависят от темы.
+ */
+
+:root {
+  --font-ui: "Onest Variable", "Onest", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-lg: 15px;
+  --leading: 16px;
+
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 12px;
+  --space-6: 16px;
+
+  --radius-sm: 4px;
+  --radius-md: 5px;
+  --radius-lg: 10px;
+
+  --control-h: 24px;
+  --control-h-lg: 28px;
+  --icon: 16px;
+
+  --topbar-h: 40px;
+  --statusbar-h: 22px;
+  --toolbar-w: 40px;
+  --sidebar-w: 220px;
+  --inspector-w: 248px;
+
+  --canvas-bg: #fbfbf8;
+  --canvas-grid: #efefea;
+  --canvas-wall: #3a3a37;
+}
+
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --win: #f3f3f2;
+  --bar: #f7f7f6;
+  --panel: #ffffff;
+  --surface: #ffffff;
+  --field: #f3f3f2;
+  --line: #e6e6e3;
+  --line-2: #d4d4d0;
+  --text: #1a1a19;
+  --text-2: #55554f;
+  --text-3: #6e6e68;
+  --hover: #f1f1ef;
+  --sel: #e3f2ea;
+  --accent: #0a7c4e;
+  --accent-ink: #ffffff;
+  --accent-text: #0a7c4e;
+  --ring: rgb(10 124 78 / 28%);
+  --danger: #b4321c;
+  --danger-bg: #fbe7e3;
+  --shadow-pop: 0 0 0 0.5px rgb(0 0 0 / 18%), 0 12px 32px rgb(0 0 0 / 16%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --win: #1c1c1d;
+    --bar: #202022;
+    --panel: #232325;
+    --surface: #2b2b2e;
+    --field: #2b2b2e;
+    --line: #323235;
+    --line-2: #424246;
+    --text: #ececea;
+    --text-2: #adada9;
+    --text-3: #8e8e8a;
+    --hover: #2c2c2f;
+    --sel: #183527;
+    --accent: #34c77f;
+    --accent-ink: #06170e;
+    --accent-text: #4bd691;
+    --ring: rgb(52 199 127 / 32%);
+    --danger: #ff8a75;
+    --danger-bg: #3d211c;
+    --shadow-pop: 0 0 0 0.5px rgb(0 0 0 / 60%), 0 14px 36px rgb(0 0 0 / 55%);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --win: #1c1c1d;
+  --bar: #202022;
+  --panel: #232325;
+  --surface: #2b2b2e;
+  --field: #2b2b2e;
+  --line: #323235;
+  --line-2: #424246;
+  --text: #ececea;
+  --text-2: #adada9;
+  --text-3: #8e8e8a;
+  --hover: #2c2c2f;
+  --sel: #183527;
+  --accent: #34c77f;
+  --accent-ink: #06170e;
+  --accent-text: #4bd691;
+  --ring: rgb(52 199 127 / 32%);
+  --danger: #ff8a75;
+  --danger-bg: #3d211c;
+  --shadow-pop: 0 0 0 0.5px rgb(0 0 0 / 60%), 0 14px 36px rgb(0 0 0 / 55%);
+}

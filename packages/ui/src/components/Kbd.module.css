@@ -1,0 +1,7 @@
+.kbd {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 14px;
+  opacity: 0.75;
+  white-space: nowrap;
+}

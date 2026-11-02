@@ -1,0 +1,13 @@
+[package]
+name = "op-export"
+description = "Экспорт OpenPlanner: PDF, XLSX, DXF, IFC"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

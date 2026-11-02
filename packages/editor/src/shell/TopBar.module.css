@@ -1,0 +1,49 @@
+.root {
+  height: var(--topbar-h);
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: 0 var(--space-4) 0 var(--space-6);
+  background: var(--bar);
+  border-bottom: 1px solid var(--line);
+}
+
+.project {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-width: 0;
+  max-width: 280px;
+}
+
+.title {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dirty {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  align-self: center;
+  border-radius: 3px;
+  background: var(--text-3);
+}
+
+.variant {
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
