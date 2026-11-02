@@ -2551,6 +2551,14 @@ dependencies = [
 [[package]]
 name = "op-export"
 version = "0.0.0"
+dependencies = [
+ "ab_glyph",
+ "base64 0.23.1",
+ "flate2",
+ "glam",
+ "thiserror 2.0.21",
+ "zip",
+]
 
 [[package]]
 name = "op-format"
