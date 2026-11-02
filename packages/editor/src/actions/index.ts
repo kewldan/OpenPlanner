@@ -7,6 +7,7 @@ import { openScanWizard } from "../scan/store";
 import { useEditor } from "../store/editor";
 import { applyTheme } from "../theme";
 import { exitCompare } from "../variants/actions";
+import { set3d, toggle3d } from "../view3d/actions";
 import type { Shortcut } from "./shortcut";
 
 export type ActionGroup = "file" | "edit" | "tools" | "view" | "help";
@@ -53,7 +54,13 @@ export async function addUnderlay(): Promise<void> {
   }
 }
 
-const editable = () => useEditor.getState().view.type !== "compare";
+/** План можно править: не сравнение и не 3D. */
+const editable = () => {
+  const { view, three } = useEditor.getState();
+  return view.type !== "compare" && !three.options.enabled;
+};
+
+const in3d = () => useEditor.getState().three.options.enabled;
 
 function tool(id: Tool, code: string, keywords: string): Action {
   return {
@@ -62,7 +69,10 @@ function tool(id: Tool, code: string, keywords: string): Action {
     group: "tools",
     keywords,
     keys: [{ code }],
-    enabled: id === "demolish" ? () => useEditor.getState().view.type === "variant" : editable,
+    enabled:
+      id === "demolish"
+        ? () => useEditor.getState().view.type === "variant" && editable()
+        : editable,
     run: () => sendToEngine({ type: "setTool", tool: id }),
   };
 }
@@ -245,6 +255,39 @@ export const actions: readonly Action[] = [
     keys: [{ code: "Digit0", mod: true }],
     inInputs: true,
     run: () => sendToEngine({ type: "zoomToScale", denominator: 50 }),
+  },
+  {
+    id: "view.toggle3d",
+    title: "Переключить 2D / 3D",
+    group: "view",
+    keywords: "трёхмерный объём модель вид",
+    keys: [{ code: "Digit3", alt: true }],
+    enabled: () => useEditor.getState().view.type !== "compare",
+    run: () => toggle3d(),
+  },
+  {
+    id: "view.3dOrbit",
+    title: "3D: орбита",
+    group: "view",
+    keywords: "вращение обзор сверху кукольный дом",
+    enabled: in3d,
+    run: () => set3d({ mode: "orbit" }),
+  },
+  {
+    id: "view.3dWalk",
+    title: "3D: прогулка",
+    group: "view",
+    keywords: "ходьба wasd первое лицо",
+    enabled: in3d,
+    run: () => set3d({ mode: "walk" }),
+  },
+  {
+    id: "view.3dReset",
+    title: "3D: показать всю квартиру",
+    group: "view",
+    keywords: "сброс камера вписать",
+    enabled: in3d,
+    run: () => sendToEngine({ type: "resetCamera3d" }),
   },
   {
     id: "view.themeAuto",

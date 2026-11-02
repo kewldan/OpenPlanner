@@ -4,6 +4,7 @@ import { sendToEngine, startEngine } from "../engine";
 import { t } from "../i18n";
 import { useEditor } from "../store/editor";
 import { exitCompare } from "../variants/actions";
+import { camera } from "../view3d/actions";
 import { NumericInput } from "./NumericInput";
 import styles from "./PlanCanvas.module.css";
 
@@ -19,13 +20,93 @@ const drawingTools = new Set([
   "calibrate",
 ]);
 
-/** Холст плана. Рисует движок в воркере; здесь — ввод и размеры. */
+/** Клавиши движения в 3D: вперёд, вправо, вверх. */
+const moveKeys: Record<string, [number, number, number]> = {
+  KeyW: [1, 0, 0],
+  ArrowUp: [1, 0, 0],
+  KeyS: [-1, 0, 0],
+  ArrowDown: [-1, 0, 0],
+  KeyD: [0, 1, 0],
+  ArrowRight: [0, 1, 0],
+  KeyA: [0, -1, 0],
+  ArrowLeft: [0, -1, 0],
+  KeyE: [0, 0, 1],
+  KeyQ: [0, 0, -1],
+};
+
+/** Скорость движения в 3D, мм/с (с Shift — быстрее). */
+const SPEED = 2500;
+
+const in3d = () => useEditor.getState().three.options.enabled;
+
+const isTyping = (target: EventTarget | null) =>
+  target instanceof HTMLElement && Boolean(target.closest("input, textarea, select"));
+
+/** WASD в 3D: пока клавиши нажаты, каждый кадр камера сдвигается. */
+function useMoveKeys3d() {
+  const enabled = useEditor((s) => s.three.options.enabled);
+  useEffect(() => {
+    if (!enabled) return;
+    const pressed = new Set<string>();
+    let fast = false;
+    let frame = 0;
+    let last = 0;
+    const tick = (time: number) => {
+      const dt = Math.min(0.1, (time - last) / 1000);
+      last = time;
+      const v = [0, 0, 0];
+      for (const code of pressed) {
+        const d = moveKeys[code];
+        if (d) for (let i = 0; i < 3; i++) v[i] = (v[i] ?? 0) + (d[i] ?? 0);
+      }
+      const step = SPEED * (fast ? 2.5 : 1) * dt;
+      if (v.some((x) => x !== 0)) {
+        camera({
+          type: "move",
+          forward: (v[0] ?? 0) * step,
+          right: (v[1] ?? 0) * step,
+          up: (v[2] ?? 0) * step,
+        });
+      }
+      frame = pressed.size > 0 ? requestAnimationFrame(tick) : 0;
+    };
+    const onKey = (event: KeyboardEvent) => {
+      fast = event.shiftKey;
+      if (!(event.code in moveKeys) || isTyping(event.target)) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (useEditor.getState().dialog !== null) return;
+      event.preventDefault();
+      if (event.type === "keydown") pressed.add(event.code);
+      else pressed.delete(event.code);
+      if (pressed.size > 0 && frame === 0) {
+        last = performance.now();
+        frame = requestAnimationFrame(tick);
+      }
+    };
+    const onBlur = () => pressed.clear();
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKey);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKey);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [enabled]);
+}
+
+/** Холст плана и 3D-вида. Рисует движок в воркере; здесь — ввод и размеры. */
 export function PlanCanvas() {
   const rootRef = useRef<HTMLDivElement>(null);
   const [panning, setPanning] = useState(false);
   const space = useRef(false);
+  /** Перетаскивание в 3D: поворот или сдвиг. */
+  const drag3d = useRef<"rotate" | "pan" | null>(null);
   const engine = useEditor((s) => s.engine);
   const tool = useEditor((s) => s.tool);
+  const three = useEditor((s) => s.three.options.enabled);
+  useMoveKeys3d();
 
   useEffect(() => {
     const root = rootRef.current;
@@ -50,6 +131,12 @@ export function PlanCanvas() {
     // Прокрутка — сдвиг, ⌘/Ctrl + прокрутка (и щипок на тачпаде) — масштаб.
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
+      if (in3d()) {
+        const delta =
+          event.deltaMode === WheelEvent.DOM_DELTA_LINE ? event.deltaY * 33 : event.deltaY;
+        camera({ type: "zoom", factor: Math.exp(-Math.max(-300, Math.min(300, delta)) * 0.002) });
+        return;
+      }
       const rect = canvas.getBoundingClientRect();
       if (event.ctrlKey || event.metaKey) {
         // Щелчок колеса мыши (~100 px) — ×1,22; щипок тачпада даёт мелкие шаги.
@@ -69,8 +156,6 @@ export function PlanCanvas() {
     canvas.addEventListener("wheel", onWheel, { passive: false });
 
     // Пробел — временное панорамирование левой кнопкой.
-    const isTyping = (target: EventTarget | null) =>
-      target instanceof HTMLElement && Boolean(target.closest("input, textarea, select"));
     const onKey = (event: KeyboardEvent) => {
       if (event.code !== "Space" || isTyping(event.target)) return;
       space.current = event.type === "keydown";
@@ -105,6 +190,12 @@ export function PlanCanvas() {
     if (event.target !== event.currentTarget.querySelector("canvas")) return;
     // Фокус уходит с полей инспектора: правка в поле применяется до действия на холсте.
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    if (in3d()) {
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      drag3d.current = event.button === 0 && !event.shiftKey ? "rotate" : "pan";
+      return;
+    }
     if (event.button === 1 || (event.button === 0 && space.current)) {
       event.preventDefault();
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -122,6 +213,12 @@ export function PlanCanvas() {
   };
 
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    if (in3d()) {
+      if (drag3d.current) {
+        camera({ type: drag3d.current, dx: event.movementX, dy: event.movementY });
+      }
+      return;
+    }
     if (panning) {
       sendToEngine({ type: "pan", dx: event.movementX, dy: event.movementY });
       return;
@@ -132,6 +229,10 @@ export function PlanCanvas() {
   const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (drag3d.current || in3d()) {
+      drag3d.current = null;
+      return;
     }
     if (panning) {
       setPanning(false);
@@ -145,16 +246,24 @@ export function PlanCanvas() {
       ref={rootRef}
       role="application"
       aria-label={t("canvas.label")}
-      className={[styles.root, panning && styles.panning, drawingTools.has(tool) && styles.drawing]
+      data-view={three ? "3d" : "2d"}
+      className={[
+        styles.root,
+        panning && styles.panning,
+        three && styles.orbit,
+        !three && drawingTools.has(tool) && styles.drawing,
+      ]
         .filter(Boolean)
         .join(" ")}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
-      onPointerLeave={(event) => point(event, "leave")}
+      onPointerLeave={(event) => {
+        if (!in3d()) point(event, "leave");
+      }}
       onDoubleClick={(event) => {
-        if (event.target === event.currentTarget.querySelector("canvas")) {
+        if (!in3d() && event.target === event.currentTarget.querySelector("canvas")) {
           const rect = event.currentTarget.getBoundingClientRect();
           sendToEngine({
             type: "pointer",

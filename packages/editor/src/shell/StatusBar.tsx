@@ -30,8 +30,26 @@ function CursorInfo() {
   );
 }
 
+/** Камера 3D-вида: режим, положение глаза и его высота. */
+function CameraInfo3d() {
+  const camera = useEditor((s) => s.three.camera);
+  if (!camera) return null;
+  const [x, y, h] = camera.eye;
+  return (
+    <span className={styles.mono} data-testid="camera-3d">
+      {t("view3d.camera", {
+        mode: camera.mode === "walk" ? t("view3d.walk") : t("view3d.orbit"),
+        x: formatNumber(x),
+        y: formatNumber(y),
+        h: formatNumber(h),
+      })}
+    </span>
+  );
+}
+
 export function StatusBar() {
   const engine = useEditor((s) => s.engine);
+  const in3d = useEditor((s) => s.three.options.enabled);
   const scale = useEditor((s) => s.scaleDenominator);
   const zoom = useEditor((s) => s.zoomPercent);
   const dirty = useEditor((s) => s.dirty);
@@ -45,22 +63,45 @@ export function StatusBar() {
 
   return (
     <footer className={styles.root}>
-      <span className={styles.hint} data-testid="tool-hint">
-        {step === "idle" ? t("status.hint") : t(`step.${step}`)}
-      </span>
-      <CursorInfo />
-      <button
-        type="button"
-        className={[styles.mono, styles.link].join(" ")}
-        title={t("status.scaleTo50")}
-        onClick={() => sendToEngine({ type: "zoomToScale", denominator: 50 })}
-      >
-        {t("status.scale", { denominator: formatNumber(scale) })}
-      </button>
-      <span className={styles.mono}>{t("status.zoom", { percent: formatNumber(zoom) })}</span>
-      <IconButton label={t("action.zoomToFit")} onClick={() => sendToEngine({ type: "zoomToFit" })}>
-        <Icon name="fit" />
-      </IconButton>
+      {in3d ? (
+        <CameraInfo3d />
+      ) : (
+        <>
+          <span className={styles.hint} data-testid="tool-hint">
+            {step === "idle" ? t("status.hint") : t(`step.${step}`)}
+          </span>
+          <CursorInfo />
+        </>
+      )}
+      {in3d ? (
+        <>
+          <span className={styles.spacer} />
+          <IconButton
+            label={t("view3d.reset")}
+            onClick={() => sendToEngine({ type: "resetCamera3d" })}
+          >
+            <Icon name="fit" />
+          </IconButton>
+        </>
+      ) : (
+        <>
+          <button
+            type="button"
+            className={[styles.mono, styles.link].join(" ")}
+            title={t("status.scaleTo50")}
+            onClick={() => sendToEngine({ type: "zoomToScale", denominator: 50 })}
+          >
+            {t("status.scale", { denominator: formatNumber(scale) })}
+          </button>
+          <span className={styles.mono}>{t("status.zoom", { percent: formatNumber(zoom) })}</span>
+          <IconButton
+            label={t("action.zoomToFit")}
+            onClick={() => sendToEngine({ type: "zoomToFit" })}
+          >
+            <Icon name="fit" />
+          </IconButton>
+        </>
+      )}
       <span data-testid="save-status">{saveStatus}</span>
       {engine.state === "ready" && (
         <span className={styles.mono} title={`WebGPU: ${engine.webgpu}`}>

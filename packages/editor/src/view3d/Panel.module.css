@@ -1,0 +1,74 @@
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 24px;
+  color: var(--text-2);
+}
+
+.check input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.hint {
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--text-xs);
+}
+
+.views {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.views li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.view {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-width: 0;
+  height: var(--control-h);
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.view:hover {
+  background: var(--hover);
+}
+
+.view span {
+  color: var(--text-3);
+}
+
+.remove {
+  width: var(--control-h);
+  height: var(--control-h);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  cursor: pointer;
+}
+
+.remove:hover {
+  background: var(--danger-bg);
+  color: var(--danger);
+}

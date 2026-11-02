@@ -1,9 +1,12 @@
 import type {
+  CameraInfo,
   Document,
   FromEngine,
   LengthInfo,
+  Options3d,
   RoomInfo,
   SnapKind,
+  SunInfo,
   Tool,
   ToolOptions,
   ToolStep,
@@ -76,6 +79,8 @@ export interface EditorState {
   lastVariant: string | null;
   /** Сводка обмера и вариантов. */
   summaries: ViewSummary[];
+  /** 3D-вид: настройки, камера и солнце (если включено). */
+  three: { options: Options3d; camera: CameraInfo | null; sun: SunInfo | null };
   setMode: (mode: EditorMode) => void;
   setDialog: (dialog: EditorDialog) => void;
   setViewport: (width: number, height: number) => void;
@@ -114,6 +119,11 @@ export const useEditor = create<EditorState>()((set) => ({
   previousView: { type: "survey" },
   lastVariant: null,
   summaries: [],
+  three: {
+    options: { enabled: false, mode: "orbit", ceiling: true, white: false },
+    camera: null,
+    sun: null,
+  },
   setMode: (mode) => set({ mode }),
   setDialog: (dialog) => set({ dialog }),
   setViewport: (width, height) => set({ viewport: { width, height } }),
@@ -167,6 +177,11 @@ function reduce(acc: Partial<EditorState>, event: FromEngine): Partial<EditorSta
       };
     case "variantsSummary":
       return { ...acc, summaries: event.views };
+    case "view3dChanged":
+      return {
+        ...acc,
+        three: { options: event.options, camera: event.camera, sun: event.sun ?? null },
+      };
     case "error":
       return { ...acc, lastError: event.message };
     case "journal":

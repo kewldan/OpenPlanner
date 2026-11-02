@@ -30,8 +30,9 @@ const toolIcons: Record<string, IconName> = {
 export function Toolbar() {
   const current = useEditor((s) => s.tool);
   const ready = useEditor((s) => s.engine.state === "ready");
-  // Подписка на вид: доступность инструментов зависит от него.
+  // Подписка на вид и 3D: доступность инструментов зависит от них.
   useEditor((s) => s.view);
+  useEditor((s) => s.three.options.enabled);
   return (
     <nav className={styles.toolbar} aria-label={t("tools.label")}>
       {toolActions.map((action) => {

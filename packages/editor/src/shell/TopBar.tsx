@@ -5,6 +5,7 @@ import { t } from "../i18n";
 import { useProject } from "../project";
 import { type EditorMode, useEditor } from "../store/editor";
 import { enterReplan, enterSurvey } from "../variants/actions";
+import { toggle3d } from "../view3d/actions";
 import { Icon } from "./icons";
 import styles from "./TopBar.module.css";
 
@@ -18,10 +19,7 @@ const modes: readonly { value: EditorMode; label: string; disabled: boolean }[] 
   { value: "finish", label: t("mode.finish"), disabled: true },
 ];
 
-const views = [
-  { value: "2d", label: t("view.2d") },
-  { value: "3d", label: t("view.3d"), disabled: true },
-] as const;
+type ViewKind = "2d" | "3d";
 
 function action(id: string) {
   const found = actions.find((a) => a.id === id);
@@ -55,6 +53,12 @@ export function TopBar() {
     if (next === "replan") enterReplan();
     else enterSurvey();
   };
+  const in3d = useEditor((s) => s.three.options.enabled);
+  const comparing = view.type === "compare";
+  const views: readonly { value: ViewKind; label: string; disabled: boolean }[] = [
+    { value: "2d", label: t("view.2d"), disabled: false },
+    { value: "3d", label: t("view.3d"), disabled: comparing },
+  ];
   // Подписка на историю, чтобы кнопки обновляли доступность.
   useEditor((s) => s.canUndo && s.canRedo);
 
@@ -87,7 +91,12 @@ export function TopBar() {
       <div className={styles.spacer} />
       <Segmented label={t("mode.label")} value={mode} options={modes} onChange={setMode} />
       <div className={styles.spacer} />
-      <Segmented label={t("view.label")} value="2d" options={views} onChange={() => {}} />
+      <Segmented
+        label={t("view.label")}
+        value={in3d ? "3d" : "2d"}
+        options={views}
+        onChange={(next: ViewKind) => toggle3d(next === "3d")}
+      />
       <div className={styles.group}>
         <Button onClick={palette.run} aria-label={label(palette.id)}>
           Команды

@@ -113,3 +113,11 @@
   font: inherit;
   cursor: pointer;
 }
+
+.orbit {
+  cursor: grab;
+}
+
+.orbit:active {
+  cursor: grabbing;
+}

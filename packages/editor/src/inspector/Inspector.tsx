@@ -18,6 +18,7 @@ import { sendToEngine } from "../engine";
 import { formatNumber, type MessageKey, t } from "../i18n";
 import { useEditor } from "../store/editor";
 import { demolishedIds, statusOf, viewVariant } from "../variants/status";
+import { View3dPanel } from "../view3d/Panel";
 import { CommitField } from "./CommitField";
 import { formatArea, formatDecimal, parseNumber } from "./format";
 import styles from "./Inspector.module.css";
@@ -126,6 +127,20 @@ export function Inspector() {
   const tool = useEditor((s) => s.tool);
   const lastError = useEditor((s) => s.lastError);
   const freeRegions = useEditor((s) => s.derived.freeRegions);
+  const in3d = useEditor((s) => s.three.options.enabled);
+
+  if (in3d && document) {
+    return (
+      <aside className={styles.root} aria-label={t("view3d.title")} data-testid="inspector">
+        <View3dPanel document={document} />
+        {lastError && (
+          <p className={styles.error} role="alert">
+            {lastError}
+          </p>
+        )}
+      </aside>
+    );
+  }
 
   const single =
     document && selection.length === 1 ? findElement(document, selection[0] ?? "") : null;

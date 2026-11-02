@@ -23,6 +23,10 @@
   text-overflow: ellipsis;
 }
 
+.spacer {
+  flex: 1;
+}
+
 .snap {
   color: var(--accent-text);
 }
