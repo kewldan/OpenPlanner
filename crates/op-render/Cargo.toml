@@ -14,5 +14,11 @@ log.workspace = true
 thiserror.workspace = true
 wgpu.workspace = true
 
+# Нативные бэкенды — для рендера без окна (тесты, будущий оффлайн-рендер).
+# В WASM-сборке бэкенды задаёт op-engine (WebGPU/WebGL2).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+pollster = "1"
+wgpu = { workspace = true, features = ["std", "metal", "vulkan", "dx12"] }
+
 [lints]
 workspace = true
