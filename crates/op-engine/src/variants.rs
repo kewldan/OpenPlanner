@@ -103,7 +103,10 @@ fn adapt_into(
                     // пометки обмера остаются как есть.
                     if matches!(
                         existing,
-                        Element::Wall(_) | Element::Opening(_) | Element::Room(_)
+                        Element::Wall(_)
+                            | Element::Opening(_)
+                            | Element::Room(_)
+                            | Element::Furniture(_)
                     ) {
                         demolish.push(id);
                     }
@@ -196,7 +199,13 @@ pub fn set_demolished(doc: &Document, variant: &str, ids: &[String], on: bool) -
     for id in ids {
         let survey = find(doc, id).is_some_and(|e| {
             e.variant().is_none()
-                && matches!(e, Element::Wall(_) | Element::Opening(_) | Element::Room(_))
+                && matches!(
+                    e,
+                    Element::Wall(_)
+                        | Element::Opening(_)
+                        | Element::Room(_)
+                        | Element::Furniture(_)
+                )
         });
         if !survey {
             continue;
@@ -284,6 +293,12 @@ pub fn create(
         l.variant.clone_from(&new_variant);
         commands.push(put(Element::Leader(l)));
     }
+    for f in doc.furniture.iter().filter(|e| mine(&e.variant)) {
+        let mut f = f.clone();
+        f.id = fresh(&mut map, &f.id, ids);
+        f.variant.clone_from(&new_variant);
+        commands.push(put(Element::Furniture(f)));
+    }
     (commands, id)
 }
 
@@ -302,6 +317,10 @@ pub fn delete(doc: &Document, variant: &str) -> Vec<Command> {
         .filter(|e| mine(&e.variant))
         .for_each(|e| remove(&e.id));
     doc.leaders
+        .iter()
+        .filter(|e| mine(&e.variant))
+        .for_each(|e| remove(&e.id));
+    doc.furniture
         .iter()
         .filter(|e| mine(&e.variant))
         .for_each(|e| remove(&e.id));
@@ -436,6 +455,10 @@ pub fn translate(doc: &mut Document, d: DVec2) {
     for u in &mut doc.underlays {
         u.x += d.x;
         u.y += d.y;
+    }
+    for f in &mut doc.furniture {
+        f.x += d.x;
+        f.y += d.y;
     }
     for dim in &mut doc.dimensions {
         for a in [&mut dim.start, &mut dim.end] {

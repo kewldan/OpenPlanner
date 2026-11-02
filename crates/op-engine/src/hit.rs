@@ -137,6 +137,16 @@ pub fn hit(
             return Some(r.id.clone());
         }
     }
+    for f in doc
+        .furniture
+        .iter()
+        .rev()
+        .filter(|f| derived.editable(&f.layer))
+    {
+        if crate::furniture::contains(f, p, radius) {
+            return Some(f.id.clone());
+        }
+    }
     for w in doc
         .walls
         .iter()
@@ -293,6 +303,11 @@ pub fn in_rect(doc: &Document, derived: &Derived, lo: DVec2, hi: DVec2) -> Vec<S
     for l in doc.leaders.iter().filter(|l| derived.editable(&l.layer)) {
         if inside(DVec2::new(l.x, l.y)) && inside(DVec2::new(l.text_x, l.text_y)) {
             ids.push(l.id.clone());
+        }
+    }
+    for f in doc.furniture.iter().filter(|f| derived.editable(&f.layer)) {
+        if crate::furniture::corners(f).into_iter().all(inside) {
+            ids.push(f.id.clone());
         }
     }
     for u in doc.underlays.iter().filter(|u| derived.editable(&u.layer)) {

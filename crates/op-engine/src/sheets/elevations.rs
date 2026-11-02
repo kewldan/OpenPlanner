@@ -16,8 +16,8 @@ use op_geom::left_normal;
 use op_model::{Document, OpeningKind};
 
 use super::{
-    CAPTION_BAND, GAP, LAYER_DIMENSIONS, LAYER_OPENINGS, LAYER_TABLES, LAYER_WALLS, NAME_HEIGHT,
-    Plot, SCALES, SMALL_HEIGHT, Views, flow, new_sheet,
+    CAPTION_BAND, GAP, LAYER_DIMENSIONS, LAYER_FURNITURE, LAYER_OPENINGS, LAYER_TABLES,
+    LAYER_WALLS, NAME_HEIGHT, Plot, SCALES, SMALL_HEIGHT, Views, flow, new_sheet,
 };
 use crate::{
     derived::{Derived, opening_span},
@@ -59,6 +59,15 @@ struct FaceOpening {
     hinge_left: bool,
 }
 
+/// Предмет мебели спинкой к грани: от и до вдоль грани, низ и верх, мм.
+#[derive(Debug, Clone)]
+struct FaceItem {
+    from: f64,
+    to: f64,
+    bottom: f64,
+    top: f64,
+}
+
 /// Грань помещения.
 #[derive(Debug, Clone)]
 struct Face {
@@ -67,6 +76,7 @@ struct Face {
     end: DVec2,
     length: f64,
     openings: Vec<FaceOpening>,
+    furniture: Vec<FaceItem>,
 }
 
 /// Помещение с гранями.
@@ -225,6 +235,33 @@ fn faces(doc: &Document, derived: &Derived, contour: &[DVec2]) -> Vec<Face> {
             }
         }
         openings.sort_by(|a, b| a.from.total_cmp(&b.from));
+        // Мебель спинкой к грани (со стороны помещения).
+        let mut furniture = Vec::new();
+        for f in doc
+            .furniture
+            .iter()
+            .filter(|f| derived.visible.contains(&f.layer))
+        {
+            let back = [
+                crate::furniture::to_plan(f, DVec2::new(-f.width / 2.0, -f.depth / 2.0)),
+                crate::furniture::to_plan(f, DVec2::new(f.width / 2.0, -f.depth / 2.0)),
+            ];
+            let against = back.iter().all(|b| dir.perp_dot(*b - p).abs() < 60.0);
+            let inside = dir.perp_dot(DVec2::new(f.x, f.y) - p) > 0.0;
+            if !against || !inside {
+                continue;
+            }
+            let (t0, t1) = ((back[0] - p).dot(dir), (back[1] - p).dot(dir));
+            let (lo, hi) = (t0.min(t1).max(0.0), t0.max(t1).min(length));
+            if hi - lo > 1.0 {
+                furniture.push(FaceItem {
+                    from: lo,
+                    to: hi,
+                    bottom: f.elevation,
+                    top: f.elevation + f.height,
+                });
+            }
+        }
         let letter = LETTERS.get(out.len()).map_or_else(
             || {
                 format!(
@@ -241,6 +278,7 @@ fn faces(doc: &Document, derived: &Derived, contour: &[DVec2]) -> Vec<Face> {
             end: q,
             length,
             openings,
+            furniture,
         });
     }
     out
@@ -581,6 +619,21 @@ impl Page {
                     ),
                 );
             }
+        }
+        let furniture = plot.sheet.layer(LAYER_FURNITURE);
+        for f in &face.furniture {
+            let top = f.top.min(height);
+            if top <= f.bottom {
+                continue;
+            }
+            let (a, b) = (point(f.from, f.bottom), point(f.to, top));
+            plot.items.push(Item::polyline(
+                furniture,
+                vec![a, DVec2::new(b.x, a.y), b, DVec2::new(a.x, b.y)],
+                true,
+                0.25,
+                Rgb::BLACK,
+            ));
         }
         // Цепочка под стеной: края проёмов, затем общий размер.
         let mut xs = vec![0.0, face.length];

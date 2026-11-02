@@ -83,6 +83,12 @@ pub fn demolition(scene: &mut Scene, d: &Demolition<'_>) {
             }
         }
     }
+    for f in d.survey.furniture.iter().filter(|f| d.ids.contains(&f.id)) {
+        let c = crate::furniture::corners(f);
+        for i in 0..c.len() {
+            scene.dashed(c[i], c[(i + 1) % c.len()], 1.5, 5.0, red);
+        }
+    }
     for o in d
         .survey
         .openings
@@ -135,13 +141,43 @@ pub fn arc(center: DVec2, radius: f64, from: f64, to: f64) -> Vec<DVec2> {
         .collect()
 }
 
-/// Сцена документа: подложки, помещения, стены, проёмы, размеры, выноски.
+/// Свои модели мебели по путям файлов.
+pub type Models = std::collections::HashMap<String, std::sync::Arc<crate::furniture::Model>>;
+
+/// Обозначение предмета мебели: белая подложка под габаритом и линии.
+pub fn furniture_symbol(
+    scene: &mut Scene,
+    f: &op_model::Furniture,
+    model: Option<&crate::furniture::Model>,
+    color: Color,
+    width: f32,
+    fill: Option<Color>,
+) {
+    let marks = crate::furniture::plan_marks(f, model);
+    if let (Some(fill), Some(outline)) = (fill, marks.first()) {
+        scene.fill(&[&outline.points], fill);
+    }
+    for m in &marks {
+        if m.dashed {
+            let n = m.points.len();
+            let segments = if m.closed { n } else { n.saturating_sub(1) };
+            for i in 0..segments {
+                scene.dashed(m.points[i], m.points[(i + 1) % n], width, 4.0, color);
+            }
+        } else {
+            scene.polyline(&m.points, m.closed, width, color);
+        }
+    }
+}
+
+/// Сцена документа: подложки, помещения, мебель, стены, проёмы, размеры, выноски.
 #[must_use]
 pub fn document(
     doc: &Document,
     derived: &Derived,
     font: Option<&Font>,
     images: &dyn Fn(&str) -> bool,
+    models: &Models,
 ) -> Scene {
     let mut scene = Scene::new();
     let shown = |layer: &str| derived.visible.contains(layer);
@@ -168,6 +204,22 @@ pub fn document(
             contours.extend(region.islands.iter().map(Vec::as_slice));
             scene.fill(&contours, palette::room());
         }
+    }
+
+    for f in doc.furniture.iter().filter(|f| shown(&f.layer)) {
+        let model = f
+            .model
+            .as_ref()
+            .and_then(|m| models.get(m))
+            .map(AsRef::as_ref);
+        furniture_symbol(
+            &mut scene,
+            f,
+            model,
+            palette::ink(),
+            1.0,
+            Some(Color::hex(0xFFFFFF, 1.0)),
+        );
     }
 
     let groups = std::iter::once((palette::wall(), &derived.wall_shapes)).chain(

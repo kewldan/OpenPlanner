@@ -30,6 +30,8 @@ pub enum Tool {
     Calibrate,
     /// Демонтаж: щелчок по элементу обмера отмечает или снимает демонтаж.
     Demolish,
+    /// Мебель: позиция каталога ставится щелчком, у стены — спинкой к ней.
+    Furniture,
 }
 
 /// Шаг инструмента — по нему UI показывает подсказку.
@@ -66,6 +68,8 @@ pub enum ToolStep {
     DemolishPick,
     /// Перепланировка недоступна в этом виде (сравнение, обмер).
     Unavailable,
+    /// Мебель: щелчок ставит предмет.
+    FurniturePlace,
 }
 
 /// Фаза ввода указателя (левая кнопка).
@@ -273,6 +277,30 @@ pub struct SunInfo {
     pub altitude: f64,
 }
 
+/// Позиция каталога мебели для UI.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogEntry {
+    /// Идентификатор.
+    pub id: String,
+    /// Название.
+    pub name: String,
+    /// Раздел.
+    pub category: String,
+    /// Ширина, мм.
+    pub width: f64,
+    /// Глубина, мм.
+    pub depth: f64,
+    /// Высота, мм.
+    pub height: f64,
+    /// Низ над полом, мм.
+    pub elevation: f64,
+    /// Слова для поиска.
+    pub keywords: String,
+    /// Обозначение в квадрате 100 × 100: путь SVG.
+    pub icon: String,
+}
+
 /// Длина и площадь стен одного материала.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]
@@ -473,6 +501,18 @@ pub enum ToEngine {
         /// Ракурс.
         id: String,
     },
+    /// Инструмент «Мебель» с позицией каталога.
+    FurnitureTool {
+        /// Позиция каталога.
+        item: String,
+    },
+    /// Повернуть и (или) отразить выделенную мебель или предмет инструмента.
+    TransformFurniture {
+        /// Поворот по часовой стрелке, градусы.
+        rotate: f64,
+        /// Отразить по ширине.
+        mirror: bool,
+    },
     /// Отметить или снять демонтаж элементов обмера в текущем варианте.
     SetDemolished {
         /// Элементы.
@@ -590,6 +630,11 @@ pub enum FromEngine {
     ViewModeChanged {
         /// Вид.
         view: View,
+    },
+    /// Каталог мебели (один раз при запуске).
+    Catalog {
+        /// Позиции.
+        items: Vec<CatalogEntry>,
     },
     /// Сводка обмера и всех вариантов: площади и изменения.
     VariantsSummary {

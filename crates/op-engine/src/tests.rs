@@ -566,6 +566,10 @@ fn every_element_survives_json() {
     click(&mut s, 2000.0, 2000.0);
     click(&mut s, 2500.0, 1500.0);
     s.add_underlay(png(4, 4), "п.png").unwrap();
+    s.handle(ToEngine::FurnitureTool {
+        item: "bed-double".into(),
+    });
+    click(&mut s, 2500.0, 3000.0);
     let doc = s.document();
     let elements: Vec<Element> = doc
         .layers
@@ -579,8 +583,9 @@ fn every_element_survives_json() {
         .chain(doc.dimensions.iter().cloned().map(Element::Dimension))
         .chain(doc.leaders.iter().cloned().map(Element::Leader))
         .chain(doc.underlays.iter().cloned().map(Element::Underlay))
+        .chain(doc.furniture.iter().cloned().map(Element::Furniture))
         .collect();
-    assert_eq!(elements.len(), 7 + 4 + 4 + 1 + 1 + 1 + 1 + 1);
+    assert_eq!(elements.len(), 8 + 4 + 4 + 1 + 1 + 1 + 1 + 1 + 1);
     for element in elements {
         let command = Command::Put {
             element,
@@ -1532,4 +1537,203 @@ fn walk_starts_inside_the_nearest_room() {
             .any(|(x, y)| (walk.eye[0] - x).abs() < 1e-6 && (walk.eye[1] - y).abs() < 1e-6),
         "{walk:?} {rooms:?}"
     );
+}
+
+// ---------------------------------------------------------------- мебель
+
+fn furniture_tool(s: &mut EngineState, item: &str) {
+    assert!(!has_error(
+        &s.handle(ToEngine::FurnitureTool { item: item.into() })
+    ));
+}
+
+#[test]
+fn furniture_snaps_to_walls_and_transforms() {
+    let mut s = state();
+    two_rooms(&mut s);
+    furniture_tool(&mut s, "bed-double");
+    assert_eq!(s.step(), ToolStep::FurniturePlace);
+    // Спинка у верхней стены (внутренняя грань y = 1060): кровать встаёт к ней вплотную.
+    click(&mut s, 1700.0, 2150.0);
+    let bed = s.document().furniture[0].clone();
+    assert_eq!(bed.item, "bed-double");
+    assert!((bed.y - 2060.0).abs() < 1e-6, "{}", bed.y);
+    assert!(bed.rotation.abs() < 1e-6);
+    // У левой стены (грань x = 1060) лицом вправо — поворот 270°.
+    furniture_tool(&mut s, "wardrobe");
+    click(&mut s, 1420.0, 4000.0);
+    let wardrobe = s.document().furniture[1].clone();
+    assert!((wardrobe.x - 1360.0).abs() < 1e-6, "{}", wardrobe.x);
+    assert!(
+        (wardrobe.rotation - 270.0).abs() < 1e-6,
+        "{}",
+        wardrobe.rotation
+    );
+    // Посреди комнаты — без привязки, с поворотом инструмента.
+    furniture_tool(&mut s, "armchair");
+    s.handle(ToEngine::TransformFurniture {
+        rotate: 90.0,
+        mirror: false,
+    });
+    click(&mut s, 1750.0, 3500.0);
+    let chair = s.document().furniture[2].clone();
+    assert!((chair.rotation - 90.0).abs() < 1e-6);
+
+    // Выделение кровати щелчком, поворот и отражение — одна правка каждое.
+    tool(&mut s, Tool::Select);
+    click(&mut s, 1700.0, 2500.0);
+    assert_eq!(s.selection(), std::slice::from_ref(&bed.id));
+    s.handle(ToEngine::TransformFurniture {
+        rotate: -90.0,
+        mirror: true,
+    });
+    let turned = s.document().furniture_item(&bed.id).unwrap().clone();
+    assert!((turned.rotation - 270.0).abs() < 1e-6 && turned.mirrored);
+    s.handle(ToEngine::Undo);
+    assert!(!s.document().furniture_item(&bed.id).unwrap().mirrored);
+
+    // Перетаскивание: вдоль верхней стены кровать скользит, оставаясь у неё;
+    // спинкой к левой стене (грань x = 1060) — поворачивается лицом вправо.
+    drag(
+        &mut s,
+        DVec2::new(1700.0, 2500.0),
+        DVec2::new(1500.0, 2500.0),
+    );
+    let slid = s.document().furniture_item(&bed.id).unwrap().clone();
+    assert!(
+        (slid.x - 1500.0).abs() < 1e-6 && (slid.y - 2060.0).abs() < 1e-6,
+        "{slid:?}"
+    );
+    drag(
+        &mut s,
+        DVec2::new(1500.0, 2500.0),
+        DVec2::new(2100.0, 3440.0),
+    );
+    let moved = s.document().furniture_item(&bed.id).unwrap().clone();
+    assert!(
+        (moved.x - 2060.0).abs() < 1e-6 && (moved.rotation - 270.0).abs() < 1e-6,
+        "{moved:?}"
+    );
+
+    // Удаление.
+    s.handle(ToEngine::Select {
+        ids: vec![chair.id.clone()],
+    });
+    s.handle(ToEngine::DeleteSelection);
+    assert!(s.document().furniture_item(&chair.id).is_none());
+}
+
+#[test]
+fn own_glb_model_is_stored_drawn_and_removed() {
+    let cube = op_scan::io::Mesh {
+        positions: vec![
+            glam::DVec3::new(0.0, 0.0, 0.0),
+            glam::DVec3::new(0.8, 0.0, 0.0),
+            glam::DVec3::new(0.8, 0.0, 0.5),
+            glam::DVec3::new(0.0, 0.0, 0.5),
+            glam::DVec3::new(0.4, 1.2, 0.25),
+        ],
+        triangles: vec![
+            [0, 1, 4],
+            [1, 2, 4],
+            [2, 3, 4],
+            [3, 0, 4],
+            [0, 2, 1],
+            [0, 3, 2],
+        ],
+    };
+    let bytes = op_scan::io::write_glb(&cube);
+    let mut s = state();
+    two_rooms(&mut s);
+    s.import_furniture(bytes, "Кресло-мешок.glb").unwrap();
+    let f = s.document().furniture[0].clone();
+    assert_eq!(f.item, crate::furniture::CUSTOM);
+    assert_eq!(f.name, "Кресло-мешок");
+    assert_eq!([f.width, f.depth, f.height], [800.0, 500.0, 1200.0]);
+    let asset = f.model.clone().unwrap();
+    assert!(s.document().assets.contains_key(&asset));
+    // В 3D — треугольники модели.
+    enable_3d(&mut s);
+    let scene = s.take_scene_3d().unwrap();
+    let tall = scene
+        .opaque
+        .vertices
+        .iter()
+        .any(|v| (f64::from(v.pos[2]) - 1200.0).abs() < 1.0);
+    assert!(tall, "вершина модели на высоте 1,2 м");
+    // Модель переживает файл; при удалении предмета уходит и файл модели.
+    let file = s.export_file("test").unwrap();
+    let mut t = state();
+    t.import_file(&file).unwrap();
+    assert!(t.models.contains_key(&asset));
+    s.handle(ToEngine::Select { ids: vec![f.id] });
+    s.handle(ToEngine::DeleteSelection);
+    assert!(!s.document().assets.contains_key(&asset));
+    assert!(s.import_furniture(b"not a glb".to_vec(), "x").is_err());
+}
+
+#[test]
+fn furniture_belongs_to_variants_and_drawings() {
+    let mut s = state();
+    two_rooms(&mut s);
+    // Мебель обмера — диван; в варианте его убирают и ставят кровать.
+    furniture_tool(&mut s, "sofa");
+    click(&mut s, 1700.0, 4400.0);
+    let sofa = s.document().furniture[0].id.clone();
+    tool(&mut s, Tool::Select);
+    s.handle(ToEngine::CreateVariant {
+        name: "Вариант А".into(),
+        copy_of: None,
+    });
+    let v = variant_id(&s);
+    s.handle(ToEngine::SetDemolished {
+        ids: vec![sofa.clone()],
+        demolished: true,
+    });
+    furniture_tool(&mut s, "bed-single");
+    click(&mut s, 3200.0, 2000.0);
+    let bed = s.document().furniture.last().unwrap().clone();
+    assert_eq!(bed.variant.as_deref(), Some(v.as_str()));
+    assert!(
+        s.doc().furniture_item(&sofa).is_none(),
+        "диван убран в варианте"
+    );
+    assert!(
+        s.document().furniture_item(&sofa).is_some(),
+        "в обмере диван остался"
+    );
+
+    // Комплект варианта: план расстановки и спецификация.
+    let set = s.drawings(&request(Some(&v)));
+    let sheet = set
+        .sheets
+        .iter()
+        .find(|s| s.title == "План расстановки мебели")
+        .unwrap();
+    let texts = sheet_texts(sheet);
+    assert!(
+        texts
+            .iter()
+            .any(|t| t == "Спецификация мебели и оборудования")
+    );
+    assert!(texts.iter().any(|t| t == "Кровать односпальная"));
+    assert!(!texts.iter().any(|t| t == "Диван"), "{texts:?}");
+    let table = &set
+        .worksheets
+        .iter()
+        .find(|w| w.name == "Мебель")
+        .unwrap()
+        .tables[0];
+    assert_eq!(table.rows.len(), 1);
+    assert_eq!(table.rows[0][2].display(), "900 × 2000 × 450");
+
+    // Копия варианта переносит мебель, удаление варианта убирает её.
+    s.handle(ToEngine::CreateVariant {
+        name: "Копия".into(),
+        copy_of: Some(v.clone()),
+    });
+    assert_eq!(s.document().furniture.len(), 3);
+    let copy = variant_id(&s);
+    s.handle(ToEngine::DeleteVariant { id: copy });
+    assert_eq!(s.document().furniture.len(), 2);
 }

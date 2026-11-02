@@ -81,6 +81,7 @@ const LAYER_DIMENSIONS: &str = "Размеры";
 const LAYER_NOTES: &str = "Выноски";
 const LAYER_DEMOLITION: &str = "Демонтаж";
 const LAYER_CONSTRUCTION: &str = "Монтаж";
+const LAYER_FURNITURE: &str = "Мебель";
 
 /// Лист комплекта.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,6 +90,7 @@ enum Kind {
     Demolition,
     Construction,
     Rooms,
+    Furniture,
 }
 
 impl Kind {
@@ -98,6 +100,7 @@ impl Kind {
             Self::Demolition => "План демонтажа",
             Self::Construction => "План монтажа перегородок",
             Self::Rooms => "План помещений",
+            Self::Furniture => "План расстановки мебели",
         }
     }
 }
@@ -135,6 +138,9 @@ pub fn build(doc: &Document, variant: Option<&str>, date: &str) -> SheetSet {
             kinds.push(Kind::Construction);
         }
         kinds.push(Kind::Rooms);
+    }
+    if !views.furniture_rows().is_empty() {
+        kinds.push(Kind::Furniture);
     }
 
     let size = {
@@ -969,8 +975,42 @@ impl<'a> Views<'a> {
                     &self.variant_rooms(),
                 ));
             }
+            Kind::Furniture => out.push(furniture_table(&self.furniture_rows())),
         }
         out
+    }
+
+    /// Итоговый вид: вариант, если он выбран, иначе обмер.
+    fn final_view(&self) -> (&Document, &Derived) {
+        match &self.variant {
+            Some(v) => (&v.doc, &v.derived),
+            None => (&self.survey, &self.survey_derived),
+        }
+    }
+
+    /// Спецификация мебели итогового вида: одинаковые предметы — одной позицией.
+    fn furniture_rows(&self) -> Vec<FurnitureRow> {
+        let (doc, derived) = self.final_view();
+        let mut rows: Vec<FurnitureRow> = Vec::new();
+        for f in doc
+            .furniture
+            .iter()
+            .filter(|f| derived.visible.contains(&f.layer))
+        {
+            let size = [f.width, f.depth, f.height].map(f64::round);
+            let same = |r: &FurnitureRow| {
+                r.name == f.name && r.size.iter().zip(size).all(|(a, b)| (a - b).abs() < 0.5)
+            };
+            match rows.iter_mut().find(|r| same(r)) {
+                Some(r) => r.ids.push(f.id.clone()),
+                None => rows.push(FurnitureRow {
+                    name: f.name.clone(),
+                    size,
+                    ids: vec![f.id.clone()],
+                }),
+            }
+        }
+        rows
     }
 
     /// Ведомости для XLSX.
@@ -1012,12 +1052,30 @@ impl<'a> Views<'a> {
                 .collect(),
             });
         }
+        let furniture = self.furniture_rows();
+        if !furniture.is_empty() {
+            out.push(Worksheet {
+                name: "Мебель".into(),
+                tables: vec![furniture_table(&furniture)],
+            });
+        }
         out
     }
 
     /// План листа.
     fn draw(&self, kind: Kind, plot: &mut Plot<'_>) {
         match (kind, &self.variant) {
+            (Kind::Furniture, _) => {
+                let (doc, derived) = self.final_view();
+                let rooms = match &self.variant {
+                    Some(_) => self.variant_rooms(),
+                    None => self.survey_rooms(),
+                };
+                plot.walls(LAYER_WALLS, &walls_where(doc, derived, |_| true));
+                plot.openings(doc, derived, |_| true);
+                plot.room_labels(doc, &rooms, false);
+                plot.furniture(doc, derived, &self.furniture_rows());
+            }
             (Kind::Survey, _) | (_, None) => {
                 let (doc, derived) = (&self.survey, &self.survey_derived);
                 plot.walls(LAYER_WALLS, &walls_where(doc, derived, |_| true));
@@ -1242,6 +1300,53 @@ fn construction_table(rows: &[Row]) -> Table {
             Cell::text(""),
             Cell::text(""),
             Cell::number(area, 2),
+        ]),
+    }
+}
+
+/// Позиция спецификации мебели.
+#[derive(Debug, Clone)]
+struct FurnitureRow {
+    name: String,
+    /// Ширина, глубина, высота, мм.
+    size: [f64; 3],
+    /// Предметы этой позиции.
+    ids: Vec<String>,
+}
+
+fn furniture_table(rows: &[FurnitureRow]) -> Table {
+    let count: usize = rows.iter().map(|r| r.ids.len()).sum();
+    Table {
+        title: "Спецификация мебели и оборудования".into(),
+        columns: vec![
+            Column::new("Поз.", 14.0, Align::Center),
+            Column::new("Наименование", 96.0, Align::Left),
+            Column::new("Размеры (Ш × Г × В), мм", 55.0, Align::Center),
+            Column::new("Кол.", 20.0, Align::Right),
+        ],
+        rows: rows
+            .iter()
+            .enumerate()
+            .map(|(i, r)| {
+                let [w, d, h] = r.size;
+                vec![
+                    Cell::text((i + 1).to_string()),
+                    Cell::text(r.name.clone()),
+                    Cell::text(format!(
+                        "{} × {} × {}",
+                        geometry::format_length(w),
+                        geometry::format_length(d),
+                        geometry::format_length(h)
+                    )),
+                    Cell::text(r.ids.len().to_string()),
+                ]
+            })
+            .collect(),
+        footer: Some(vec![
+            Cell::text(""),
+            Cell::text("Итого"),
+            Cell::text(""),
+            Cell::text(count.to_string()),
         ]),
     }
 }
@@ -1684,6 +1789,56 @@ impl Plot<'_> {
                     color: Rgb::BLACK,
                 },
             ));
+        }
+    }
+
+    /// Мебель: обозначения и номера позиций спецификации в центрах предметов.
+    fn furniture(&mut self, doc: &Document, derived: &Derived, rows: &[FurnitureRow]) {
+        let layer = self.sheet.layer(LAYER_FURNITURE);
+        for f in doc
+            .furniture
+            .iter()
+            .filter(|f| derived.visible.contains(&f.layer))
+        {
+            let marks = crate::furniture::plan_marks(f, None);
+            if let Some(outline) = marks.first() {
+                self.items
+                    .push(Item::fill(layer, vec![outline.points.clone()], Rgb::WHITE));
+            }
+            for m in marks {
+                self.items.push(Item {
+                    layer,
+                    shape: Mark::Stroke {
+                        points: m.points,
+                        closed: m.closed,
+                        width: SYMBOL_LINE,
+                        color: Rgb::BLACK,
+                        dash: m.dashed.then_some((1.5, 1.0)),
+                    },
+                });
+            }
+            if let Some(n) = rows.iter().position(|r| r.ids.contains(&f.id)) {
+                let at = DVec2::new(f.x, f.y);
+                let r = SMALL_HEIGHT * 0.9 * self.k;
+                let circle: Vec<DVec2> = (0..24)
+                    .map(|i| {
+                        let t = f64::from(i) / 24.0 * std::f64::consts::TAU;
+                        at + DVec2::new(t.cos(), t.sin()) * r
+                    })
+                    .collect();
+                self.items
+                    .push(Item::fill(layer, vec![circle.clone()], Rgb::WHITE));
+                self.items
+                    .push(Item::polyline(layer, circle, true, THIN, Rgb::BLACK));
+                self.text(
+                    layer,
+                    at,
+                    &(n + 1).to_string(),
+                    SMALL_HEIGHT * 0.8,
+                    Align::Center,
+                    Rgb::BLACK,
+                );
+            }
         }
     }
 

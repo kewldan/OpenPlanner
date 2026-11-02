@@ -24,7 +24,12 @@ impl EngineState {
     /// 3D-сцена текущего вида (обмер или вариант).
     #[must_use]
     pub fn scene_3d(&self) -> Scene3D {
-        model3d::build(&self.projected, &self.derived, &self.options_3d)
+        model3d::build(
+            &self.projected,
+            &self.derived,
+            &self.options_3d,
+            &self.models,
+        )
     }
 
     /// 3D-сцена, если она изменилась с прошлого вызова и 3D включён.

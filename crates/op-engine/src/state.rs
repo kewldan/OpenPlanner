@@ -80,6 +80,12 @@ pub struct EngineState {
     pub(crate) scene_3d_dirty: bool,
     /// Камера 3D уже наведена на модель этого документа.
     pub(crate) camera_3d_fitted: bool,
+    /// Позиция каталога для инструмента «Мебель».
+    pub(crate) furniture_item: String,
+    /// Поворот предмета инструмента «Мебель», градусы.
+    pub(crate) furniture_rotation: f64,
+    /// Свои модели мебели по путям файлов в проекте.
+    pub(crate) models: HashMap<String, Arc<crate::furniture::Model>>,
     images: HashMap<String, DecodedImage>,
     uploaded: HashSet<String>,
 }
@@ -114,6 +120,9 @@ impl EngineState {
             camera_3d: crate::camera3d::Camera3d::default(),
             scene_3d_dirty: true,
             camera_3d_fitted: false,
+            furniture_item: "sofa".into(),
+            furniture_rotation: 0.0,
+            models: HashMap::new(),
             images: HashMap::new(),
             uploaded: HashSet::new(),
         }
@@ -194,6 +203,9 @@ impl EngineState {
                 self.summary_event(),
                 self.view_mode_event(),
                 self.view_3d_event(),
+                FromEngine::Catalog {
+                    items: crate::furniture::catalog_entries(),
+                },
             ],
         }
     }
@@ -395,6 +407,20 @@ impl EngineState {
                 vec![self.view_3d_event()]
             }
             ToEngine::SaveView3d { name } => self.save_view_3d(name),
+            ToEngine::FurnitureTool { item } => {
+                if crate::furniture::catalog_item(&item).is_none() {
+                    return EngineEvents {
+                        events: vec![FromEngine::Error {
+                            message: "Такой позиции нет в каталоге".into(),
+                        }],
+                    };
+                }
+                self.furniture_item = item;
+                self.set_tool(Tool::Furniture)
+            }
+            ToEngine::TransformFurniture { rotate, mirror } => {
+                self.transform_furniture(rotate, mirror)
+            }
             ToEngine::ApplyView3d { id } => self.apply_view_3d(&id),
         };
         EngineEvents { events }
@@ -409,7 +435,7 @@ impl EngineState {
                 return self.compare_scene(left.as_deref(), right.as_deref(), font, &images);
             }
             let (doc, derived) = self.shown();
-            let mut scene = draw::document(doc, derived, font, &images);
+            let mut scene = draw::document(doc, derived, font, &images, &self.models);
             if let (Some(v), Some((survey, survey_derived))) = (self.variant(), &self.survey) {
                 let ids = op_model::view::demolished(self.history.document(), v);
                 draw::demolition(
@@ -462,7 +488,7 @@ impl EngineState {
             let mut doc = op_model::view::project(full, variant.as_deref());
             crate::variants::translate(&mut doc, offset);
             let derived = Derived::new(&doc);
-            scene.extend(draw::document(&doc, &derived, font, images));
+            scene.extend(draw::document(&doc, &derived, font, images, &self.models));
             if let Some(v) = &variant {
                 let mut survey = op_model::view::project(full, None);
                 crate::variants::translate(&mut survey, offset);
@@ -616,6 +642,77 @@ impl EngineState {
         Ok(EngineEvents { events })
     }
 
+    /// Добавляет свою модель мебели (GLB) в центр видимой области и выделяет её.
+    ///
+    /// # Errors
+    ///
+    /// Файл не читается как GLB.
+    pub fn import_furniture(&mut self, bytes: Vec<u8>, name: &str) -> Result<EngineEvents, String> {
+        let model = crate::furniture::read_model(&bytes)?;
+        let id = self.ids.generate();
+        let asset = format!("assets/furniture/{id}.glb");
+        let [width, depth, height] = model.size.map(|v| v.round().max(1.0));
+        let name = name.trim_end_matches(".glb").trim_end_matches(".GLB");
+        let item = op_model::Furniture {
+            id: id.clone(),
+            layer: LayerKind::Furniture.id().into(),
+            variant: None,
+            item: crate::furniture::CUSTOM.into(),
+            name: if name.is_empty() {
+                "Модель".into()
+            } else {
+                name.to_owned()
+            },
+            x: self.camera.center.x,
+            y: self.camera.center.y,
+            rotation: 0.0,
+            mirrored: false,
+            width,
+            depth,
+            height,
+            elevation: 0.0,
+            model: Some(asset.clone()),
+        };
+        self.models.insert(asset.clone(), Arc::new(model));
+        let mut events = self.execute_all(vec![
+            Command::asset(asset, bytes),
+            Command::Put {
+                element: Element::Furniture(item),
+                index: None,
+            },
+        ]);
+        events.extend(self.select(vec![id]));
+        Ok(EngineEvents { events })
+    }
+
+    /// Поворачивает и отражает выделенную мебель или предмет инструмента «Мебель».
+    pub(crate) fn transform_furniture(&mut self, rotate: f64, mirror: bool) -> Vec<FromEngine> {
+        if !rotate.is_finite() {
+            return vec![];
+        }
+        if self.tool == Tool::Furniture {
+            self.furniture_rotation = (self.furniture_rotation + rotate).rem_euclid(360.0);
+            self.overlay_dirty = true;
+            return vec![];
+        }
+        let commands: Vec<Command> = self
+            .doc()
+            .furniture
+            .iter()
+            .filter(|f| self.selection.contains(&f.id))
+            .map(|f| {
+                let mut f = f.clone();
+                f.rotation = (f.rotation + rotate).rem_euclid(360.0);
+                f.mirrored ^= mirror;
+                Command::Put {
+                    element: Element::Furniture(f),
+                    index: None,
+                }
+            })
+            .collect();
+        self.execute_all(commands)
+    }
+
     /// Импортирует распознанный скан одной правкой и показывает план целиком.
     pub fn import_scan(
         &mut self,
@@ -646,6 +743,7 @@ impl EngineState {
         self.images.clear();
         self.uploaded.clear();
         self.camera_3d_fitted = false;
+        self.models.clear();
         self.document_changed();
         if self.options_3d.enabled {
             self.fit_camera_3d();
@@ -697,6 +795,22 @@ impl EngineState {
                     self.images.insert(key, image);
                 }
                 Err(err) => log::warn!("подложка {key}: {err}"),
+            }
+        }
+        // Прочитать свои модели мебели.
+        let missing: Vec<(String, Arc<Vec<u8>>)> = doc
+            .furniture
+            .iter()
+            .filter_map(|f| f.model.clone())
+            .filter(|m| !self.models.contains_key(m))
+            .filter_map(|m| doc.assets.get(&m).map(|d| (m, d.clone())))
+            .collect();
+        for (key, data) in missing {
+            match crate::furniture::read_model(&data) {
+                Ok(model) => {
+                    self.models.insert(key, Arc::new(model));
+                }
+                Err(err) => log::warn!("модель {key}: {err}"),
             }
         }
         self.document_dirty = true;
@@ -984,6 +1098,7 @@ fn all_ids(doc: &Document) -> HashSet<&str> {
         .chain(doc.dimensions.iter().map(|e| e.id.as_str()))
         .chain(doc.leaders.iter().map(|e| e.id.as_str()))
         .chain(doc.underlays.iter().map(|e| e.id.as_str()))
+        .chain(doc.furniture.iter().map(|e| e.id.as_str()))
         .collect()
 }
 

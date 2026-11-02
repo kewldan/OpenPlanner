@@ -64,6 +64,10 @@ fn outline(
         );
         return true;
     }
+    if let Some(f) = doc.furniture_item(id) {
+        scene.polyline(&crate::furniture::corners(f), true, width, color);
+        return true;
+    }
     if let Some(u) = doc.underlay(id) {
         let (lo, hi) = geometry::underlay_rect(u);
         scene.polyline(
@@ -193,6 +197,18 @@ impl EngineState {
                     }
                 }
                 scene.handle(a, 9.0, accent);
+            }
+            (Tool::Furniture, _) => {
+                if let Some(f) = self.furniture_candidate(p, false) {
+                    draw::furniture_symbol(
+                        &mut scene,
+                        &f,
+                        None,
+                        accent,
+                        1.5,
+                        Some(accent.with_alpha(0.08)),
+                    );
+                }
             }
             (Tool::Door | Tool::Window | Tool::Arch, _) => {
                 if let Some(o) = self.opening_candidate(p, false)

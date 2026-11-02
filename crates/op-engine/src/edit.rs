@@ -143,11 +143,22 @@ pub fn delete(doc: &Document, derived: &Derived, ids: &[String]) -> Vec<Command>
             removed_assets.insert(u.asset.as_str());
         }
     }
+    for f in &doc.furniture {
+        if selected.contains(f.id.as_str()) {
+            commands.push(Command::Remove { id: f.id.clone() });
+            if let Some(model) = &f.model {
+                removed_assets.insert(model.as_str());
+            }
+        }
+    }
     for asset in removed_assets {
-        let still_used = doc
-            .underlays
-            .iter()
-            .any(|u| u.asset == asset && !selected.contains(u.id.as_str()));
+        let still_used =
+            doc.underlays
+                .iter()
+                .any(|u| u.asset == asset && !selected.contains(u.id.as_str()))
+                || doc.furniture.iter().any(|f| {
+                    f.model.as_deref() == Some(asset) && !selected.contains(f.id.as_str())
+                });
         if !still_used {
             commands.push(Command::RemoveAsset {
                 path: asset.to_owned(),
@@ -204,6 +215,14 @@ pub fn translate(doc: &Document, ids: &[String], delta: DVec2) -> Vec<Command> {
             u.x += delta.x;
             u.y += delta.y;
             commands.push(put(Element::Underlay(u)));
+        }
+    }
+    for f in &doc.furniture {
+        if selected.contains(f.id.as_str()) {
+            let mut f = f.clone();
+            f.x += delta.x;
+            f.y += delta.y;
+            commands.push(put(Element::Furniture(f)));
         }
     }
     for d in &doc.dimensions {

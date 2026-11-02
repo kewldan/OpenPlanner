@@ -10,7 +10,7 @@ use op_render::text::Font;
 
 use crate::{
     edit::{self, WallEnd},
-    geometry,
+    furniture, geometry,
     hit::{self, HandleKind},
     protocol::{FromEngine, PointerPhase, SnapKind, Tool, ToolStep},
     snap::{self, Snap, SnapInput},
@@ -21,6 +21,8 @@ use crate::{
 const DRAG_THRESHOLD_PX: f64 = 3.0;
 /// Радиус попадания по ручке, CSS-пиксели.
 const HANDLE_RADIUS_PX: f64 = 7.0;
+/// Расстояние, на котором мебель притягивается к стене, CSS-пиксели.
+const FURNITURE_SNAP_PX: f64 = 24.0;
 /// Радиус попадания по линии, CSS-пиксели.
 const HIT_RADIUS_PX: f64 = 5.0;
 
@@ -84,6 +86,7 @@ impl ToolData {
             (Tool::Calibrate, _) => ToolStep::CalibrateFirst,
             (Tool::Select, _) => ToolStep::Idle,
             (Tool::Demolish, _) => ToolStep::DemolishPick,
+            (Tool::Furniture, _) => ToolStep::FurniturePlace,
         }
     }
 }
@@ -288,6 +291,7 @@ impl EngineState {
             Tool::Dimension => self.dimension_pointer(phase, p, shift, alt),
             Tool::Leader => self.leader_pointer(phase, p, shift, alt),
             Tool::Calibrate => self.calibrate_pointer(phase, p, alt),
+            Tool::Furniture => self.furniture_pointer(phase, p, alt),
         }
     }
 
@@ -458,6 +462,9 @@ impl EngineState {
         if let Some(d) = doc.dimension(id) {
             return geometry::dimension(&self.derived, d).map(|g| g.a);
         }
+        if let Some(f) = doc.furniture_item(id) {
+            return Some(DVec2::new(f.x, f.y));
+        }
         None
     }
 
@@ -467,6 +474,36 @@ impl EngineState {
         match &drag.kind {
             DragKind::Marquee { .. } => Vec::new(),
             DragKind::Move { grab } => {
+                // Один предмет мебели: у стены встаёт к ней спинкой (Alt — без привязки).
+                if let [id] = self.selection.as_slice()
+                    && let Some(f) = doc.furniture_item(id)
+                {
+                    let mut f = f.clone();
+                    let target = *grab + (p - drag.start_world);
+                    let snapped = (!alt)
+                        .then(|| {
+                            furniture::snap_to_wall(
+                                doc,
+                                &self.derived,
+                                target,
+                                f.depth,
+                                FURNITURE_SNAP_PX / self.px(),
+                            )
+                        })
+                        .flatten();
+                    match snapped {
+                        Some((at, rotation)) => {
+                            f.x = at.x;
+                            f.y = at.y;
+                            f.rotation = rotation;
+                        }
+                        None => {
+                            f.x = round_to(target.x, if alt { 1.0 } else { 10.0 });
+                            f.y = round_to(target.y, if alt { 1.0 } else { 10.0 });
+                        }
+                    }
+                    return vec![put(Element::Furniture(f))];
+                }
                 let exclude: Vec<String> = doc
                     .walls
                     .iter()
@@ -553,6 +590,64 @@ impl EngineState {
                 vec![put(Element::Room(r))]
             }
         }
+    }
+
+    // ---------- Мебель ----------
+
+    /// Предмет инструмента «Мебель» в точке `p`: у стены — спинкой к ней.
+    pub(crate) fn furniture_candidate(&self, p: DVec2, alt: bool) -> Option<op_model::Furniture> {
+        let item = furniture::catalog_item(&self.furniture_item)?;
+        let [width, depth, height] = item.size;
+        let snapped = (!alt)
+            .then(|| {
+                furniture::snap_to_wall(
+                    self.doc(),
+                    &self.derived,
+                    p,
+                    depth,
+                    FURNITURE_SNAP_PX / self.px(),
+                )
+            })
+            .flatten();
+        let (at, rotation) = snapped.unwrap_or((
+            DVec2::new(round_to(p.x, 10.0), round_to(p.y, 10.0)),
+            self.furniture_rotation,
+        ));
+        Some(op_model::Furniture {
+            id: String::new(),
+            layer: LayerKind::Furniture.id().into(),
+            variant: None,
+            item: item.id.into(),
+            name: item.name.into(),
+            x: at.x,
+            y: at.y,
+            rotation,
+            mirrored: false,
+            width,
+            depth,
+            height,
+            elevation: item.elevation,
+            model: None,
+        })
+    }
+
+    fn furniture_pointer(&mut self, phase: PointerPhase, p: DVec2, alt: bool) -> Vec<FromEngine> {
+        self.cursor = Some(Snap {
+            point: p,
+            kind: None,
+            node: None,
+            wall: None,
+            guides: Vec::new(),
+        });
+        self.overlay_dirty = true;
+        if phase != PointerPhase::Down {
+            return vec![];
+        }
+        let Some(mut f) = self.furniture_candidate(p, alt) else {
+            return vec![];
+        };
+        f.id = self.ids.generate();
+        self.execute_all(vec![put(Element::Furniture(f))])
     }
 
     // ---------- Демонтаж ----------

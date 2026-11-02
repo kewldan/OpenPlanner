@@ -182,6 +182,24 @@ impl Engine {
         Ok(events.into_ts()?)
     }
 
+    /// Добавляет свою модель мебели (GLB) в проект.
+    ///
+    /// # Errors
+    ///
+    /// Файл не читается как GLB.
+    #[wasm_bindgen(js_name = importFurniture)]
+    pub fn import_furniture(
+        &mut self,
+        bytes: Vec<u8>,
+        name: &str,
+    ) -> Result<Ts<EngineEvents>, JsError> {
+        let events = self
+            .state
+            .import_furniture(bytes, name)
+            .map_err(|err| JsError::new(&err))?;
+        Ok(events.into_ts()?)
+    }
+
     /// Воспроизводит журнал автосохранения поверх текущего документа.
     ///
     /// # Errors

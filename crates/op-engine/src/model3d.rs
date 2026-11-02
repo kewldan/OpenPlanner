@@ -17,6 +17,7 @@ use op_render::{
 
 use crate::{
     derived::Derived,
+    draw::Models,
     geometry,
     protocol::Options3d,
     sun::{self, SunPosition},
@@ -79,6 +80,60 @@ fn rings(shape: &shapes::Shape) -> Vec<Vec<DVec2>> {
         .collect()
 }
 
+/// Предмет мебели: своя модель — треугольниками, позиция каталога — брусками.
+fn furniture(
+    mesh: &mut Mesh,
+    f: &op_model::Furniture,
+    models: &Models,
+    options: &Options3d,
+    palette: &Palette,
+) {
+    let top = options.cut.unwrap_or(f64::INFINITY);
+    if f.elevation >= top {
+        return;
+    }
+    let tint = |rgb: u32| {
+        if palette.white {
+            Color::hex(0xECECE9, 1.0)
+        } else {
+            Color::hex(rgb, 1.0)
+        }
+    };
+    let place = |x: f64, y: f64| from_plan(crate::furniture::to_plan(f, DVec2::new(x, y)));
+    if let Some(model) = f.model.as_ref().and_then(|m| models.get(m)) {
+        let color = tint(0xB9B3AA);
+        for t in &model.triangles {
+            let corner = |u: glam::DVec3| {
+                let p = place((u.x - 0.5) * f.width, (u.y - 0.5) * f.depth);
+                p.extend((f.elevation + u.z * f.height).min(top))
+            };
+            let [a, b, c] = t.map(corner);
+            // Переход из осей glTF (X, Y вверх, Z к зрителю) в оси сцены (X, −Z, Y)
+            // сохраняет обход; отражение по ширине его меняет.
+            if f.mirrored {
+                mesh.triangle([a, c, b], color);
+            } else {
+                mesh.triangle([a, b, c], color);
+            }
+        }
+        return;
+    }
+    for part in crate::furniture::parts(&f.item, f.width, f.depth, f.height) {
+        let z0 = f.elevation + part.lo.z;
+        let z1 = (f.elevation + part.hi.z).min(top);
+        if z1 <= z0 {
+            continue;
+        }
+        let rect = [
+            place(part.lo.x, part.lo.y),
+            place(part.hi.x, part.lo.y),
+            place(part.hi.x, part.hi.y),
+            place(part.lo.x, part.hi.y),
+        ];
+        mesh.block(rect, z0, z1, tint(part.color));
+    }
+}
+
 /// Солнце для настроек: положение (в том числе под горизонтом) и свет для сцены.
 #[must_use]
 pub fn sun(doc: &Document, options: &Options3d) -> Option<(SunPosition, Option<Sun>)> {
@@ -92,9 +147,10 @@ pub fn sun(doc: &Document, options: &Options3d) -> Option<(SunPosition, Option<S
     Some((position, light))
 }
 
-/// 3D-сцена вида `doc` (обмер или проекция варианта) с его производными данными.
+/// 3D-сцена вида `doc` (обмер или проекция варианта) с его производными данными;
+/// `models` — свои модели мебели по путям файлов.
 #[must_use]
-pub fn build(doc: &Document, derived: &Derived, options: &Options3d) -> Scene3D {
+pub fn build(doc: &Document, derived: &Derived, options: &Options3d, models: &Models) -> Scene3D {
     let palette = Palette::new(options.white);
     let mut opaque = Mesh::default();
     let mut glass = Mesh::default();
@@ -211,6 +267,10 @@ pub fn build(doc: &Document, derived: &Derived, options: &Options3d) -> Scene3D 
         }
     }
 
+    for f in doc.furniture.iter().filter(|f| shown(&f.layer)) {
+        furniture(&mut opaque, f, models, options, &palette);
+    }
+
     // Полы и потолки помещений (метки в одной области — одно помещение).
     let mut used = HashSet::new();
     for r in doc.rooms.iter().filter(|r| shown(&r.layer)) {
@@ -317,7 +377,7 @@ mod tests {
 
     fn scene(doc: &Document, options: Options3d) -> Scene3D {
         let doc = project(doc, None);
-        build(&doc, &Derived::new(&doc), &options)
+        build(&doc, &Derived::new(&doc), &options, &Models::new())
     }
 
     #[test]
