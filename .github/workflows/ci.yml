@@ -35,6 +35,10 @@ jobs:
         env:
           # Рендер без окна обязан пройти (Vulkan на программном lavapipe).
           OPENPLANNER_REQUIRE_GPU: "1"
+      - name: Нативный рендер кадра (wgpu на Vulkan)
+        run: cargo test -p op-render -- --nocapture
+        env:
+          OPENPLANNER_REQUIRE_GPU: "1"
       - run: cargo clippy -p op-engine --target wasm32-unknown-unknown -- -D warnings
 
   web:
