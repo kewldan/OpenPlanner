@@ -1,0 +1,18 @@
+[package]
+name = "op-format"
+description = "Чтение и запись файлов проекта OpenPlanner (.oplan)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+# Формат открыт под MIT, чтобы сторонние инструменты могли читать и писать .oplan.
+license = "MIT"
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+zip.workspace = true
+
+[lints]
+workspace = true

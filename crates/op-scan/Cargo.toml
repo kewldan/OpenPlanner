@@ -1,0 +1,13 @@
+[package]
+name = "op-scan"
+description = "Распознавание скана: облако точек и LiDAR-сетка → стены, проёмы, помещения"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

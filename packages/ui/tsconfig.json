@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "../../target/tsc/ui",
+    "rootDir": "src",
+    "tsBuildInfoFile": "../../target/tsc/ui.tsbuildinfo"
+  },
+  "include": ["src"]
+}

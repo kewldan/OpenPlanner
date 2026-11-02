@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "../../target/tsc/engine-client",
+    "rootDir": ".",
+    "tsBuildInfoFile": "../../target/tsc/engine-client.tsbuildinfo"
+  },
+  "include": ["src", "wasm/*.d.ts"]
+}

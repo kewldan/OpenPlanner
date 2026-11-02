@@ -1,0 +1,171 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  WASM_BINDGEN_VERSION: 0.2.130
+  BUN_VERSION: 1.4.4
+
+jobs:
+  rust:
+    name: Rust · fmt, clippy, тесты
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Системные библиотеки Tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev \
+            mesa-vulkan-drivers
+      - run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - name: Заглушка фронтенда для tauri::generate_context!
+        run: mkdir -p apps/desktop/dist && echo '<!doctype html>' > apps/desktop/dist/index.html
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+        env:
+          # Рендер без окна обязан пройти (Vulkan на программном lavapipe).
+          OPENPLANNER_REQUIRE_GPU: "1"
+      - name: Нативный рендер кадра (wgpu на Vulkan)
+        run: cargo test -p op-render -- --nocapture
+        env:
+          OPENPLANNER_REQUIRE_GPU: "1"
+      - run: cargo clippy -p op-engine --target wasm32-unknown-unknown -- -D warnings
+
+  web:
+    name: Web · Biome, типы, тесты, сборка
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - name: wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VERSION" --locked
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile
+      - run: bunx biome ci .
+      - run: bun run build:wasm
+      - run: bunx tsc -b
+      - run: bun test
+      - run: bunx vite build
+        working-directory: apps/desktop
+      - name: Браузер для e2e
+        run: bunx playwright install --with-deps chromium
+        working-directory: apps/desktop
+      - name: E2E (веб-сборка)
+        run: bunx playwright test
+        working-directory: apps/desktop
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-traces
+          path: apps/desktop/test-results/
+          retention-days: 7
+
+  desktop:
+    name: Desktop · ${{ matrix.os }}
+    needs: [rust, web]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-26
+            binary: target/release/openplanner-desktop
+          - os: windows-latest
+            binary: target/release/openplanner-desktop.exe
+          - os: ubuntu-24.04
+            binary: target/release/openplanner-desktop
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Системные библиотеки Tauri и окружение для e2e
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev \
+            xvfb openbox xdotool imagemagick webkit2gtk-driver
+      - run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - name: wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --version ${{ env.WASM_BINDGEN_VERSION }} --locked
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile
+      - name: Сборка приложения без установщика
+        run: bunx tauri build --no-bundle
+        working-directory: apps/desktop
+      - name: Самопроверка (запуск окна и движка)
+        if: runner.os != 'Linux'
+        shell: bash
+        run: bash scripts/desktop-selftest.sh "${{ matrix.binary }}"
+      - name: Самопроверка (запуск окна и движка)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a bash scripts/desktop-selftest.sh "${{ matrix.binary }}"
+      - name: Версия ОС
+        if: runner.os == 'macOS'
+        run: sw_vers
+      - name: Нативный рендер кадра (wgpu на Metal / D3D12)
+        if: runner.os != 'Linux'
+        run: cargo test -p op-render -- --nocapture
+        env:
+          OPENPLANNER_REQUIRE_GPU: "1"
+      - name: Системные диалоги и восстановление после сбоя
+        if: runner.os != 'Linux'
+        shell: bash
+        run: bash scripts/desktop-dialogs.sh "${{ matrix.binary }}"
+        env:
+          SHOTS: ${{ github.workspace }}/apps/desktop/test-results/desktop
+      - name: Системные диалоги и восстановление после сбоя
+        if: runner.os == 'Linux'
+        run: xvfb-run -a bash -c 'openbox & sleep 1; bash scripts/desktop-dialogs.sh "${{ matrix.binary }}"'
+        env:
+          SHOTS: ${{ github.workspace }}/apps/desktop/test-results/desktop
+      - name: Самопроверка на WebGPU (WebView2 + программный адаптер)
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          EXPECT_BACKEND: BrowserWebGpu
+        run: |
+          # У раннера нет GPU: WebGPU нужен программный адаптер. Пробуем варианты
+          # (D3D12 на WARP в обход блоклиста и Vulkan SwiftShader), достаточно одного.
+          variants=(
+            "--enable-unsafe-webgpu --ignore-gpu-blocklist"
+            "--enable-unsafe-webgpu --ignore-gpu-blocklist --use-webgpu-adapter=swiftshader"
+            "--enable-unsafe-webgpu --ignore-gpu-blocklist --enable-features=Vulkan --use-vulkan=swiftshader --use-webgpu-adapter=swiftshader"
+          )
+          for args in "${variants[@]}"; do
+            echo "::group::OPENPLANNER_WEBVIEW2_ARGS=$args"
+            if OPENPLANNER_WEBVIEW2_ARGS="$args" bash scripts/desktop-selftest.sh "${{ matrix.binary }}"; then
+              echo "::endgroup::"
+              echo "WebGPU в настоящем окне WebView2: $args"
+              exit 0
+            fi
+            echo "::endgroup::"
+          done
+          exit 1
+      - name: tauri-driver
+        if: runner.os == 'Linux'
+        run: cargo install tauri-driver --locked
+      - name: E2E десктопа (нативные диалоги, файлы, восстановление)
+        if: runner.os == 'Linux'
+        run: bash scripts/desktop-e2e.sh
+        env:
+          APP: ${{ github.workspace }}/${{ matrix.binary }}
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: desktop-screenshots-${{ runner.os }}
+          path: apps/desktop/test-results/desktop/
+          retention-days: 7

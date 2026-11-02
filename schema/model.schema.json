@@ -1,0 +1,42 @@
+{
+  "$defs": {
+    "ProjectMeta": {
+      "description": "Сведения о проекте, которые попадают в основную надпись чертежей.",
+      "properties": {
+        "address": {
+          "description": "Адрес объекта.",
+          "type": "string"
+        },
+        "title": {
+          "description": "Название проекта, например «Комендантский пр.».",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "address"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/kewldan/OpenPlanner/schema/model.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Документ проекта.\n\nНа стадии 0 содержит только сведения о проекте. Обмер, варианты, слои\nи объекты добавляются на следующих стадиях.",
+  "properties": {
+    "defaultCeilingHeight": {
+      "description": "Высота потолка по умолчанию, мм.",
+      "format": "double",
+      "type": "number"
+    },
+    "meta": {
+      "$ref": "#/$defs/ProjectMeta",
+      "description": "Сведения о проекте."
+    }
+  },
+  "required": [
+    "meta",
+    "defaultCeilingHeight"
+  ],
+  "title": "Модель проекта OpenPlanner (model.json)",
+  "type": "object"
+}

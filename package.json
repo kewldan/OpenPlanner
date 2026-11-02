@@ -1,0 +1,28 @@
+{
+  "name": "openplanner",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build:wasm": "bash scripts/build-wasm.sh",
+    "build:wasm:release": "bash scripts/build-wasm.sh --release",
+    "dev": "bun run --cwd apps/desktop tauri dev",
+    "dev:web": "bun run --cwd apps/desktop dev:web",
+    "build": "bun run --cwd apps/desktop tauri build",
+    "check": "biome check .",
+    "fix": "biome check --write .",
+    "typecheck": "tsc -b",
+    "test": "bun test",
+    "prepare": "lefthook install"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.4",
+    "@types/bun": "1.4.4",
+    "lefthook": "2.2.2",
+    "typescript": "7.0.2"
+  }
+}

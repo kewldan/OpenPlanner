@@ -1,0 +1,30 @@
+.root {
+  width: var(--inspector-w);
+  flex: none;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.section {
+  padding: var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.title {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  height: 20px;
+  display: flex;
+  align-items: center;
+}
+
+.error {
+  color: var(--danger);
+  font-size: var(--text-xs);
+}

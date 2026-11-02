@@ -1,0 +1,23 @@
+# Rust
+/target/
+
+# JS
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Сгенерированный WASM-модуль ядра
+/packages/engine-client/wasm/
+
+# Tauri
+/apps/desktop/src-tauri/gen/
+
+# Прочее
+.DS_Store
+*.log
+.env
+.env.*
+
+# Playwright
+test-results/
+playwright-report/
