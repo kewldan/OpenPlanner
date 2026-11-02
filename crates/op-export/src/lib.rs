@@ -5,10 +5,15 @@
 //! собирает движок; здесь — рамка с основной надписью, таблицы, штриховки и
 //! запись в PDF (векторный, со слоями), SVG, DXF (по слоям), XLSX и ZIP.
 
+pub mod font;
+pub mod frame;
 pub mod hatch;
 pub mod sheet;
+pub mod table;
 
+pub use frame::TitleBlock;
 pub use sheet::{Align, Item, Rgb, Shape, Sheet, Text, Viewport};
+pub use table::{Cell, Column, Table};
 
 /// Ошибка записи файла.
 #[derive(Debug, thiserror::Error)]
