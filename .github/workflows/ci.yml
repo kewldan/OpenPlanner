@@ -82,10 +82,16 @@ jobs:
         include:
           - os: macos-26
             binary: target/release/openplanner-desktop
+            bundle: --bundles app
+            artifact: OpenPlanner-macOS.zip
           - os: windows-latest
             binary: target/release/openplanner-desktop.exe
+            bundle: --no-bundle
+            artifact: target/release/openplanner-desktop.exe
           - os: ubuntu-24.04
             binary: target/release/openplanner-desktop
+            bundle: --no-bundle
+            artifact: target/release/openplanner-desktop
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -103,8 +109,9 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
       - run: bun install --frozen-lockfile
-      - name: Сборка приложения без установщика
-        run: bunx tauri build --no-bundle
+      - name: Сборка приложения (на macOS — пакет .app)
+        id: build
+        run: bunx tauri build ${{ matrix.bundle }}
         working-directory: apps/desktop
       - name: Самопроверка (запуск окна и движка)
         if: runner.os != 'Linux'
@@ -163,6 +170,20 @@ jobs:
         run: bash scripts/desktop-e2e.sh
         env:
           APP: ${{ github.workspace }}/${{ matrix.binary }}
+      # Сборка для ручной проверки: скачивается со страницы прогона (Artifacts).
+      - name: Пакет macOS для скачивания
+        if: always() && runner.os == 'macOS' && steps.build.outcome == 'success'
+        run: |
+          app=target/release/bundle/macos/OpenPlanner.app
+          # Подпись без сертификата (ad-hoc): на Apple Silicon приложение без подписи не запускается.
+          codesign --force --deep --sign - "$app"
+          ditto -c -k --keepParent "$app" OpenPlanner-macOS.zip
+      - uses: actions/upload-artifact@v7
+        if: always() && steps.build.outcome == 'success'
+        with:
+          name: OpenPlanner-${{ runner.os }}
+          path: ${{ matrix.artifact }}
+          retention-days: 14
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
