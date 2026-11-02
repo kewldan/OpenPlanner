@@ -27,6 +27,7 @@ function setup(
     openDrawing: async () => null,
     fileStamp: async (path) => stamps.get(path) ?? "0:0",
     readProject: async () => new Uint8Array([9]),
+    writeExport: async () => {},
     kind: "browser",
     openProject: async () => options.opened ?? null,
     chooseSaveTarget: async (name) =>

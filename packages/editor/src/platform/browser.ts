@@ -94,6 +94,12 @@ export const browserPlatform: Platform = {
     return null;
   },
 
+  async writeExport(bytes, path) {
+    const name = path.split(/[\\/]/).pop() ?? path;
+    const ext = exportExtension(name);
+    download(bytes, name, ext ? exportFormats[ext].mime : "application/octet-stream");
+  },
+
   async readProject() {
     throw new Error("в браузере у проекта нет пути на диске");
   },

@@ -37,6 +37,12 @@ export interface EngineApi {
 export const AUTOSAVE_INTERVAL_MS = 30_000;
 const UNTITLED_KEY_NAME = "untitled";
 
+/** Имя файла без папки и расширения `.oplan`. */
+function baseOf(path: string): string {
+  const name = path.split(/[\\/]/).pop() ?? path;
+  return name.replace(/\.oplan$/i, "");
+}
+
 /** Копия своих правок при конфликте: «Кв (конфликт 2026-11-02 14-05).oplan» рядом с файлом. */
 export function conflictCopy(path: string, name: string, now: Date): SavedFile {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -145,6 +151,28 @@ export class ProjectController {
     });
   }
 
+  /** Открыть проект по пути (MCP-агент): как «Открыть…», но без диалога. */
+  async openPath(path: string): Promise<boolean> {
+    const done = await this.#exclusive(async () => {
+      if (!(await this.#leaveCurrent())) return false;
+      const bytes = await this.platform.readProject(path);
+      const name = baseOf(path);
+      await this.engine.call({ type: "importFile", bytes });
+      this.#pendingLines = "";
+      const key = await this.platform.journal.locate(path, name);
+      await this.#resetJournal(key);
+      this.#stamp = await this.platform.fileStamp(path);
+      this.store.setState({ path, name, journalKey: key, savedAt: null });
+      return true;
+    });
+    return done === true;
+  }
+
+  /** Сохранить в указанный файл (MCP-агент), без диалога. */
+  async saveTo(path: string): Promise<boolean> {
+    return (await this.#exclusive(() => this.#save(false, { path, name: baseOf(path) }))) === true;
+  }
+
   /** Гостевой просмотр: проект из ссылки только для чтения, без журнала. */
   async openGuest(bytes: Uint8Array): Promise<void> {
     this.#starting = this.#exclusive(async () => {
@@ -221,11 +249,11 @@ export class ProjectController {
     await this.save();
   }
 
-  async #save(forceChoose: boolean): Promise<boolean> {
+  async #save(forceChoose: boolean, explicit?: SavedFile): Promise<boolean> {
     const state = this.store.getState();
     if (state.guest) return false;
     // Файл изменили на другом устройстве после открытия — перезаписать только с согласия.
-    if (state.path && !forceChoose && this.#stamp !== null) {
+    if (!explicit && state.path && !forceChoose && this.#stamp !== null) {
       const stamp = await this.platform.fileStamp(state.path);
       if (stamp !== null && stamp !== this.#stamp) {
         const overwrite = await this.platform.confirm(
@@ -240,7 +268,8 @@ export class ProjectController {
       }
     }
     let target: SavedFile | null =
-      state.path && !forceChoose ? { path: state.path, name: state.name ?? "" } : null;
+      explicit ??
+      (state.path && !forceChoose ? { path: state.path, name: state.name ?? "" } : null);
     if (!target) {
       const title = await this.engine.call({ type: "documentTitle" });
       target = await this.platform.chooseSaveTarget(fileNameFor(title));

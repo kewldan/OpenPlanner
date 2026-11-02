@@ -71,6 +71,12 @@ function call(current: Engine, request: EngineCall): { value: unknown; transfer:
         events: current.addRender(request.bytes, request.name, request.passes, request.date).events,
       });
       return { value: undefined, transfer: [] };
+    case "mcpMessage": {
+      // Правки агента — обычные события движка: окно обновляется сразу.
+      const { events, ...rest } = current.mcpMessage(request.line);
+      post({ kind: "events", events });
+      return { value: rest, transfer: rest.files.map((f) => f.bytes.buffer) };
+    }
     case "exportGuest": {
       const bytes = current.exportGuest(request.generator);
       return { value: bytes, transfer: [bytes.buffer] };

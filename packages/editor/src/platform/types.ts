@@ -60,6 +60,14 @@ export interface Platform {
   fileStamp(path: string): Promise<string | null>;
   /** Прочитать проект по известному пути (для синхронизации). */
   readProject(path: string): Promise<Uint8Array>;
+  /** Записать файл экспорта по указанному пути (MCP-агент); только расширения экспорта. */
+  writeExport(bytes: Uint8Array, path: string): Promise<void>;
+  /**
+   * Запросы MCP-агента (только десктоп): `handler(conn, line)` для каждой строки
+   * JSON-RPC; ответ — `mcpReply`. В браузере MCP нет.
+   */
+  onMcp?(handler: (conn: number, line: string) => void): Promise<void>;
+  mcpReply?(conn: number, line: string): Promise<void>;
   /** Спросить, куда сохранить проект. `null` — пользователь отменил выбор. */
   chooseSaveTarget(suggestedName: string): Promise<SavedFile | null>;
   /** Записать проект туда, куда выбрал пользователь. */

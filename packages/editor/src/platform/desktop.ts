@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask, message, open, save } from "@tauri-apps/plugin-dialog";
 import {
@@ -96,6 +97,23 @@ export const desktopPlatform: Platform = {
     if (typeof path !== "string") return null;
     const buffer = await invoke<ArrayBuffer>("read_table", { path });
     return { name: fileName(path), bytes: new Uint8Array(buffer) };
+  },
+
+  async writeExport(bytes, path) {
+    if (!exportExtension(path)) throw new Error(`неизвестный формат экспорта: ${path}`);
+    await invoke("write_export", bytes, { headers: { "x-path": encodeURIComponent(path) } });
+  },
+
+  async onMcp(handler) {
+    await listen<{ conn: number; line: string }>("mcp-request", (event) =>
+      handler(event.payload.conn, event.payload.line),
+    );
+    // Окно готово: накопленные до запуска движка запросы придут сейчас.
+    await invoke("mcp_ready");
+  },
+
+  async mcpReply(conn, line) {
+    await invoke("mcp_reply", { conn, line });
   },
 
   async fileStamp(path) {

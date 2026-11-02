@@ -8,6 +8,7 @@ import type {
   DxfImport,
   DxfInfo,
   FromEngine,
+  McpReply,
   ScanImport,
   ScanResult,
   TableFormat,
@@ -68,6 +69,8 @@ export type {
   MaterialAmount,
   MaterialKind,
   MaterialTotal,
+  McpFileOut,
+  McpReply,
   Measure,
   Node,
   Opening,
@@ -153,7 +156,8 @@ export type EngineCall =
   | { type: "renderInput"; view?: string }
   | { type: "addRender"; bytes: Uint8Array; name: string; passes: number; date: string }
   | { type: "assetBytes"; path: string }
-  | { type: "exportGuest"; generator: string };
+  | { type: "exportGuest"; generator: string }
+  | { type: "mcpMessage"; line: string };
 
 /** Тип результата вызова. */
 export interface EngineCallResult {
@@ -177,6 +181,7 @@ export interface EngineCallResult {
   addRender: undefined;
   assetBytes: Uint8Array | undefined;
   exportGuest: Uint8Array;
+  mcpMessage: Omit<McpReply, "events">;
 }
 
 /** UI → воркер. */
