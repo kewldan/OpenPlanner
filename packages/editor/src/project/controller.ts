@@ -55,6 +55,8 @@ export class ProjectController {
   #writes: Promise<void> = Promise.resolve();
   /** Пока идёт смена проекта или сохранение, строки журнала копятся. */
   #paused = 0;
+  /** Запуск (проверка журнала восстановления). Команды пользователя ждут его окончания. */
+  #starting: Promise<unknown> = Promise.resolve();
 
   constructor(
     private readonly platform: Platform,
@@ -71,11 +73,12 @@ export class ProjectController {
 
   /** Вызывается при запуске движка: восстанавливает несохранённый проект прошлого сеанса. */
   async start(): Promise<void> {
-    await this.#exclusive(async () => {
+    this.#starting = this.#exclusive(async () => {
       const key = await this.platform.journal.locate(null, UNTITLED_KEY_NAME);
       await this.#recoverOrReset(key, t("recovery.untitled"));
       this.store.setState({ path: null, name: null, journalKey: key, savedAt: null });
-    });
+    }, false);
+    await this.#starting;
   }
 
   /** События движка: строки журнала уходят в журнал текущего проекта. */
@@ -220,8 +223,13 @@ export class ProjectController {
     await this.platform.journal.reset(key, header);
   }
 
-  /** Операции над проектом не пересекаются; журнал на это время приостановлен. */
-  async #exclusive<T>(action: () => Promise<T>): Promise<T | false> {
+  /**
+   * Операции над проектом не пересекаются; журнал на это время приостановлен.
+   * Команды пользователя сначала дожидаются запуска (`userAction`), а во время
+   * другой своей операции — отклоняются, чтобы двойное ⌘O не открыло два диалога.
+   */
+  async #exclusive<T>(action: () => Promise<T>, userAction = true): Promise<T | false> {
+    if (userAction) await this.#starting;
     if (this.store.getState().busy) return false;
     this.store.setState({ busy: true });
     await this.flushJournal();
