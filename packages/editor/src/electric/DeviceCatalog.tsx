@@ -4,14 +4,15 @@ import styles from "../furniture/Catalog.module.css";
 import { DRAG_TYPE } from "../furniture/items";
 import { t } from "../i18n";
 import { useEditor } from "../store/editor";
-import { deviceEntries, deviceGroups } from "./devices";
+import { type DeviceMode, deviceEntries, deviceGroups } from "./devices";
 
-/** Каталог электроточек: «Электрика» — розетки, выводы, щит; «Освещение» — светильники и выключатели. */
-export function DeviceCatalog({ lighting }: { lighting: boolean }) {
+/** Каталог точек: «Электрика» — розетки, выводы, щит; «Освещение» — светильники и
+ * выключатели; «Климат» — терморегуляторы, кондиционеры, вентиляция. */
+export function DeviceCatalog({ mode }: { mode: DeviceMode }) {
   const catalog = useEditor((s) => s.deviceCatalog);
   const tool = useEditor((s) => s.tool);
   const [active, setActive] = useState<string | null>(null);
-  const groups = deviceGroups(deviceEntries(catalog, lighting));
+  const groups = deviceGroups(deviceEntries(catalog, mode));
   const pick = (kind: (typeof catalog)[number]["kind"]) => {
     setActive(kind);
     sendToEngine({ type: "deviceTool", kind });

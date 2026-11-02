@@ -14,11 +14,11 @@ pub mod view;
 pub use command::{Command, CommandError};
 pub use document::{
     Anchor, AssetData, Circuit, CircuitKind, Device, DeviceGroup, DeviceKind, Dimension, Document,
-    DrawingSettings, Finish, Furniture, Justification, Layer, LayerKind, Leader, Level, LightScene,
-    Material, MaterialKind, Measure, Node, Opening, OpeningKind, PaperFormat, Pipe, PipeSystem,
-    PipeVertex, PlumbingKind, PlumbingPoint, PriceItem, PriceKind, PricePoint, ProjectMeta,
-    QuantityOverride, Room, SavedView, Side, Site, Surface, TileLayout, TilePattern, Underlay,
-    Variant, Wall, WallMaterial,
+    DrawingSettings, Finish, Furniture, HeatingZone, Justification, Layer, LayerKind, Leader,
+    Level, LightScene, Material, MaterialKind, Measure, Node, Opening, OpeningKind, PaperFormat,
+    Pipe, PipeSystem, PipeVertex, PlumbingKind, PlumbingPoint, PriceItem, PriceKind, PricePoint,
+    ProjectMeta, QuantityOverride, Room, SavedView, Side, Site, Surface, TileLayout, TilePattern,
+    Underlay, Variant, Wall, WallMaterial,
 };
 pub use element::Element;
 pub use history::{History, HistoryOp};

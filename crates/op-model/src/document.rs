@@ -613,6 +613,18 @@ pub enum DeviceKind {
     JunctionBox,
     /// Электрощит.
     Panel,
+    /// Терморегулятор тёплого пола.
+    Thermostat,
+    /// Внутренний блок кондиционера.
+    AcIndoor,
+    /// Наружный блок кондиционера.
+    AcOutdoor,
+    /// Бризер (приточная установка).
+    Breather,
+    /// Вентиляционная решётка.
+    VentGrille,
+    /// Вытяжной вентилятор.
+    ExhaustFan,
 }
 
 impl DeviceKind {
@@ -622,6 +634,20 @@ impl DeviceKind {
         matches!(
             self,
             Self::CeilingLight | Self::Pendant | Self::Spot | Self::WallLight | Self::LedStrip
+        )
+    }
+
+    /// Климат: тёплый пол, кондиционирование, вентиляция.
+    #[must_use]
+    pub fn is_climate(self) -> bool {
+        matches!(
+            self,
+            Self::Thermostat
+                | Self::AcIndoor
+                | Self::AcOutdoor
+                | Self::Breather
+                | Self::VentGrille
+                | Self::ExhaustFan
         )
     }
 
@@ -723,6 +749,25 @@ pub struct Circuit {
     pub section: f64,
     /// Коэффициент спроса Кс.
     pub demand: f64,
+}
+
+/// Зона тёплого пола в помещении.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub struct HeatingZone {
+    /// Идентификатор.
+    pub id: String,
+    /// Помещение.
+    pub room: String,
+    /// Удельная мощность, Вт/м².
+    pub density: f64,
+    /// Отступ от стен, мм.
+    pub margin: f64,
+    /// Терморегулятор (электроточка).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub thermostat: Option<String>,
 }
 
 /// Сценарий освещения: светильники, включённые вместе.
@@ -1014,6 +1059,8 @@ pub enum DeviceGroup {
     Light,
     /// Щит.
     Panel,
+    /// Климат: терморегуляторы, кондиционеры, вентиляция.
+    Climate,
 }
 
 /// Откуда берётся объём позиции сметы.
@@ -1073,6 +1120,8 @@ pub enum Measure {
     Fixtures,
     /// Предметы мебели, шт.
     Furniture,
+    /// Площадь обогрева тёплого пола, м².
+    Heating,
     /// Площадь отделки, м² (по поверхности и виду материала; без значения — любые).
     Finish {
         /// Поверхность.
@@ -1271,6 +1320,9 @@ pub struct Document {
     /// Объёмы строк сметы, заданные вручную.
     #[serde(default)]
     pub overrides: Vec<QuantityOverride>,
+    /// Зоны тёплого пола.
+    #[serde(default)]
+    pub heating: Vec<HeatingZone>,
     /// Этажи выше первого (первый — неявный).
     #[serde(default)]
     pub levels: Vec<Level>,
@@ -1331,6 +1383,7 @@ impl Document {
             finishes: Vec::new(),
             prices: Vec::new(),
             overrides: Vec::new(),
+            heating: Vec::new(),
             levels: Vec::new(),
             variants: Vec::new(),
             drawing: DrawingSettings::default(),

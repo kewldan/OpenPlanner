@@ -11,6 +11,7 @@ export const ru = {
   "mode.light": "Освещение",
   "mode.plumbing": "Сантехника",
   "mode.finish": "Отделка",
+  "mode.climate": "Климат",
 
   "view.label": "Вид",
   "view.2d": "2D",
@@ -32,6 +33,7 @@ export const ru = {
   "sidebar.electrical": "Щит",
   "sidebar.plumbing": "Трубы",
   "sidebar.finish": "Отделка",
+  "sidebar.climate": "Климат",
 
   "devices.hint":
     "Щёлкните позицию и поставьте её на план. Розетки, выключатели и бра встают на грань ближайшей стены; светильники — куда щёлкнули.",
@@ -179,6 +181,19 @@ export const ru = {
   "levels.removeOk": "Удалить",
   "levels.cancel": "Отмена",
   "levels.confirmRemove": "Удалить этаж «{name}» вместе со всем, что на нём нарисовано?",
+
+  "climate.heating": "Тёплые полы",
+  "climate.removeZone": "Удалить тёплый пол: {name}",
+  "climate.density": "Удельная мощность",
+  "climate.margin": "Отступ, мм",
+  "climate.thermostat": "Терморегулятор",
+  "climate.noThermostat": "Без терморегулятора",
+  "climate.thermostatN": "Терморегулятор {n} · H {h}",
+  "climate.zoneCalc": "обогрев {heated} из {area} м² · {power} Вт",
+  "climate.addZone": "Тёплый пол: {name}",
+  "climate.noRooms": "Тёплый пол уже во всех помещениях",
+  "climate.air": "Воздухообмен и охлаждение",
+  "climate.airCalc": "{provided} из {required} м³/ч · сплит {cooling} кВт · блоков {units}",
 
   "circuit.lighting": "Освещение",
   "circuit.sockets": "Розетки",

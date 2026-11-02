@@ -4,8 +4,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AssetData, Circuit, Document, DrawingSettings, Element, Finish, Level, LightScene, Material,
-    PriceItem, ProjectMeta, QuantityOverride, SavedView, Site, Surface, element,
+    AssetData, Circuit, Document, DrawingSettings, Element, Finish, HeatingZone, Level, LightScene,
+    Material, PriceItem, ProjectMeta, QuantityOverride, SavedView, Site, Surface, element,
 };
 
 /// Ошибка применения команды. Документ при ошибке не меняется.
@@ -102,6 +102,11 @@ pub enum Command {
     SetFinishes {
         /// Отделка.
         finishes: Vec<Finish>,
+    },
+    /// Заменить зоны тёплого пола.
+    SetHeating {
+        /// Зоны.
+        heating: Vec<HeatingZone>,
     },
     /// Заменить список этажей (элементы удалённого этажа удаляются отдельными командами).
     SetLevels {
@@ -300,6 +305,21 @@ impl Command {
                 }
                 let previous = std::mem::replace(&mut doc.finishes, finishes);
                 Ok(Self::SetFinishes { finishes: previous })
+            }
+            Self::SetHeating { heating } => {
+                if heating.iter().any(|z| {
+                    z.id.is_empty()
+                        || z.room.is_empty()
+                        || !(z.density.is_finite() && z.density > 0.0)
+                        || !(z.margin.is_finite() && z.margin >= 0.0)
+                }) {
+                    return Err(CommandError::InvalidValue {
+                        field: "heating",
+                        reason: "у зоны: помещение, мощность больше нуля, отступ не меньше нуля",
+                    });
+                }
+                let previous = std::mem::replace(&mut doc.heating, heating);
+                Ok(Self::SetHeating { heating: previous })
             }
             Self::SetLevels { levels } => {
                 if levels.iter().any(|l| {

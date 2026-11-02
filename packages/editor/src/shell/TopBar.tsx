@@ -19,6 +19,7 @@ const modes: readonly { value: EditorMode; label: string; disabled: boolean }[] 
   { value: "light", label: t("mode.light"), disabled: false },
   { value: "plumbing", label: t("mode.plumbing"), disabled: false },
   { value: "finish", label: t("mode.finish"), disabled: false },
+  { value: "climate", label: t("mode.climate"), disabled: false },
 ];
 
 type ViewKind = "2d" | "3d";

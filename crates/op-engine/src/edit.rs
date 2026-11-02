@@ -132,6 +132,32 @@ pub fn delete(doc: &Document, derived: &Derived, ids: &[String]) -> Vec<Command>
             commands.push(Command::Remove { id: r.id.clone() });
         }
     }
+    // Зоны тёплого пола удалённых помещений уходят, удалённый терморегулятор отвязывается.
+    let touches = |z: &op_model::HeatingZone| {
+        selected.contains(z.room.as_str())
+            || z.thermostat
+                .as_deref()
+                .is_some_and(|t| selected.contains(t))
+    };
+    if doc.heating.iter().any(touches) {
+        commands.push(Command::SetHeating {
+            heating: doc
+                .heating
+                .iter()
+                .filter(|z| !selected.contains(z.room.as_str()))
+                .map(|z| {
+                    let mut z = z.clone();
+                    if z.thermostat
+                        .as_deref()
+                        .is_some_and(|t| selected.contains(t))
+                    {
+                        z.thermostat = None;
+                    }
+                    z
+                })
+                .collect(),
+        });
+    }
     // Отделка удалённых помещений уходит вместе с ними.
     if doc
         .finishes

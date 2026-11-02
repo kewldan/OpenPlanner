@@ -4,6 +4,7 @@
 //! `cargo test`; WASM-обёртка связывает её с рендерером и `OffscreenCanvas`.
 
 pub mod camera3d;
+pub mod climate;
 pub mod derived;
 pub mod draw;
 pub mod dxf_import;

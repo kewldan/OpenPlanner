@@ -8,9 +8,15 @@ import type {
 } from "@openplanner/engine-client";
 import { sendToEngine } from "../engine";
 
-/** Позиции каталога для режима: «Освещение» — светильники и выключатели, «Электрика» — остальное. */
-export function deviceEntries(items: readonly DeviceEntry[], lighting: boolean): DeviceEntry[] {
-  return items.filter((i) => i.lighting === lighting);
+/** Каталог точек какого режима. */
+export type DeviceMode = "electric" | "light" | "climate";
+
+/** Позиции каталога для режима: «Освещение» — светильники и выключатели, «Климат» —
+ * тёплый пол, кондиционеры и вентиляция, «Электрика» — остальное. */
+export function deviceEntries(items: readonly DeviceEntry[], mode: DeviceMode): DeviceEntry[] {
+  return items.filter((i) =>
+    mode === "climate" ? i.climate : mode === "light" ? i.lighting : !i.lighting && !i.climate,
+  );
 }
 
 /** Позиции по разделам в порядке каталога. */

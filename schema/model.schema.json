@@ -244,6 +244,11 @@
           "const": "panel",
           "description": "Щит.",
           "type": "string"
+        },
+        {
+          "const": "climate",
+          "description": "Климат: терморегуляторы, кондиционеры, вентиляция.",
+          "type": "string"
         }
       ]
     },
@@ -353,6 +358,36 @@
         {
           "const": "panel",
           "description": "Электрощит.",
+          "type": "string"
+        },
+        {
+          "const": "thermostat",
+          "description": "Терморегулятор тёплого пола.",
+          "type": "string"
+        },
+        {
+          "const": "acIndoor",
+          "description": "Внутренний блок кондиционера.",
+          "type": "string"
+        },
+        {
+          "const": "acOutdoor",
+          "description": "Наружный блок кондиционера.",
+          "type": "string"
+        },
+        {
+          "const": "breather",
+          "description": "Бризер (приточная установка).",
+          "type": "string"
+        },
+        {
+          "const": "ventGrille",
+          "description": "Вентиляционная решётка.",
+          "type": "string"
+        },
+        {
+          "const": "exhaustFan",
+          "description": "Вытяжной вентилятор.",
           "type": "string"
         }
       ]
@@ -574,6 +609,43 @@
         "width",
         "depth",
         "height"
+      ],
+      "type": "object"
+    },
+    "HeatingZone": {
+      "description": "Зона тёплого пола в помещении.",
+      "properties": {
+        "density": {
+          "description": "Удельная мощность, Вт/м².",
+          "format": "double",
+          "type": "number"
+        },
+        "id": {
+          "description": "Идентификатор.",
+          "type": "string"
+        },
+        "margin": {
+          "description": "Отступ от стен, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "room": {
+          "description": "Помещение.",
+          "type": "string"
+        },
+        "thermostat": {
+          "description": "Терморегулятор (электроточка).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "room",
+        "density",
+        "margin"
       ],
       "type": "object"
     },
@@ -1105,6 +1177,19 @@
           "properties": {
             "type": {
               "const": "furniture",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Площадь обогрева тёплого пола, м².",
+          "properties": {
+            "type": {
+              "const": "heating",
               "type": "string"
             }
           },
@@ -2167,6 +2252,14 @@
       "description": "Мебель и оборудование.",
       "items": {
         "$ref": "#/$defs/Furniture"
+      },
+      "type": "array"
+    },
+    "heating": {
+      "default": [],
+      "description": "Зоны тёплого пола.",
+      "items": {
+        "$ref": "#/$defs/HeatingZone"
       },
       "type": "array"
     },

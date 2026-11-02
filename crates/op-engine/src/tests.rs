@@ -2831,3 +2831,103 @@ fn deleting_a_level_removes_its_elements_in_one_step() {
     assert_eq!(s.document().walls.len(), before);
     assert_eq!(s.document().furniture.len(), 1);
 }
+
+// ---------------------------------------------------------------- климат
+
+fn climate(events: &EngineEvents) -> crate::protocol::ClimateReport {
+    events
+        .events
+        .iter()
+        .rev()
+        .find_map(|e| match e {
+            FromEngine::Climate { report } => Some(report.clone()),
+            _ => None,
+        })
+        .unwrap()
+}
+
+#[test]
+fn floor_heating_ventilation_and_air_conditioning() {
+    use op_model::DeviceKind as K;
+    let mut s = state();
+    two_rooms(&mut s);
+    let room = left_room(&s);
+    furniture_tool(&mut s, "bed-double");
+    click(&mut s, 1750.0, 3000.0);
+    let bed = s.document().furniture[0].clone();
+    device_tool(&mut s, K::Thermostat);
+    click(&mut s, 1100.0, 2000.0);
+    device_tool(&mut s, K::Breather);
+    click(&mut s, 1700.0, 1150.0);
+    device_tool(&mut s, K::AcIndoor);
+    click(&mut s, 3200.0, 1150.0);
+    tool(&mut s, Tool::Select);
+    let thermostat = s
+        .document()
+        .devices
+        .iter()
+        .find(|d| d.kind == K::Thermostat)
+        .unwrap()
+        .id
+        .clone();
+    let events = s.handle(ToEngine::Command {
+        command: Command::SetHeating {
+            heating: vec![op_model::HeatingZone {
+                id: "z1".into(),
+                room: room.clone(),
+                density: 150.0,
+                margin: 100.0,
+                thermostat: Some(thermostat.clone()),
+            }],
+        },
+    });
+    let report = climate(&events);
+    let zone = &report.zones[0];
+    // 1380 × 3880 мм минус отступ по периметру 10,52 м × 0,1 м минус кровать.
+    let expected = 5.3544 - 1.052 - bed.width * bed.depth / 1e6;
+    assert!(
+        (zone.heated - (expected * 100.0).round() / 100.0).abs() < 0.011,
+        "{zone:?}"
+    );
+    assert!((zone.power - (zone.heated * 150.0).round()).abs() < 1e-9);
+    // Бризер — 120 м³/ч при нужных 3 м³/ч на м²; в правой комнате — кондиционер.
+    let left = report.rooms.iter().find(|r| r.id == room).unwrap();
+    assert!((left.air_provided - 120.0).abs() < 1e-9 && left.air_required > 0.0);
+    let right = report.rooms.iter().find(|r| r.id != room).unwrap();
+    assert_eq!(right.ac_units, 1);
+    assert!(right.cooling > 0.0);
+    // Группы: тёплый пол и кондиционер — своими группами, мощность пола — от зоны.
+    let report = electrical(&s.handle(ToEngine::AutoCircuits));
+    let heating = report
+        .circuits
+        .iter()
+        .find(|c| c.purpose.starts_with("Тёплый пол"))
+        .unwrap();
+    assert!((heating.installed - zone.power).abs() < 1e-9, "{heating:?}");
+    assert!(
+        report
+            .circuits
+            .iter()
+            .any(|c| c.purpose.starts_with("Кондиционер"))
+    );
+    // Лист, смета.
+    let set = s.drawings(&request(None));
+    assert!(
+        set.sheets
+            .iter()
+            .any(|x| x.title == "План тёплых полов и климата")
+    );
+    s.handle(ToEngine::DefaultPrices);
+    let est = estimate(&s.snapshot());
+    let mat = est.lines.iter().find(|l| l.code == "К-02").unwrap();
+    assert!((mat.quantity - zone.heated).abs() < 0.011);
+    // Удалённый терморегулятор отвязывается, удалённое помещение уносит зону.
+    s.handle(ToEngine::Select {
+        ids: vec![thermostat],
+    });
+    s.handle(ToEngine::DeleteSelection);
+    assert!(s.document().heating[0].thermostat.is_none());
+    s.handle(ToEngine::Select { ids: vec![room] });
+    s.handle(ToEngine::DeleteSelection);
+    assert!(s.document().heating.is_empty());
+}

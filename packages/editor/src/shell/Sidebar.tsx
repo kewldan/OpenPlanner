@@ -11,6 +11,7 @@ import { IconButton } from "@openplanner/ui";
 import { type KeyboardEvent, type MouseEvent, useState } from "react";
 import { addUnderlay, isEnabled, toolActions } from "../actions";
 import { format, isMacPlatform } from "../actions/shortcut";
+import { ClimatePanel } from "../climate/ClimatePanel";
 import { pickDxf } from "../dxf/store";
 import { ElectricalPanel } from "../electric/ElectricalPanel";
 import { sendToEngine } from "../engine";
@@ -90,6 +91,7 @@ const tabTitles: Record<SidebarTab, MessageKey> = {
   electrical: "sidebar.electrical",
   plumbing: "sidebar.plumbing",
   finish: "sidebar.finish",
+  climate: "sidebar.climate",
 };
 
 /** Левая панель: дерево объектов, каталог мебели, слои, варианты. */
@@ -105,11 +107,21 @@ export function Sidebar() {
     electrical: mode === "electric" || mode === "light",
     plumbing: mode === "plumbing",
     finish: mode === "finish",
+    climate: mode === "climate",
     layers: true,
     variants: true,
   };
   const tabs = (
-    ["objects", "catalog", "electrical", "plumbing", "finish", "layers", "variants"] as const
+    [
+      "objects",
+      "catalog",
+      "electrical",
+      "plumbing",
+      "finish",
+      "climate",
+      "layers",
+      "variants",
+    ] as const
   ).filter((value) => shown[value]);
   const tab = shown[selected] ? selected : "objects";
   return (
@@ -139,6 +151,8 @@ export function Sidebar() {
           <PlumbingPanel />
         ) : tab === "finish" ? (
           <FinishPanel />
+        ) : tab === "climate" ? (
+          <ClimatePanel />
         ) : tab === "layers" ? (
           <Layers />
         ) : (
@@ -172,6 +186,12 @@ const deviceNames: Record<DeviceKind, string> = {
   ledStrip: "Светодиодная лента",
   junctionBox: "Распредкоробка",
   panel: "Электрощит",
+  thermostat: "Терморегулятор",
+  acIndoor: "Кондиционер",
+  acOutdoor: "Наружный блок",
+  breather: "Бризер",
+  ventGrille: "Вентрешётка",
+  exhaustFan: "Вытяжной вентилятор",
 };
 
 interface TreeItem {

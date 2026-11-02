@@ -330,6 +330,8 @@ pub struct DeviceEntry {
     pub group: String,
     /// Светильник или выключатель — показывается в режиме «Освещение».
     pub lighting: bool,
+    /// Климат — показывается в режиме «Климат».
+    pub climate: bool,
     /// Ставится на стену (иначе — на потолок или пол).
     pub on_wall: bool,
     /// Высота установки по умолчанию, мм.
@@ -554,6 +556,60 @@ pub struct DxfImport {
     pub layers: Vec<String>,
     /// Толщина стен, мм.
     pub thickness: f64,
+}
+
+/// Зона тёплого пола с расчётом.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct HeatingInfo {
+    /// Зона.
+    pub id: String,
+    /// Помещение.
+    pub room: String,
+    /// Название помещения.
+    pub room_name: String,
+    /// Площадь помещения, м².
+    pub area: f64,
+    /// Площадь обогрева (без мебели на полу и отступа от стен), м².
+    pub heated: f64,
+    /// Мощность, Вт.
+    pub power: f64,
+    /// Терморегулятор.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub thermostat: Option<String>,
+}
+
+/// Климат помещения: воздухообмен и охлаждение.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct RoomClimate {
+    /// Помещение.
+    pub id: String,
+    /// Название.
+    pub name: String,
+    /// Площадь, м².
+    pub area: f64,
+    /// Нужный воздухообмен, м³/ч.
+    pub air_required: f64,
+    /// Приток и вытяжка установленными устройствами, м³/ч.
+    pub air_provided: f64,
+    /// Рекомендуемая мощность охлаждения, кВт.
+    pub cooling: f64,
+    /// Внутренних блоков кондиционеров.
+    pub ac_units: u32,
+}
+
+/// Климат текущего вида: тёплые полы, воздухообмен, охлаждение.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct ClimateReport {
+    /// Зоны тёплого пола.
+    pub zones: Vec<HeatingInfo>,
+    /// Помещения.
+    pub rooms: Vec<RoomClimate>,
+    /// Предупреждения.
+    pub warnings: Vec<String>,
 }
 
 /// Строка сметы: позиция прайса в помещении (или без помещения).
@@ -1160,6 +1216,11 @@ pub enum FromEngine {
     Finishes {
         /// Расчёт.
         report: FinishReport,
+    },
+    /// Климат текущего вида: тёплые полы, вентиляция, кондиционирование.
+    Climate {
+        /// Расчёт.
+        report: ClimateReport,
     },
     /// Сменился текущий этаж.
     LevelChanged {

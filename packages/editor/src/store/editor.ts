@@ -1,6 +1,7 @@
 import type {
   CameraInfo,
   CatalogEntry,
+  ClimateReport,
   DeviceEntry,
   Document,
   ElectricalReport,
@@ -30,7 +31,8 @@ export type EditorMode =
   | "electric"
   | "light"
   | "plumbing"
-  | "finish";
+  | "finish"
+  | "climate";
 
 export type EditorDialog =
   | "palette"
@@ -49,7 +51,8 @@ export type SidebarTab =
   | "catalog"
   | "electrical"
   | "plumbing"
-  | "finish";
+  | "finish"
+  | "climate";
 
 /** Режимы, которые не меняют вид (обмер или вариант): каталоги и расчёты. */
 export const catalogModes: readonly EditorMode[] = [
@@ -58,6 +61,7 @@ export const catalogModes: readonly EditorMode[] = [
   "light",
   "plumbing",
   "finish",
+  "climate",
 ];
 
 export type EngineStatus =
@@ -133,6 +137,8 @@ export interface EditorState {
   estimate: EstimateReport | null;
   /** Текущий этаж (`null` — первый). */
   level: string | null;
+  /** Климат текущего вида. */
+  climate: ClimateReport | null;
   /** Открытая вкладка левой панели. */
   sidebarTab: SidebarTab;
   setSidebarTab: (tab: SidebarTab) => void;
@@ -188,6 +194,7 @@ export const useEditor = create<EditorState>()((set) => ({
   finishes: null,
   estimate: null,
   level: null,
+  climate: null,
   sidebarTab: "objects",
   setSidebarTab: (sidebarTab) => set({ sidebarTab }),
   setMode: (mode) => set({ mode }),
@@ -270,6 +277,8 @@ function reduce(acc: Partial<EditorState>, event: FromEngine): Partial<EditorSta
       return { ...acc, finishes: event.report };
     case "estimate":
       return { ...acc, estimate: event.report };
+    case "climate":
+      return { ...acc, climate: event.report };
     case "levelChanged":
       return { ...acc, level: event.level ?? null };
     case "view3dChanged":

@@ -82,6 +82,9 @@ const TEMPLATE: &[Template] = &[
     ("О-13", "Отделка", "Обои", M, "рул.", 1800.0, || Measure::Consumption { name: "Обои".into(), material: None }, 1.0, 0.0),
     ("О-14", "Отделка", "Ламинат или доска", M, "м²", 1100.0, || Measure::Finish { surface: Some(Surface::Floor), kind: Some(MaterialKind::Laminate) }, 1.0, 0.07),
     ("М-01", "Мебель", "Сборка и установка мебели", W, "шт.", 1500.0, || Measure::Furniture, 1.0, 0.0),
+    ("К-01", "Климат", "Монтаж тёплого пола (нагревательный мат)", W, "м²", 900.0, || Measure::Heating, 1.0, 0.0),
+    ("К-02", "Климат", "Нагревательный мат 150 Вт/м²", M, "м²", 2200.0, || Measure::Heating, 1.0, 0.0),
+    ("К-03", "Климат", "Монтаж климатического оборудования", W, "шт.", 6000.0, || Measure::Devices { group: Some(DeviceGroup::Climate) }, 1.0, 0.0),
     ("Р-01", "Общие работы", "Уборка после ремонта", W, "м²", 120.0, || Measure::FloorArea, 1.0, 0.0),
 ];
 
@@ -116,6 +119,7 @@ fn group_token(g: DeviceGroup) -> &'static str {
         DeviceGroup::Switch => "switch",
         DeviceGroup::Light => "light",
         DeviceGroup::Panel => "panel",
+        DeviceGroup::Climate => "climate",
     }
 }
 
@@ -157,11 +161,12 @@ fn find<T: Copy>(all: &[T], token: &str, name: fn(T) -> &'static str) -> Option<
     all.iter().copied().find(|v| name(*v) == token)
 }
 
-const GROUPS: [DeviceGroup; 4] = [
+const GROUPS: [DeviceGroup; 5] = [
     DeviceGroup::Outlet,
     DeviceGroup::Switch,
     DeviceGroup::Light,
     DeviceGroup::Panel,
+    DeviceGroup::Climate,
 ];
 const SURFACES: [Surface; 3] = [Surface::Floor, Surface::Ceiling, Surface::Walls];
 const KINDS: [MaterialKind; 5] = [
@@ -193,6 +198,7 @@ pub fn measure_token(m: &Measure) -> String {
         Measure::Pipes { system } => opt("pipes", system.map(system_token)),
         Measure::Fixtures => "fixtures".into(),
         Measure::Furniture => "furniture".into(),
+        Measure::Heating => "heating".into(),
         Measure::Finish { surface, kind } => format!(
             "finish:{}:{}",
             surface.map_or("*", surface_token),
@@ -249,6 +255,7 @@ pub fn parse_measure(token: &str) -> Option<Measure> {
         }
         "fixtures" => Measure::Fixtures,
         "furniture" => Measure::Furniture,
+        "heating" => Measure::Heating,
         "finish" => Measure::Finish {
             surface: match fa {
                 Some(t) => Some(find(&SURFACES, t, surface_token)?),
@@ -386,7 +393,9 @@ impl<'a> Context<'a> {
             }
             Measure::Devices { group } => {
                 for d in doc.devices.iter().filter(|d| self.shown(&d.layer)) {
-                    let g = if d.kind.is_light() {
+                    let g = if d.kind.is_climate() {
+                        DeviceGroup::Climate
+                    } else if d.kind.is_light() {
                         DeviceGroup::Light
                     } else if crate::electric::is_switch(d.kind) {
                         DeviceGroup::Switch
@@ -409,6 +418,11 @@ impl<'a> Context<'a> {
                         && system.is_none_or(|s| p.system == s)
                 }) {
                     add(self.room_at(DVec2::new(p.x, p.y)), 1.0);
+                }
+            }
+            Measure::Heating => {
+                for z in crate::climate::zones(doc, self.derived) {
+                    add(Some(&z.room), z.heated);
                 }
             }
             Measure::Fixtures | Measure::Furniture => {

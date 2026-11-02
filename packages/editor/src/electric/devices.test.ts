@@ -9,11 +9,17 @@ import {
   toggleKeyLight,
 } from "./devices";
 
-const entry = (kind: DeviceEntry["kind"], group: string, lighting: boolean): DeviceEntry => ({
+const entry = (
+  kind: DeviceEntry["kind"],
+  group: string,
+  lighting: boolean,
+  climate = false,
+): DeviceEntry => ({
   kind,
   name: kind,
   group,
   lighting,
+  climate,
   onWall: true,
   height: 300,
   power: 0,
@@ -22,14 +28,17 @@ const entry = (kind: DeviceEntry["kind"], group: string, lighting: boolean): Dev
 });
 
 describe("электрика в интерфейсе", () => {
-  test("каталог делится на электрику и освещение", () => {
+  test("каталог делится на электрику, освещение и климат", () => {
     const items = [
       entry("socket", "Розетки", false),
       entry("switch1", "Выключатели", true),
       entry("spot", "Светильники", true),
+      entry("breather", "Климат", false, true),
     ];
-    expect(deviceEntries(items, true).map((i) => i.kind)).toEqual(["switch1", "spot"]);
-    expect(deviceGroups(deviceEntries(items, true)).map(([g]) => g)).toEqual([
+    expect(deviceEntries(items, "light").map((i) => i.kind)).toEqual(["switch1", "spot"]);
+    expect(deviceEntries(items, "electric").map((i) => i.kind)).toEqual(["socket"]);
+    expect(deviceEntries(items, "climate").map((i) => i.kind)).toEqual(["breather"]);
+    expect(deviceGroups(deviceEntries(items, "light")).map(([g]) => g)).toEqual([
       "Выключатели",
       "Светильники",
     ]);

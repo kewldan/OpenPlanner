@@ -67,6 +67,7 @@ const OUTLETS: &str = "Выводы";
 const SWITCHES: &str = "Выключатели";
 const LIGHTS: &str = "Светильники";
 const PANEL: &str = "Щит и коробки";
+const CLIMATE: &str = "Климат";
 
 /// Каталог электроточек.
 pub const DEVICES: &[DeviceItem] = &[
@@ -217,6 +218,47 @@ pub const DEVICES: &[DeviceItem] = &[
         0.0,
     ),
     d(DeviceKind::Panel, "Электрощит", PANEL, 1700.0, 0.0, 0.0),
+    d(
+        DeviceKind::Thermostat,
+        "Терморегулятор тёплого пола",
+        CLIMATE,
+        900.0,
+        0.0,
+        0.0,
+    ),
+    d(
+        DeviceKind::AcIndoor,
+        "Кондиционер, внутренний блок",
+        CLIMATE,
+        2300.0,
+        800.0,
+        0.0,
+    ),
+    d(
+        DeviceKind::AcOutdoor,
+        "Кондиционер, наружный блок",
+        CLIMATE,
+        1500.0,
+        0.0,
+        0.0,
+    ),
+    d(DeviceKind::Breather, "Бризер", CLIMATE, 1900.0, 45.0, 0.0),
+    d(
+        DeviceKind::VentGrille,
+        "Вентиляционная решётка",
+        CLIMATE,
+        2400.0,
+        0.0,
+        0.0,
+    ),
+    d(
+        DeviceKind::ExhaustFan,
+        "Вытяжной вентилятор",
+        CLIMATE,
+        2300.0,
+        25.0,
+        0.0,
+    ),
 ];
 
 /// Позиция каталога по виду.
@@ -447,6 +489,91 @@ pub fn symbol(kind: DeviceKind) -> Vec<Mark> {
             ));
             out.push(mark(vec![p(-w, back + h), p(w, back)], false));
         }
+        DeviceKind::Thermostat => {
+            let (w, h) = (r * 0.5, r * 0.9);
+            out.push(mark(
+                vec![p(-w, back), p(w, back), p(w, back + h), p(-w, back + h)],
+                true,
+            ));
+            // Волна — нагрев.
+            out.push(mark(
+                vec![
+                    p(-w * 0.6, back + h * 0.5),
+                    p(-w * 0.2, back + h * 0.3),
+                    p(w * 0.2, back + h * 0.7),
+                    p(w * 0.6, back + h * 0.5),
+                ],
+                false,
+            ));
+        }
+        DeviceKind::AcIndoor => {
+            let (w, h) = (r * 1.8, r * 0.6);
+            out.push(mark(
+                vec![p(-w, back), p(w, back), p(w, back + h), p(-w, back + h)],
+                true,
+            ));
+            for x in [-0.5, 0.0, 0.5] {
+                out.push(mark(
+                    vec![
+                        p(x * w - r * 0.3, back + h * 0.6),
+                        p(x * w + r * 0.3, back + h * 0.6),
+                    ],
+                    false,
+                ));
+            }
+        }
+        DeviceKind::AcOutdoor => {
+            let (w, h) = (r * 1.3, r * 1.0);
+            out.push(mark(
+                vec![p(-w, back), p(w, back), p(w, back + h), p(-w, back + h)],
+                true,
+            ));
+            out.push(mark(circle(p(0.0, back + h / 2.0), h * 0.35), true));
+        }
+        DeviceKind::Breather => {
+            let (w, h) = (r * 0.8, r * 0.5);
+            out.push(mark(
+                vec![p(-w, back), p(w, back), p(w, back + h), p(-w, back + h)],
+                true,
+            ));
+            // Стрелка притока — в помещение.
+            out.push(mark(
+                vec![p(0.0, back + h), p(0.0, back + h + r * 0.8)],
+                false,
+            ));
+            out.push(mark(
+                vec![
+                    p(-r * 0.25, back + h + r * 0.5),
+                    p(0.0, back + h + r * 0.8),
+                    p(r * 0.25, back + h + r * 0.5),
+                ],
+                false,
+            ));
+        }
+        DeviceKind::VentGrille => {
+            let (w, h) = (r * 0.8, r * 0.5);
+            out.push(mark(
+                vec![p(-w, back), p(w, back), p(w, back + h), p(-w, back + h)],
+                true,
+            ));
+            for y in [0.25, 0.5, 0.75] {
+                out.push(mark(vec![p(-w, back + h * y), p(w, back + h * y)], false));
+            }
+        }
+        DeviceKind::ExhaustFan => {
+            let c = p(0.0, back + r * 0.6);
+            out.push(mark(circle(c, r * 0.6), true));
+            // Стрелка вытяжки — к стене.
+            out.push(mark(vec![c + p(0.0, r * 0.3), c - p(0.0, r * 0.4)], false));
+            out.push(mark(
+                vec![
+                    c + p(-r * 0.2, -r * 0.15),
+                    c - p(0.0, r * 0.4),
+                    c + p(r * 0.2, -r * 0.15),
+                ],
+                false,
+            ));
+        }
     }
     out
 }
@@ -579,6 +706,7 @@ pub fn catalog_entries() -> Vec<DeviceEntry> {
                 name: i.name.into(),
                 group: i.group.into(),
                 lighting: i.kind.is_light() || is_switch(i.kind),
+                climate: i.kind.is_climate(),
                 on_wall: on_wall(i.kind),
                 height: i.height,
                 power: i.power,
@@ -606,7 +734,23 @@ fn loads(kind: DeviceKind) -> bool {
             | DeviceKind::JunctionBox
             | DeviceKind::Panel
             | DeviceKind::CeilingOutlet
+            | DeviceKind::AcOutdoor
+            | DeviceKind::VentGrille
     ) && !is_switch(kind)
+}
+
+/// Мощность нагрузки точки: у терморегулятора — сумма зон тёплого пола, которыми он управляет.
+#[must_use]
+pub fn power(doc: &Document, derived: &Derived, d: &Device) -> f64 {
+    if d.kind == DeviceKind::Thermostat {
+        crate::climate::zones(doc, derived)
+            .iter()
+            .filter(|z| z.thermostat.as_deref() == Some(d.id.as_str()))
+            .map(|z| z.power)
+            .sum()
+    } else {
+        d.power
+    }
 }
 
 fn new_circuit(
@@ -705,11 +849,17 @@ pub fn auto_circuits(
         .filter(|d| !d.kind.is_light())
     {
         let id = match dev.kind {
-            DeviceKind::SocketPower | DeviceKind::CableOutlet => {
-                let label = if dev.label.trim().is_empty() {
-                    kind_name(dev.kind).to_owned()
-                } else {
-                    dev.label.clone()
+            DeviceKind::SocketPower
+            | DeviceKind::CableOutlet
+            | DeviceKind::Thermostat
+            | DeviceKind::AcIndoor => {
+                // Тёплый пол и кондиционер — своей группой, как силовые потребители.
+                let room = room_at(doc, derived, DVec2::new(dev.x, dev.y)).map(|r| r.name.clone());
+                let label = match (dev.kind, room) {
+                    (DeviceKind::Thermostat, Some(r)) => format!("Тёплый пол: {r}"),
+                    (DeviceKind::AcIndoor, Some(r)) => format!("Кондиционер: {r}"),
+                    _ if !dev.label.trim().is_empty() => dev.label.clone(),
+                    _ => kind_name(dev.kind).to_owned(),
                 };
                 let phases = if dev.kind == DeviceKind::SocketPower {
                     3
@@ -721,7 +871,7 @@ pub fn auto_circuits(
                     circuits.len() + 1,
                     label,
                     CircuitKind::Power,
-                    dev.power,
+                    power(doc, derived, dev),
                     phases,
                 );
                 let id = c.id.clone();
@@ -834,7 +984,7 @@ pub fn report(doc: &Document, derived: &Derived) -> ElectricalReport {
                 .iter()
                 .filter(|d| d.circuit.as_deref() == Some(&c.id))
                 .collect();
-            let installed: f64 = members.iter().map(|d| d.power).sum();
+            let installed: f64 = members.iter().map(|d| power(doc, derived, d)).sum();
             let (_, length) = route(doc, &c.id);
             let calc = electrical::circuit(&electrical::CircuitInput {
                 installed,

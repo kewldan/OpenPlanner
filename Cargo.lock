@@ -2612,6 +2612,7 @@ dependencies = [
 name = "op-scan"
 version = "0.0.0"
 dependencies = [
+ "base64 0.23.1",
  "glam",
  "op-geom",
  "op-model",

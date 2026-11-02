@@ -347,6 +347,22 @@ pub fn create(
         finishes.extend(copies);
         commands.push(Command::SetFinishes { finishes });
     }
+    let zones: Vec<op_model::HeatingZone> = doc
+        .heating
+        .iter()
+        .filter(|z| map.contains_key(&z.room))
+        .map(|z| op_model::HeatingZone {
+            id: ids.generate(),
+            room: re(&z.room, &map),
+            thermostat: z.thermostat.as_ref().map(|t| re(t, &map)),
+            ..z.clone()
+        })
+        .collect();
+    if !zones.is_empty() {
+        let mut heating = doc.heating.clone();
+        heating.extend(zones);
+        commands.push(Command::SetHeating { heating });
+    }
     (commands, id)
 }
 

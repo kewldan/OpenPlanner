@@ -7,6 +7,7 @@
 //! справа от плана над основной надписью или под планом — где плану просторнее;
 //! что не поместилось, переносится на листы продолжения.
 
+mod climate;
 mod elevations;
 mod finishes;
 mod plumbing;
@@ -100,6 +101,7 @@ enum Kind {
     Sewer,
     Floors,
     Ceilings,
+    Climate,
 }
 
 impl Kind {
@@ -118,6 +120,7 @@ impl Kind {
             Self::Sewer => "План канализации",
             Self::Floors => "План полов",
             Self::Ceilings => "План потолков",
+            Self::Climate => "План тёплых полов и климата",
         }
     }
 }
@@ -190,6 +193,9 @@ pub fn build(doc: &Document, variant: Option<&str>, level: Option<&str>, date: &
     }
     if views.has_finishes(op_model::Surface::Ceiling) {
         kinds.push(Kind::Ceilings);
+    }
+    if views.has_climate() {
+        kinds.push(Kind::Climate);
     }
 
     let size = {
@@ -1065,6 +1071,10 @@ impl<'a> Views<'a> {
                 out.extend(self.totals_table());
             }
             Kind::Ceilings => out.push(self.finishes_table(Some(op_model::Surface::Ceiling))),
+            Kind::Climate => {
+                out.extend(self.heating_table());
+                out.push(self.air_table());
+            }
         }
         out
     }
@@ -1406,6 +1416,16 @@ impl<'a> Views<'a> {
                 tables,
             });
         }
+        if self.has_climate() {
+            out.push(Worksheet {
+                name: "Климат".into(),
+                tables: self
+                    .heating_table()
+                    .into_iter()
+                    .chain(std::iter::once(self.air_table()))
+                    .collect(),
+            });
+        }
         if !self.final_view().0.finishes.is_empty() {
             out.push(Worksheet {
                 name: "Отделка".into(),
@@ -1423,6 +1443,7 @@ impl<'a> Views<'a> {
             (Kind::Water | Kind::Sewer, _) => self.draw_plumbing(kind == Kind::Water, plot),
             (Kind::Floors, _) => self.draw_finishes(op_model::Surface::Floor, plot),
             (Kind::Ceilings, _) => self.draw_finishes(op_model::Surface::Ceiling, plot),
+            (Kind::Climate, _) => self.draw_climate(plot),
             (Kind::Sockets | Kind::Lighting | Kind::Switches | Kind::Wiring, _) => {
                 let (doc, derived) = self.final_view();
                 let rooms = match &self.variant {

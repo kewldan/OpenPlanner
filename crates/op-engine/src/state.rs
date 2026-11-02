@@ -241,6 +241,7 @@ impl EngineState {
                 self.electrical_event(),
                 self.plumbing_event(),
                 self.finishes_event(),
+                self.climate_event(),
                 self.estimate_event(),
                 self.level_event(),
             ],
@@ -292,6 +293,7 @@ impl EngineState {
             self.electrical_event(),
             self.plumbing_event(),
             self.finishes_event(),
+            self.climate_event(),
             self.estimate_event(),
         ]
     }
@@ -897,6 +899,7 @@ impl EngineState {
             self.electrical_event(),
             self.plumbing_event(),
             self.finishes_event(),
+            self.climate_event(),
         ]
     }
 
@@ -956,6 +959,13 @@ impl EngineState {
         });
         events.push(self.level_event());
         events
+    }
+
+    /// Климат текущего вида.
+    pub(crate) fn climate_event(&self) -> FromEngine {
+        FromEngine::Climate {
+            report: crate::climate::report(&self.projected, &self.derived),
+        }
     }
 
     /// Смета текущего вида.
@@ -1306,6 +1316,7 @@ impl EngineState {
                     self.electrical_event(),
                     self.plumbing_event(),
                     self.finishes_event(),
+                    self.climate_event(),
                     self.estimate_event(),
                 ];
                 if before != self.selection {

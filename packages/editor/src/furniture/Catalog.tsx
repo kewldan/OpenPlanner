@@ -10,7 +10,8 @@ import { byCategory, DRAG_TYPE, importModel, pickItem, searchCatalog } from "./i
 /** Каталог мебели: поиск, разделы, позиции с обозначениями; щелчок или перетаскивание на план. */
 export function Catalog() {
   const mode = useEditor((s) => s.mode);
-  if (mode === "electric" || mode === "light") return <DeviceCatalog lighting={mode === "light"} />;
+  if (mode === "electric" || mode === "light" || mode === "climate")
+    return <DeviceCatalog mode={mode} />;
   if (mode === "plumbing") return <PlumbingCatalog />;
   return <FurnitureCatalog />;
 }
