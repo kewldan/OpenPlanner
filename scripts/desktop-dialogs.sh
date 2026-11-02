@@ -38,14 +38,36 @@ mac_keys() {
   osascript -e 'tell application "System Events"' "$@" -e 'end tell'
 }
 
+# Окно приложения на передний план. Windows не даёт новому процессу перехватить
+# фокус (поверх висит консоль агента раннера): сворачиваем чужие окна и вызываем
+# SetForegroundWindow после нажатия Alt — стандартный способ снять блокировку.
+WIN_FOCUS='
+  Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class W {
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
+  [DllImport("user32.dll")] public static extern void keybd_event(byte k, byte s, uint f, UIntPtr e);
+}
+"@
+  Get-Process | Where-Object {
+    $_.MainWindowHandle -ne 0 -and $_.ProcessName -notin @("openplanner-desktop", "explorer")
+  } | ForEach-Object { [void][W]::ShowWindow($_.MainWindowHandle, 6) }
+  $app = Get-Process openplanner-desktop -ErrorAction SilentlyContinue |
+    Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+  [W]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero)
+  [W]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)
+  if ($app) { [void][W]::SetForegroundWindow($app.MainWindowHandle) }
+  Start-Sleep -Milliseconds 500
+  $ws = New-Object -ComObject WScript.Shell
+'
+
 win_send() {
   # Путь вставляется из буфера обмена: при посимвольном вводе автодополнение
   # поля «Имя файла» съедает часть символов.
-  OP_TEXT="$1" powershell -NoProfile -Command '
+  OP_TEXT="$1" powershell -NoProfile -Command "$WIN_FOCUS"'
     Set-Clipboard -Value $env:OP_TEXT
-    $ws = New-Object -ComObject WScript.Shell
-    [void]$ws.AppActivate("OpenPlanner")
-    Start-Sleep -Milliseconds 500
     # Alt+N — фокус в поле «Имя файла» (в диалоге открытия он стоит в списке).
     $ws.SendKeys("%n")
     Start-Sleep -Milliseconds 300
@@ -119,10 +141,7 @@ press_enter() {
         -e 'key code 36'
       ;;
     windows)
-      powershell -NoProfile -Command '
-        $ws = New-Object -ComObject WScript.Shell
-        [void]$ws.AppActivate("OpenPlanner")
-        Start-Sleep -Milliseconds 500
+      powershell -NoProfile -Command "$WIN_FOCUS"'
         $ws.SendKeys("{ENTER}")'
       ;;
     linux) xdotool key Return ;;
