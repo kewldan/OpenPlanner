@@ -22,6 +22,12 @@ const TITLE = "//label[text()='Название']/following::input[1]";
 const PROJECT = join(WORK, "kv.oplan");
 const JOURNAL = `${PROJECT}.journal`;
 const SCAN = new URL("../e2e/fixtures/apartment.glb", import.meta.url).pathname;
+// Текущая версия формата — из op-format, чтобы тест не устаревал при каждом её повышении.
+const FORMAT_VERSION = Number(
+  readFileSync(new URL("../../../crates/op-format/src/lib.rs", import.meta.url), "utf8").match(
+    /FORMAT_VERSION: u32 = (\d+)/,
+  )?.[1],
+);
 
 rmSync(WORK, { recursive: true, force: true });
 mkdirSync(WORK, { recursive: true });
@@ -140,7 +146,7 @@ async function main() {
   const manifest = JSON.parse(readZipEntry(PROJECT, "manifest.json"));
   assert(model.meta.title === "Комендантский пр.", "в файле правильное название");
   assert(
-    manifest.formatVersion === 2,
+    manifest.formatVersion === FORMAT_VERSION,
     `манифест: ${manifest.generator}, формат ${manifest.formatVersion}`,
   );
   assert(existsSync(JOURNAL), "рядом с файлом создан журнал");
@@ -246,8 +252,13 @@ async function main() {
 
   // ── 5. Импорт скана через нативный диалог ───────────────────────────────────
   step("новый проект и ⌘I → мастер импорта скана");
-  key("ctrl+n");
-  await waitFor("новый проект", async () => (await session.text()).includes("Пусто"));
+  // Пока проект дописывает сохранение, файловые команды недоступны — повторяем.
+  await waitFor("новый проект", async () => {
+    if ((await session.text()).includes("Пусто")) return true;
+    key("ctrl+n");
+    await sleep(800);
+    return (await session.text()).includes("Пусто");
+  });
   key("ctrl+i");
   await waitFor("мастер импорта", async () => (await session.text()).includes("Импорт скана"));
   before = windows();
