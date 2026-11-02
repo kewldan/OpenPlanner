@@ -193,7 +193,12 @@ wait_line() {
   for _ in $(seq 1 "${2:-90}"); do
     if grep -q "$1" "$report"; then return 0; fi
     if grep -qE '^(OK|FAIL) ' "$report"; then return 1; fi
-    if ! kill -0 "$pid" 2>/dev/null; then return 1; fi
+    # Приложение пишет итог и сразу выходит: строка могла появиться между
+    # проверкой отчёта и проверкой процесса — перечитать отчёт ещё раз.
+    if ! kill -0 "$pid" 2>/dev/null; then
+      grep -q "$1" "$report"
+      return
+    fi
     sleep 1
   done
   return 1
