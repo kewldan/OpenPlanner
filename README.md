@@ -26,6 +26,7 @@ Most room planners stop at a pretty 3D picture. OpenPlanner is built around what
 | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 📡 **Scan to plan**                  | Drop in a LiDAR scan — Polycam GLB, OBJ, PLY, ZIP or Apple RoomPlan room data. OpenPlanner finds the floor, ceiling, walls (with measured thickness where both faces were scanned), doors and windows, asks about doubtful spots with a confidence score, and imports the plan with room areas as a single undoable step. Recognition runs locally, in a background worker. |
 | 🧱 **Replanning variants**           | The survey stays the single “as is” plan; each variant marks what to demolish and adds new partitions with a material (aerated concrete, drywall, brick). A survey edit shows up in every variant at once. Compare two variants by room areas, demolished and new wall lengths and areas, or side by side on the plan.                                                      |
+| 🗂️ **Drawings from the model**       | The survey, demolition, partition and room plans are built from the same model at one scale, with a ГОСТ title block, room schedule, demolition and partition statements and a legend. Export a vector PDF with layers and searchable Cyrillic text, DXF by layers, SVG, PNG, XLSX — or a single “crew pack” ZIP.                                                           |
 | 📏 **Survey tools**                  | Wall chains with snapping (ends, midpoints, perpendicular, axes, grid) or exact lengths and angles from the keyboard, mitered corners and T-junctions, doors / windows / arches, node-anchored dimensions, leaders, layers you can hide or lock, and an image underlay you calibrate with one known distance.                                                               |
 | 📐 **Rooms that compute themselves** | Click inside a closed contour (or let _Find rooms_ do it): area and perimeter are measured along the wall faces and stay correct when you move, split or extend walls.                                                                                                                                                                                                      |
 | 🦀 **Rust core, GPU canvas**         | The document model and the renderer are Rust compiled to WebAssembly and run in a Web Worker. The plan is drawn with **wgpu** — WebGPU where the platform provides it, WebGL2 otherwise — so the UI thread stays responsive.                                                                                                                                                |
@@ -51,20 +52,20 @@ Most room planners stop at a pretty 3D picture. OpenPlanner is built around what
 
 Development goes in stages. Each stage ships fully working; there is no throwaway MVP.
 
-| Stage                     | Scope                                                                                                 | Status     |
-| ------------------------- | ----------------------------------------------------------------------------------------------------- | ---------- |
-| 0 · Foundation            | App shell, engine, `.oplan` files, autosave and recovery, command palette, CI on 3 OSes               | ✅ Done    |
-| 1 · Survey                | Walls with snapping and numeric input, openings, rooms with areas, dimensions, layers, image underlay | ✅ Done    |
-| 2 · Scan                  | Import a Polycam LiDAR scan → walls, openings and rooms, with a review step                           | ✅ Done    |
-| 3 · Replanning            | Existing / demolish / new status, partitions, design variants and comparison                          | ✅ Done    |
-| 4 · Drawings              | Sheet set with title block, vector PDF, DXF by layers                                                 | 🔜 Next    |
-| 5 · 3D                    | Orbit, walkthrough, section cut, sun                                                                  | 📋 Planned |
-| 6 · Furniture             | Catalog, drag and drop, GLB import                                                                    | 📋 Planned |
-| 7 · Electrical & lighting | Outlets, switches, panel groups, cable runs, illuminance                                              | 📋 Planned |
-| 8 · Plumbing              | Fixtures, outlets, auto-routing, slope checks                                                         | 📋 Planned |
-| 9 · Finishes              | Surfaces, tile layout with cuts, wall elevations                                                      | 📋 Planned |
-| 10 · Estimate             | Quantities from the model, price lists, XLSX                                                          | 📋 Planned |
-| 11 · Extensions           | Photoreal render, IFC, web version, floors, sync                                                      | 📋 Planned |
+| Stage                     | Scope                                                                                                 | Status         |
+| ------------------------- | ----------------------------------------------------------------------------------------------------- | -------------- |
+| 0 · Foundation            | App shell, engine, `.oplan` files, autosave and recovery, command palette, CI on 3 OSes               | ✅ Done        |
+| 1 · Survey                | Walls with snapping and numeric input, openings, rooms with areas, dimensions, layers, image underlay | ✅ Done        |
+| 2 · Scan                  | Import a Polycam LiDAR scan → walls, openings and rooms, with a review step                           | ✅ Done        |
+| 3 · Replanning            | Existing / demolish / new status, partitions, design variants and comparison                          | ✅ Done        |
+| 4 · Drawings              | Sheet set with title block, vector PDF, DXF by layers                                                 | 🚧 Mostly done |
+| 5 · 3D                    | Orbit, walkthrough, section cut, sun                                                                  | 📋 Planned     |
+| 6 · Furniture             | Catalog, drag and drop, GLB import                                                                    | 📋 Planned     |
+| 7 · Electrical & lighting | Outlets, switches, panel groups, cable runs, illuminance                                              | 📋 Planned     |
+| 8 · Plumbing              | Fixtures, outlets, auto-routing, slope checks                                                         | 📋 Planned     |
+| 9 · Finishes              | Surfaces, tile layout with cuts, wall elevations                                                      | 📋 Planned     |
+| 10 · Estimate             | Quantities from the model, price lists, XLSX                                                          | 📋 Planned     |
+| 11 · Extensions           | Photoreal render, IFC, web version, floors, sync                                                      | 📋 Planned     |
 
 Full details: [product spec](docs/product-spec.md) (in Russian).
 

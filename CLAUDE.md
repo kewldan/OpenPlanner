@@ -4,7 +4,7 @@ Guidance for AI coding agents working in this repository.
 
 ## Project
 
-OpenPlanner is an open-source **desktop apartment-renovation planner**. One model of an apartment produces themed working-drawing sheets (survey, demolition, partitions, furniture, electrical, plumbing, finishes), an estimate and a 3D view. Work proceeds in **stages** (no throwaway MVP); Stages 0 (foundation), 1 (survey: walls, openings, rooms, dimensions, leaders, layers, image underlay), 2 (LiDAR scan import with review) and 3 (replanning variants: demolition, partitions with materials, comparison) are done; Stage 4 (drawings and export) is next.
+OpenPlanner is an open-source **desktop apartment-renovation planner**. One model of an apartment produces themed working-drawing sheets (survey, demolition, partitions, furniture, electrical, plumbing, finishes), an estimate and a 3D view. Work proceeds in **stages** (no throwaway MVP); Stages 0 (foundation), 1 (survey: walls, openings, rooms, dimensions, leaders, layers, image underlay), 2 (LiDAR scan import with review) and 3 (replanning variants: demolition, partitions with materials, comparison) are done; Stage 4 (drawings and export: sheet set from the model, title block, PDF/DXF/SVG/PNG/XLSX) is mostly done — wall elevations remain.
 
 Key documents (written in Russian — read them before larger changes):
 
@@ -33,6 +33,7 @@ WebView ─ UI thread (React)  ⇄ postMessage ⇄  Web Worker: op-engine (WASM)
 - **Protocol types are generated from Rust** with tsify (`crates/op-engine/src/protocol.rs` → `packages/engine-client/wasm/op_engine.d.ts`). Never hand-write duplicates of these types in TS.
 - **One renderer** (`crates/op-render`, wgpu) for 2D, point clouds and 3D. It runs in WASM on WebGPU, falling back to WebGL2. Anything relying on compute shaders needs a non-compute path.
 - **Platform differences live behind `Platform`** (`packages/editor/src/platform`): `desktop.ts` (Tauri) and `browser.ts` (web build / e2e). The editor code must not call Tauri APIs directly.
+- **Drawings are built by the engine** (`crates/op-engine/src/sheets.rs` → `op_export::Sheet`) and written by `op-export`'s own PDF/SVG/DXF/XLSX writers; the UI only rasterises PNG and saves files via `Platform.saveExport` (native `write_export` accepts export extensions only).
 - **`.oplan` bytes are produced and parsed by the engine** (`op-format` in WASM). The native side only reads/writes bytes (`apps/desktop/src-tauri/src/files.rs`) and only accepts `.oplan` / `.oplan.journal` paths.
 - **Licensing boundary:** `crates/op-format` and `schema/` are MIT; everything else is AGPL-3.0. `op-format` must not depend on AGPL crates. Dependencies must be AGPL-compatible; GPL-2.0-only is not allowed.
 - **Actions/shortcuts:** every user command is an entry in `packages/editor/src/actions/index.ts`; the ⌘K palette, the cheat sheet and keyboard handling are built from it. Shortcuts use `KeyboardEvent.code` so they work in any layout; `mod` = ⌘ on macOS, Ctrl elsewhere.
