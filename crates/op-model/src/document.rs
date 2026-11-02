@@ -148,17 +148,20 @@ pub enum LayerKind {
     Furniture,
     /// Электрика и освещение.
     Electrical,
+    /// Сантехника: выводы, стояки, трубы.
+    Plumbing,
 }
 
 impl LayerKind {
     /// Все системные слои в порядке по умолчанию (первый — снизу).
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::Scan,
         Self::Underlays,
         Self::Rooms,
         Self::Furniture,
         Self::Walls,
         Self::Openings,
+        Self::Plumbing,
         Self::Electrical,
         Self::Dimensions,
         Self::Leaders,
@@ -177,6 +180,7 @@ impl LayerKind {
             Self::Scan => "layer-scan",
             Self::Furniture => "layer-furniture",
             Self::Electrical => "layer-electrical",
+            Self::Plumbing => "layer-plumbing",
         }
     }
 
@@ -193,6 +197,7 @@ impl LayerKind {
             Self::Scan => "Скан",
             Self::Furniture => "Мебель",
             Self::Electrical => "Электрика",
+            Self::Plumbing => "Сантехника",
         }
     }
 }
@@ -699,6 +704,250 @@ pub struct LightScene {
     pub lights: Vec<String>,
 }
 
+/// Система трубопровода (обозначения по смыслу ГОСТ 21.601: В1, Т3, К1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub enum PipeSystem {
+    /// Холодное водоснабжение.
+    Cold,
+    /// Горячее водоснабжение.
+    Hot,
+    /// Бытовая канализация.
+    Drain,
+}
+
+impl PipeSystem {
+    /// Все системы.
+    pub const ALL: [Self; 3] = [Self::Cold, Self::Hot, Self::Drain];
+
+    /// Водоснабжение (не канализация).
+    #[must_use]
+    pub fn is_water(self) -> bool {
+        self != Self::Drain
+    }
+}
+
+/// Вид сантехнической точки.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub enum PlumbingKind {
+    /// Вывод под прибор.
+    Outlet,
+    /// Стояк.
+    Riser,
+    /// Коллектор водоснабжения.
+    Manifold,
+}
+
+/// Сантехническая точка: вывод под прибор, стояк или коллектор.
+///
+/// Как электроточка, ставится по локальным осям: на стене — спинкой (−Y) к грани.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub struct PlumbingPoint {
+    /// Идентификатор.
+    pub id: String,
+    /// Слой.
+    pub layer: String,
+    /// Вариант, в котором точка новая (без значения — обмер).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub variant: Option<String>,
+    /// Вид.
+    pub kind: PlumbingKind,
+    /// Система.
+    pub system: PipeSystem,
+    /// Центр, мм.
+    pub x: f64,
+    /// Центр, мм.
+    pub y: f64,
+    /// Поворот по часовой стрелке, градусы.
+    #[serde(default)]
+    pub rotation: f64,
+    /// Отметка оси от чистого пола, мм: у вывода — ось трубы, у стояка — ось врезки.
+    pub height: f64,
+    /// Условный диаметр, мм.
+    pub diameter: f64,
+    /// Назначение: «раковина», «стиральная машина».
+    #[serde(default)]
+    pub label: String,
+    /// Прибор (предмет мебели), который обслуживает вывод.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub fixture: Option<String>,
+}
+
+/// Вершина трубы: точка плана и отметка оси от пола.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub struct PipeVertex {
+    /// X, мм.
+    pub x: f64,
+    /// Y, мм.
+    pub y: f64,
+    /// Отметка оси от чистого пола, мм.
+    pub z: f64,
+}
+
+/// Труба: ломаная с отметками вершин.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub struct Pipe {
+    /// Идентификатор.
+    pub id: String,
+    /// Слой.
+    pub layer: String,
+    /// Вариант, в котором труба новая (без значения — обмер).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub variant: Option<String>,
+    /// Система.
+    pub system: PipeSystem,
+    /// Условный диаметр, мм.
+    pub diameter: f64,
+    /// Вершины от прибора к стояку или коллектору.
+    pub points: Vec<PipeVertex>,
+    /// Проложена автоматически (пересчитывается при новой прокладке).
+    #[serde(default)]
+    pub auto: bool,
+}
+
+/// Вид отделочного материала: от него зависят раскладка и расход.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub enum MaterialKind {
+    /// Плитка, керамогранит, мозаика: раскладка, клей, затирка.
+    Tile,
+    /// Ламинат, паркетная или инженерная доска: упаковки по площади.
+    Laminate,
+    /// Краска: литры по площади и числу слоёв.
+    Paint,
+    /// Обои: рулоны по полосам.
+    Wallpaper,
+    /// Натяжной потолок, ковролин и т. п.: площадь.
+    Sheet,
+}
+
+/// Отделочный материал проекта (встроенные — в библиотеке движка).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub struct Material {
+    /// Идентификатор.
+    pub id: String,
+    /// Название.
+    pub name: String,
+    /// Вид.
+    pub kind: MaterialKind,
+    /// Ширина элемента, мм (плитка, доска; у обоев — ширина рулона).
+    #[serde(default)]
+    pub width: f64,
+    /// Длина элемента, мм (плитка, доска; у обоев — длина рулона).
+    #[serde(default)]
+    pub length: f64,
+    /// Толщина, мм.
+    #[serde(default)]
+    pub thickness: f64,
+    /// В упаковке: плитка — штук, ламинат — м², краска — литров, обои — рулонов.
+    #[serde(default)]
+    pub pack: f64,
+    /// Цвет для плана и 3D: «#rrggbb».
+    #[serde(default)]
+    pub color: String,
+}
+
+/// Поверхность помещения.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub enum Surface {
+    /// Пол.
+    Floor,
+    /// Потолок.
+    Ceiling,
+    /// Стены.
+    Walls,
+}
+
+/// Рисунок раскладки.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub enum TilePattern {
+    /// Шов в шов.
+    #[default]
+    Straight,
+    /// Вразбежку: каждый ряд сдвинут на долю длины.
+    Offset,
+    /// По диагонали (45°).
+    Diagonal,
+}
+
+/// Раскладка штучного материала.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub struct TileLayout {
+    /// Рисунок.
+    #[serde(default)]
+    pub pattern: TilePattern,
+    /// Ширина шва, мм.
+    pub joint: f64,
+    /// Сдвиг рядов вразбежку: доля длины элемента (0,5 — в полплитки).
+    pub shift: f64,
+    /// Старт: смещение сетки от угла поверхности, мм (пол — от левого верхнего угла
+    /// помещения, стена — от левого нижнего угла грани).
+    pub origin: [f64; 2],
+}
+
+impl Default for TileLayout {
+    fn default() -> Self {
+        Self {
+            pattern: TilePattern::Straight,
+            joint: 2.0,
+            shift: 0.5,
+            origin: [0.0, 0.0],
+        }
+    }
+}
+
+/// Отделка поверхности помещения.
+///
+/// Отделки стен одного помещения перекрываются по порядку списка: следующая
+/// закрывает предыдущую в своей полосе высот.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub struct Finish {
+    /// Идентификатор.
+    pub id: String,
+    /// Помещение.
+    pub room: String,
+    /// Поверхность.
+    pub surface: Surface,
+    /// Только одна стена: номер грани по развёртке (0 — «А»); без значения — все стены.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub face: Option<u32>,
+    /// Материал: встроенный из библиотеки или материал проекта.
+    pub material: String,
+    /// Низ полосы на стене от пола, мм.
+    #[serde(default)]
+    pub bottom: f64,
+    /// Верх полосы на стене, мм; без значения — до потолка.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub top: Option<f64>,
+    /// Раскладка (для плитки и досок).
+    pub layout: TileLayout,
+}
+
 /// Выноска: стрелка к точке и текст.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
@@ -791,6 +1040,18 @@ pub struct Document {
     /// Сценарии освещения.
     #[serde(default)]
     pub scenes: Vec<LightScene>,
+    /// Сантехнические точки: выводы, стояки, коллекторы.
+    #[serde(default)]
+    pub plumbing: Vec<PlumbingPoint>,
+    /// Трубы.
+    #[serde(default)]
+    pub pipes: Vec<Pipe>,
+    /// Отделочные материалы проекта.
+    #[serde(default)]
+    pub materials: Vec<Material>,
+    /// Отделка поверхностей помещений.
+    #[serde(default)]
+    pub finishes: Vec<Finish>,
     /// Варианты перепланировки.
     #[serde(default)]
     pub variants: Vec<Variant>,
@@ -842,6 +1103,10 @@ impl Document {
             devices: Vec::new(),
             circuits: Vec::new(),
             scenes: Vec::new(),
+            plumbing: Vec::new(),
+            pipes: Vec::new(),
+            materials: Vec::new(),
+            finishes: Vec::new(),
             variants: Vec::new(),
             drawing: DrawingSettings::default(),
             site: Site::default(),
@@ -902,6 +1167,18 @@ impl Document {
     #[must_use]
     pub fn device(&self, id: &str) -> Option<&Device> {
         self.devices.iter().find(|d| d.id == id)
+    }
+
+    /// Сантехническая точка по идентификатору.
+    #[must_use]
+    pub fn plumbing_point(&self, id: &str) -> Option<&PlumbingPoint> {
+        self.plumbing.iter().find(|p| p.id == id)
+    }
+
+    /// Труба по идентификатору.
+    #[must_use]
+    pub fn pipe(&self, id: &str) -> Option<&Pipe> {
+        self.pipes.iter().find(|p| p.id == id)
     }
 
     /// Вариант по идентификатору.

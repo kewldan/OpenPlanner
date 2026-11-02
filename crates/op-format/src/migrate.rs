@@ -13,8 +13,32 @@ pub(crate) type Migration = fn(Value) -> Result<Value, String>;
 
 /// `MIGRATIONS[i]` переводит формат `i + 1` в `i + 2`.
 const MIGRATIONS: &[Migration] = &[
-    v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8,
+    v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8, v8_to_v9,
 ];
+
+/// Формат 9 (стадии 8 и 9): сантехника (точки, трубы, слой «Сантехника»), материалы и отделка.
+fn v8_to_v9(mut model: Value) -> Result<Value, String> {
+    let object = model.as_object_mut().ok_or("ожидался объект модели")?;
+    for key in ["plumbing", "pipes", "materials", "finishes"] {
+        object
+            .entry(key)
+            .or_insert_with(|| Value::Array(Vec::new()));
+    }
+    let Some(layers) = object.get_mut("layers").and_then(Value::as_array_mut) else {
+        return Ok(model);
+    };
+    if !layers.iter().any(|l| l["id"] == "layer-plumbing") {
+        let at = layers
+            .iter()
+            .position(|l| l["id"] == "layer-openings")
+            .map_or(layers.len(), |i| i + 1);
+        layers.insert(
+            at,
+            serde_json::json!({ "id": "layer-plumbing", "name": "Сантехника", "visible": true, "locked": false, "system": "plumbing" }),
+        );
+    }
+    Ok(model)
+}
 
 /// Формат 8 (стадия 7): электроточки, группы щита, сценарии освещения и слой «Электрика».
 fn v7_to_v8(mut model: Value) -> Result<Value, String> {
@@ -219,7 +243,7 @@ mod tests {
         let model =
             json!({ "meta": { "title": "Кв.", "address": "" }, "defaultCeilingHeight": 2700.0 });
         let migrated = migrate(model, 1).unwrap();
-        assert_eq!(migrated["layers"].as_array().map(Vec::len), Some(9));
+        assert_eq!(migrated["layers"].as_array().map(Vec::len), Some(10));
         assert_eq!(migrated["layers"][0]["id"], json!("layer-scan"));
         assert_eq!(migrated["walls"], json!([]));
         assert_eq!(migrated["variants"], json!([]));
@@ -255,6 +279,23 @@ mod format5 {
 
     #[test]
     #[allow(clippy::unwrap_used)] // тест
+    fn v8_gets_plumbing_finishes_and_layer() {
+        let model = v8_to_v9(serde_json::json!({
+            "layers": [
+                { "id": "layer-walls" },
+                { "id": "layer-openings" },
+                { "id": "layer-electrical" }
+            ]
+        }))
+        .unwrap();
+        for key in ["plumbing", "pipes", "materials", "finishes"] {
+            assert_eq!(model[key], serde_json::json!([]));
+        }
+        assert_eq!(model["layers"][2]["id"], "layer-plumbing");
+        assert_eq!(model["layers"][3]["id"], "layer-electrical");
+    }
+
+    #[test]
     fn v7_gets_devices_circuits_scenes_and_layer() {
         let model = serde_json::json!({
             "layers": [{ "id": "layer-openings" }, { "id": "layer-dimensions" }],
@@ -262,7 +303,9 @@ mod format5 {
         let model = migrate(model, 7).unwrap();
         assert_eq!(model["devices"], serde_json::json!([]));
         assert_eq!(model["circuits"], serde_json::json!([]));
-        assert_eq!(model["layers"][1]["id"], "layer-electrical");
+        // Следующая миграция ставит «Сантехнику» сразу над проёмами.
+        assert_eq!(model["layers"][1]["id"], "layer-plumbing");
+        assert_eq!(model["layers"][2]["id"], "layer-electrical");
     }
 
     #[test]

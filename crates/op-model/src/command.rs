@@ -4,8 +4,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AssetData, Circuit, Document, DrawingSettings, Element, LightScene, ProjectMeta, SavedView,
-    Site, element,
+    AssetData, Circuit, Document, DrawingSettings, Element, Finish, LightScene, Material,
+    ProjectMeta, SavedView, Site, Surface, element,
 };
 
 /// Ошибка применения команды. Документ при ошибке не меняется.
@@ -92,6 +92,16 @@ pub enum Command {
     SetScenes {
         /// Сценарии.
         scenes: Vec<LightScene>,
+    },
+    /// Заменить список отделочных материалов проекта.
+    SetMaterials {
+        /// Материалы.
+        materials: Vec<Material>,
+    },
+    /// Заменить список отделки поверхностей.
+    SetFinishes {
+        /// Отделка.
+        finishes: Vec<Finish>,
     },
     /// Добавить элемент или заменить элемент с тем же идентификатором.
     Put {
@@ -230,6 +240,51 @@ impl Command {
                 }
                 let previous = std::mem::replace(&mut doc.scenes, scenes);
                 Ok(Self::SetScenes { scenes: previous })
+            }
+            Self::SetMaterials { materials } => {
+                for m in &materials {
+                    let sizes = [m.width, m.length, m.thickness, m.pack];
+                    if m.id.is_empty()
+                        || m.name.trim().is_empty()
+                        || sizes.iter().any(|v| !v.is_finite() || *v < 0.0)
+                    {
+                        return Err(CommandError::InvalidValue {
+                            field: "materials",
+                            reason: "у материала: идентификатор, название и размеры не меньше нуля",
+                        });
+                    }
+                }
+                let previous = std::mem::replace(&mut doc.materials, materials);
+                Ok(Self::SetMaterials {
+                    materials: previous,
+                })
+            }
+            Self::SetFinishes { finishes } => {
+                for f in &finishes {
+                    let l = &f.layout;
+                    let band_ok = f.bottom.is_finite()
+                        && f.bottom >= 0.0
+                        && f.top.is_none_or(|t| t.is_finite() && t > f.bottom);
+                    let layout_ok = l.joint.is_finite()
+                        && l.joint >= 0.0
+                        && (0.0..1.0).contains(&l.shift)
+                        && l.origin.iter().all(|v| v.is_finite());
+                    let face_ok = f.face.is_none() || f.surface == Surface::Walls;
+                    if f.id.is_empty()
+                        || f.room.is_empty()
+                        || f.material.is_empty()
+                        || !band_ok
+                        || !layout_ok
+                        || !face_ok
+                    {
+                        return Err(CommandError::InvalidValue {
+                            field: "finishes",
+                            reason: "у отделки: помещение, материал, низ полосы ниже верха, шов не меньше нуля, сдвиг от 0 до 1",
+                        });
+                    }
+                }
+                let previous = std::mem::replace(&mut doc.finishes, finishes);
+                Ok(Self::SetFinishes { finishes: previous })
             }
             Self::Put { element, index } => {
                 let id = element.id().to_owned();

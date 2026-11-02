@@ -386,6 +386,62 @@
       },
       "type": "object"
     },
+    "Finish": {
+      "description": "Отделка поверхности помещения.\n\nОтделки стен одного помещения перекрываются по порядку списка: следующая\nзакрывает предыдущую в своей полосе высот.",
+      "properties": {
+        "bottom": {
+          "default": 0.0,
+          "description": "Низ полосы на стене от пола, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "face": {
+          "description": "Только одна стена: номер грани по развёртке (0 — «А»); без значения — все стены.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "Идентификатор.",
+          "type": "string"
+        },
+        "layout": {
+          "$ref": "#/$defs/TileLayout",
+          "description": "Раскладка (для плитки и досок)."
+        },
+        "material": {
+          "description": "Материал: встроенный из библиотеки или материал проекта.",
+          "type": "string"
+        },
+        "room": {
+          "description": "Помещение.",
+          "type": "string"
+        },
+        "surface": {
+          "$ref": "#/$defs/Surface",
+          "description": "Поверхность."
+        },
+        "top": {
+          "description": "Верх полосы на стене, мм; без значения — до потолка.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "room",
+        "surface",
+        "material",
+        "layout"
+      ],
+      "type": "object"
+    },
     "Furniture": {
       "description": "Предмет мебели или оборудования: позиция каталога или своя модель GLB.\n\nЛокальные оси: ширина — вдоль X, глубина — вдоль Y; спинка (сторона к стене)\n— на −Y, лицевая сторона — на +Y. Поворот — по часовой стрелке на плане.",
       "properties": {
@@ -581,6 +637,11 @@
           "const": "electrical",
           "description": "Электрика и освещение.",
           "type": "string"
+        },
+        {
+          "const": "plumbing",
+          "description": "Сантехника: выводы, стояки, трубы.",
+          "type": "string"
         }
       ]
     },
@@ -663,6 +724,88 @@
         "lights"
       ],
       "type": "object"
+    },
+    "Material": {
+      "description": "Отделочный материал проекта (встроенные — в библиотеке движка).",
+      "properties": {
+        "color": {
+          "default": "",
+          "description": "Цвет для плана и 3D: «#rrggbb».",
+          "type": "string"
+        },
+        "id": {
+          "description": "Идентификатор.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/MaterialKind",
+          "description": "Вид."
+        },
+        "length": {
+          "default": 0.0,
+          "description": "Длина элемента, мм (плитка, доска; у обоев — длина рулона).",
+          "format": "double",
+          "type": "number"
+        },
+        "name": {
+          "description": "Название.",
+          "type": "string"
+        },
+        "pack": {
+          "default": 0.0,
+          "description": "В упаковке: плитка — штук, ламинат — м², краска — литров, обои — рулонов.",
+          "format": "double",
+          "type": "number"
+        },
+        "thickness": {
+          "default": 0.0,
+          "description": "Толщина, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "width": {
+          "default": 0.0,
+          "description": "Ширина элемента, мм (плитка, доска; у обоев — ширина рулона).",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "kind"
+      ],
+      "type": "object"
+    },
+    "MaterialKind": {
+      "description": "Вид отделочного материала: от него зависят раскладка и расход.",
+      "oneOf": [
+        {
+          "const": "tile",
+          "description": "Плитка, керамогранит, мозаика: раскладка, клей, затирка.",
+          "type": "string"
+        },
+        {
+          "const": "laminate",
+          "description": "Ламинат, паркетная или инженерная доска: упаковки по площади.",
+          "type": "string"
+        },
+        {
+          "const": "paint",
+          "description": "Краска: литры по площади и числу слоёв.",
+          "type": "string"
+        },
+        {
+          "const": "wallpaper",
+          "description": "Обои: рулоны по полосам.",
+          "type": "string"
+        },
+        {
+          "const": "sheet",
+          "description": "Натяжной потолок, ковролин и т. п.: площадь.",
+          "type": "string"
+        }
+      ]
     },
     "Node": {
       "description": "Узел — точка, в которой начинаются и заканчиваются стены.",
@@ -809,6 +952,198 @@
           "type": "string"
         }
       ]
+    },
+    "Pipe": {
+      "description": "Труба: ломаная с отметками вершин.",
+      "properties": {
+        "auto": {
+          "default": false,
+          "description": "Проложена автоматически (пересчитывается при новой прокладке).",
+          "type": "boolean"
+        },
+        "diameter": {
+          "description": "Условный диаметр, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "id": {
+          "description": "Идентификатор.",
+          "type": "string"
+        },
+        "layer": {
+          "description": "Слой.",
+          "type": "string"
+        },
+        "points": {
+          "description": "Вершины от прибора к стояку или коллектору.",
+          "items": {
+            "$ref": "#/$defs/PipeVertex"
+          },
+          "type": "array"
+        },
+        "system": {
+          "$ref": "#/$defs/PipeSystem",
+          "description": "Система."
+        },
+        "variant": {
+          "description": "Вариант, в котором труба новая (без значения — обмер).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "layer",
+        "system",
+        "diameter",
+        "points"
+      ],
+      "type": "object"
+    },
+    "PipeSystem": {
+      "description": "Система трубопровода (обозначения по смыслу ГОСТ 21.601: В1, Т3, К1).",
+      "oneOf": [
+        {
+          "const": "cold",
+          "description": "Холодное водоснабжение.",
+          "type": "string"
+        },
+        {
+          "const": "hot",
+          "description": "Горячее водоснабжение.",
+          "type": "string"
+        },
+        {
+          "const": "drain",
+          "description": "Бытовая канализация.",
+          "type": "string"
+        }
+      ]
+    },
+    "PipeVertex": {
+      "description": "Вершина трубы: точка плана и отметка оси от пола.",
+      "properties": {
+        "x": {
+          "description": "X, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "y": {
+          "description": "Y, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "z": {
+          "description": "Отметка оси от чистого пола, мм.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "type": "object"
+    },
+    "PlumbingKind": {
+      "description": "Вид сантехнической точки.",
+      "oneOf": [
+        {
+          "const": "outlet",
+          "description": "Вывод под прибор.",
+          "type": "string"
+        },
+        {
+          "const": "riser",
+          "description": "Стояк.",
+          "type": "string"
+        },
+        {
+          "const": "manifold",
+          "description": "Коллектор водоснабжения.",
+          "type": "string"
+        }
+      ]
+    },
+    "PlumbingPoint": {
+      "description": "Сантехническая точка: вывод под прибор, стояк или коллектор.\n\nКак электроточка, ставится по локальным осям: на стене — спинкой (−Y) к грани.",
+      "properties": {
+        "diameter": {
+          "description": "Условный диаметр, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "fixture": {
+          "description": "Прибор (предмет мебели), который обслуживает вывод.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "height": {
+          "description": "Отметка оси от чистого пола, мм: у вывода — ось трубы, у стояка — ось врезки.",
+          "format": "double",
+          "type": "number"
+        },
+        "id": {
+          "description": "Идентификатор.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/PlumbingKind",
+          "description": "Вид."
+        },
+        "label": {
+          "default": "",
+          "description": "Назначение: «раковина», «стиральная машина».",
+          "type": "string"
+        },
+        "layer": {
+          "description": "Слой.",
+          "type": "string"
+        },
+        "rotation": {
+          "default": 0.0,
+          "description": "Поворот по часовой стрелке, градусы.",
+          "format": "double",
+          "type": "number"
+        },
+        "system": {
+          "$ref": "#/$defs/PipeSystem",
+          "description": "Система."
+        },
+        "variant": {
+          "description": "Вариант, в котором точка новая (без значения — обмер).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "x": {
+          "description": "Центр, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "y": {
+          "description": "Центр, мм.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "layer",
+        "kind",
+        "system",
+        "x",
+        "y",
+        "height",
+        "diameter"
+      ],
+      "type": "object"
     },
     "ProjectMeta": {
       "description": "Сведения о проекте, которые попадают в основную надпись чертежей.",
@@ -994,6 +1329,82 @@
         "utcOffset"
       ],
       "type": "object"
+    },
+    "Surface": {
+      "description": "Поверхность помещения.",
+      "oneOf": [
+        {
+          "const": "floor",
+          "description": "Пол.",
+          "type": "string"
+        },
+        {
+          "const": "ceiling",
+          "description": "Потолок.",
+          "type": "string"
+        },
+        {
+          "const": "walls",
+          "description": "Стены.",
+          "type": "string"
+        }
+      ]
+    },
+    "TileLayout": {
+      "description": "Раскладка штучного материала.",
+      "properties": {
+        "joint": {
+          "description": "Ширина шва, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "origin": {
+          "description": "Старт: смещение сетки от угла поверхности, мм (пол — от левого верхнего угла\nпомещения, стена — от левого нижнего угла грани).",
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "pattern": {
+          "$ref": "#/$defs/TilePattern",
+          "default": "straight",
+          "description": "Рисунок."
+        },
+        "shift": {
+          "description": "Сдвиг рядов вразбежку: доля длины элемента (0,5 — в полплитки).",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "joint",
+        "shift",
+        "origin"
+      ],
+      "type": "object"
+    },
+    "TilePattern": {
+      "description": "Рисунок раскладки.",
+      "oneOf": [
+        {
+          "const": "straight",
+          "description": "Шов в шов.",
+          "type": "string"
+        },
+        {
+          "const": "offset",
+          "description": "Вразбежку: каждый ряд сдвинут на долю длины.",
+          "type": "string"
+        },
+        {
+          "const": "diagonal",
+          "description": "По диагонали (45°).",
+          "type": "string"
+        }
+      ]
     },
     "Underlay": {
       "description": "Изображение-подложка (сканированный план, фото обмера).",
@@ -1212,6 +1623,14 @@
       },
       "description": "Настройки чертежей."
     },
+    "finishes": {
+      "default": [],
+      "description": "Отделка поверхностей помещений.",
+      "items": {
+        "$ref": "#/$defs/Finish"
+      },
+      "type": "array"
+    },
     "furniture": {
       "default": [],
       "description": "Мебель и оборудование.",
@@ -1234,6 +1653,14 @@
       },
       "type": "array"
     },
+    "materials": {
+      "default": [],
+      "description": "Отделочные материалы проекта.",
+      "items": {
+        "$ref": "#/$defs/Material"
+      },
+      "type": "array"
+    },
     "meta": {
       "$ref": "#/$defs/ProjectMeta",
       "description": "Сведения о проекте."
@@ -1249,6 +1676,22 @@
       "description": "Окна, двери, арки.",
       "items": {
         "$ref": "#/$defs/Opening"
+      },
+      "type": "array"
+    },
+    "pipes": {
+      "default": [],
+      "description": "Трубы.",
+      "items": {
+        "$ref": "#/$defs/Pipe"
+      },
+      "type": "array"
+    },
+    "plumbing": {
+      "default": [],
+      "description": "Сантехнические точки: выводы, стояки, коллекторы.",
+      "items": {
+        "$ref": "#/$defs/PlumbingPoint"
       },
       "type": "array"
     },
