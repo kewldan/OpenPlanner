@@ -12,6 +12,72 @@ pub struct ProjectMeta {
     pub title: String,
     /// Адрес объекта.
     pub address: String,
+    /// Обозначение (шифр) комплекта чертежей.
+    #[serde(default)]
+    pub designation: String,
+    /// Организация или исполнитель.
+    #[serde(default)]
+    pub organization: String,
+    /// Стадия проектирования («Р» — рабочая документация).
+    #[serde(default)]
+    pub stage: String,
+    /// Разработал.
+    #[serde(default)]
+    pub developer: String,
+    /// Проверил.
+    #[serde(default)]
+    pub checker: String,
+}
+
+/// Формат листа.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub enum PaperFormat {
+    /// A3 альбомный, 420 × 297 мм.
+    #[default]
+    A3Landscape,
+    /// A3 книжный, 297 × 420 мм.
+    A3Portrait,
+    /// A4 альбомный, 297 × 210 мм.
+    A4Landscape,
+    /// A4 книжный, 210 × 297 мм.
+    A4Portrait,
+}
+
+impl PaperFormat {
+    /// Все форматы.
+    pub const ALL: [Self; 4] = [
+        Self::A3Landscape,
+        Self::A3Portrait,
+        Self::A4Landscape,
+        Self::A4Portrait,
+    ];
+
+    /// Ширина и высота, мм.
+    #[must_use]
+    pub fn size(self) -> (f64, f64) {
+        match self {
+            Self::A3Landscape => (420.0, 297.0),
+            Self::A3Portrait => (297.0, 420.0),
+            Self::A4Landscape => (297.0, 210.0),
+            Self::A4Portrait => (210.0, 297.0),
+        }
+    }
+}
+
+/// Настройки комплекта чертежей.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub struct DrawingSettings {
+    /// Формат листов.
+    #[serde(default)]
+    pub paper: PaperFormat,
+    /// Знаменатель масштаба (50 — 1:50); без значения — подбирается по размеру плана.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub scale: Option<u32>,
 }
 
 /// Системный слой: в него попадают новые элементы своего типа.
@@ -448,6 +514,9 @@ pub struct Document {
     /// Варианты перепланировки.
     #[serde(default)]
     pub variants: Vec<Variant>,
+    /// Настройки чертежей.
+    #[serde(default)]
+    pub drawing: DrawingSettings,
     /// Двоичные файлы проекта по путям внутри `.oplan`. В `model.json` не входят.
     #[serde(skip)]
     #[schemars(skip)]
@@ -471,7 +540,8 @@ impl Document {
         Self {
             meta: ProjectMeta {
                 title: title.into(),
-                address: String::new(),
+                stage: "Р".into(),
+                ..ProjectMeta::default()
             },
             default_ceiling_height: Self::DEFAULT_CEILING_HEIGHT,
             layers: LayerKind::ALL.into_iter().map(Layer::system).collect(),
@@ -483,6 +553,7 @@ impl Document {
             leaders: Vec::new(),
             underlays: Vec::new(),
             variants: Vec::new(),
+            drawing: DrawingSettings::default(),
             assets: BTreeMap::new(),
         }
     }
