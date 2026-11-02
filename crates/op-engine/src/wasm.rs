@@ -7,8 +7,31 @@ use wasm_bindgen::prelude::*;
 
 use crate::{
     EngineState,
-    protocol::{EngineEvents, ToEngine},
+    protocol::{EngineEvents, ScanImport, ToEngine},
 };
+
+/// Распознаёт скан (GLB, OBJ, PLY, ZIP, RoomPlan JSON). Вызывается в
+/// отдельном воркере: `progress(stage, count)` сообщает номер этапа.
+///
+/// # Errors
+///
+/// Файл не читается или в нём нет геометрии.
+#[wasm_bindgen(js_name = analyzeScan)]
+pub fn analyze_scan(
+    bytes: &[u8],
+    progress: &js_sys::Function,
+) -> Result<Ts<op_scan::ScanResult>, JsError> {
+    let mut report = |stage: op_scan::Stage| {
+        let _ = progress.call2(
+            &JsValue::NULL,
+            &JsValue::from(stage.index()),
+            &JsValue::from(op_scan::Stage::COUNT),
+        );
+    };
+    let result =
+        op_scan::analyze(bytes, &mut report).map_err(|err| JsError::new(&err.to_string()))?;
+    Ok(result.into_ts()?)
+}
 
 /// Движок, живущий в Web Worker.
 #[wasm_bindgen]
@@ -120,6 +143,22 @@ impl Engine {
     #[wasm_bindgen(js_name = importFile)]
     pub fn import_file(&mut self, bytes: &[u8]) -> Result<Ts<EngineEvents>, JsError> {
         Ok(self.state.import_file(bytes)?.into_ts()?)
+    }
+
+    /// Импортирует распознанный скан. `source` — исходный файл (сохраняется в проекте).
+    ///
+    /// # Errors
+    ///
+    /// Запрос не соответствует протоколу.
+    #[wasm_bindgen(js_name = importScan)]
+    #[allow(clippy::needless_pass_by_value)] // wasm-bindgen принимает аргументы только по значению
+    pub fn import_scan(
+        &mut self,
+        request: Ts<ScanImport>,
+        source: Option<Vec<u8>>,
+    ) -> Result<Ts<EngineEvents>, JsError> {
+        let request = request.to_rust()?;
+        Ok(self.state.import_scan(&request, source).into_ts()?)
     }
 
     /// Добавляет изображение-подложку (PNG или JPEG).

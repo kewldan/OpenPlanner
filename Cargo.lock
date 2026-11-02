@@ -2537,6 +2537,7 @@ dependencies = [
  "op-geom",
  "op-model",
  "op-render",
+ "op-scan",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",

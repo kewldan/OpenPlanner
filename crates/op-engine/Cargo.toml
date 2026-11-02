@@ -18,6 +18,7 @@ op-format.workspace = true
 op-geom.workspace = true
 op-model = { workspace = true, features = ["wasm"] }
 op-render.workspace = true
+op-scan = { workspace = true, features = ["wasm"] }
 serde.workspace = true
 tsify.workspace = true
 wasm-bindgen.workspace = true
