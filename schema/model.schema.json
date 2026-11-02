@@ -501,6 +501,51 @@
       ],
       "type": "object"
     },
+    "SavedView": {
+      "description": "Сохранённый ракурс 3D-вида. Точки — в координатах плана (мм, Y вниз) и высота от пола.",
+      "properties": {
+        "eye": {
+          "description": "Глаз: x, y, высота.",
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array"
+        },
+        "id": {
+          "description": "Идентификатор.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Название.",
+          "type": "string"
+        },
+        "target": {
+          "description": "Точка взгляда: x, y, высота.",
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array"
+        },
+        "walk": {
+          "default": false,
+          "description": "Прогулка (иначе — орбита).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "eye",
+        "target"
+      ],
+      "type": "object"
+    },
     "Side": {
       "description": "Сторона стены относительно направления от узла `a` к узлу `b`.",
       "oneOf": [
@@ -515,6 +560,38 @@
           "type": "string"
         }
       ]
+    },
+    "Site": {
+      "description": "Привязка квартиры к местности — для положения солнца.",
+      "properties": {
+        "latitude": {
+          "description": "Широта, градусы (северная — положительная).",
+          "format": "double",
+          "type": "number"
+        },
+        "longitude": {
+          "description": "Долгота, градусы (восточная — положительная).",
+          "format": "double",
+          "type": "number"
+        },
+        "north": {
+          "description": "Направление на север на плане: градусы по часовой стрелке от верха листа.",
+          "format": "double",
+          "type": "number"
+        },
+        "utcOffset": {
+          "description": "Часовой пояс: смещение от UTC, часы.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "north",
+        "latitude",
+        "longitude",
+        "utcOffset"
+      ],
+      "type": "object"
     },
     "Underlay": {
       "description": "Изображение-подложка (сканированный план, фото обмера).",
@@ -756,6 +833,16 @@
       },
       "type": "array"
     },
+    "site": {
+      "$ref": "#/$defs/Site",
+      "default": {
+        "latitude": 55.75,
+        "longitude": 37.62,
+        "north": 0.0,
+        "utcOffset": 3.0
+      },
+      "description": "Привязка к местности."
+    },
     "underlays": {
       "description": "Подложки.",
       "items": {
@@ -768,6 +855,14 @@
       "description": "Варианты перепланировки.",
       "items": {
         "$ref": "#/$defs/Variant"
+      },
+      "type": "array"
+    },
+    "views": {
+      "default": [],
+      "description": "Сохранённые ракурсы 3D-вида.",
+      "items": {
+        "$ref": "#/$defs/SavedView"
       },
       "type": "array"
     },

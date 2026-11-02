@@ -12,7 +12,19 @@ use crate::{FORMAT_VERSION, FormatError};
 pub(crate) type Migration = fn(Value) -> Result<Value, String>;
 
 /// `MIGRATIONS[i]` переводит формат `i + 1` в `i + 2`.
-const MIGRATIONS: &[Migration] = &[v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5];
+const MIGRATIONS: &[Migration] = &[v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6];
+
+/// Формат 6 (стадия 5): привязка к местности для солнца и сохранённые ракурсы 3D.
+fn v5_to_v6(mut model: Value) -> Result<Value, String> {
+    let object = model.as_object_mut().ok_or("ожидался объект модели")?;
+    object.entry("site").or_insert_with(|| {
+        serde_json::json!({ "north": 0.0, "latitude": 55.75, "longitude": 37.62, "utcOffset": 3.0 })
+    });
+    object
+        .entry("views")
+        .or_insert_with(|| Value::Array(Vec::new()));
+    Ok(model)
+}
 
 /// Формат 5 (стадия 4): графы основной надписи и настройки чертежей.
 fn v4_to_v5(mut model: Value) -> Result<Value, String> {
@@ -189,5 +201,14 @@ mod format5 {
         assert_eq!(model["meta"]["stage"], "Р");
         assert_eq!(model["meta"]["designation"], "");
         assert_eq!(model["drawing"]["paper"], "a3Landscape");
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)] // тест
+    fn v5_gets_site_and_saved_views() {
+        let model = serde_json::json!({ "meta": { "title": "Кв", "address": "" }, "variants": [] });
+        let model = migrate(model, 5).unwrap();
+        assert_eq!(model["site"]["latitude"], 55.75);
+        assert_eq!(model["views"], serde_json::json!([]));
     }
 }

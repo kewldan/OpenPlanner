@@ -80,6 +80,51 @@ pub struct DrawingSettings {
     pub scale: Option<u32>,
 }
 
+/// Привязка квартиры к местности — для положения солнца.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub struct Site {
+    /// Направление на север на плане: градусы по часовой стрелке от верха листа.
+    pub north: f64,
+    /// Широта, градусы (северная — положительная).
+    pub latitude: f64,
+    /// Долгота, градусы (восточная — положительная).
+    pub longitude: f64,
+    /// Часовой пояс: смещение от UTC, часы.
+    pub utc_offset: f64,
+}
+
+impl Default for Site {
+    /// Москва, север — вверх листа.
+    fn default() -> Self {
+        Self {
+            north: 0.0,
+            latitude: 55.75,
+            longitude: 37.62,
+            utc_offset: 3.0,
+        }
+    }
+}
+
+/// Сохранённый ракурс 3D-вида. Точки — в координатах плана (мм, Y вниз) и высота от пола.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub struct SavedView {
+    /// Идентификатор.
+    pub id: String,
+    /// Название.
+    pub name: String,
+    /// Прогулка (иначе — орбита).
+    #[serde(default)]
+    pub walk: bool,
+    /// Глаз: x, y, высота.
+    pub eye: [f64; 3],
+    /// Точка взгляда: x, y, высота.
+    pub target: [f64; 3],
+}
+
 /// Системный слой: в него попадают новые элементы своего типа.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
@@ -517,6 +562,12 @@ pub struct Document {
     /// Настройки чертежей.
     #[serde(default)]
     pub drawing: DrawingSettings,
+    /// Привязка к местности.
+    #[serde(default)]
+    pub site: Site,
+    /// Сохранённые ракурсы 3D-вида.
+    #[serde(default)]
+    pub views: Vec<SavedView>,
     /// Двоичные файлы проекта по путям внутри `.oplan`. В `model.json` не входят.
     #[serde(skip)]
     #[schemars(skip)]
@@ -554,6 +605,8 @@ impl Document {
             underlays: Vec::new(),
             variants: Vec::new(),
             drawing: DrawingSettings::default(),
+            site: Site::default(),
+            views: Vec::new(),
             assets: BTreeMap::new(),
         }
     }

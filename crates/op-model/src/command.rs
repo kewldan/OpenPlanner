@@ -3,7 +3,7 @@ use std::sync::Arc;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{AssetData, Document, DrawingSettings, Element, ProjectMeta, element};
+use crate::{AssetData, Document, DrawingSettings, Element, ProjectMeta, SavedView, Site, element};
 
 /// Ошибка применения команды. Документ при ошибке не меняется.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -69,6 +69,16 @@ pub enum Command {
     SetDrawing {
         /// Новые настройки.
         drawing: DrawingSettings,
+    },
+    /// Изменить привязку к местности.
+    SetSite {
+        /// Новая привязка.
+        site: Site,
+    },
+    /// Заменить список сохранённых ракурсов 3D-вида.
+    SetViews {
+        /// Ракурсы.
+        views: Vec<SavedView>,
     },
     /// Добавить элемент или заменить элемент с тем же идентификатором.
     Put {
@@ -146,6 +156,39 @@ impl Command {
                 }
                 let previous = std::mem::replace(&mut doc.drawing, drawing);
                 Ok(Self::SetDrawing { drawing: previous })
+            }
+            Self::SetSite { site } => {
+                let finite = [site.north, site.latitude, site.longitude, site.utc_offset]
+                    .iter()
+                    .all(|v| v.is_finite());
+                if !finite || site.latitude.abs() > 90.0 || site.longitude.abs() > 180.0 {
+                    return Err(CommandError::InvalidValue {
+                        field: "site",
+                        reason: "широта от −90 до 90°, долгота от −180 до 180°",
+                    });
+                }
+                if site.utc_offset.abs() > 14.0 {
+                    return Err(CommandError::InvalidValue {
+                        field: "utcOffset",
+                        reason: "часовой пояс — от UTC−14 до UTC+14",
+                    });
+                }
+                let previous = std::mem::replace(&mut doc.site, site);
+                Ok(Self::SetSite { site: previous })
+            }
+            Self::SetViews { views } => {
+                let finite = views
+                    .iter()
+                    .flat_map(|v| v.eye.iter().chain(&v.target))
+                    .all(|c| c.is_finite());
+                if !finite {
+                    return Err(CommandError::InvalidValue {
+                        field: "views",
+                        reason: "координаты ракурса должны быть числами",
+                    });
+                }
+                let previous = std::mem::replace(&mut doc.views, views);
+                Ok(Self::SetViews { views: previous })
             }
             Self::Put { element, index } => {
                 let id = element.id().to_owned();
