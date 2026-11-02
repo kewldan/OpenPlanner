@@ -47,3 +47,14 @@
   align-items: center;
   gap: var(--space-1);
 }
+
+.level {
+  height: var(--control-h);
+  max-width: 140px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+}

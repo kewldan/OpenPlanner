@@ -979,6 +979,23 @@ pub enum ToEngine {
     },
     /// Добавить в прайс проекта позиции типового прайса, которых в нём нет (по коду).
     DefaultPrices,
+    /// Перейти на этаж (`None` — первый).
+    SetLevel {
+        /// Этаж.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        level: Option<String>,
+    },
+    /// Добавить этаж над верхним и перейти на него.
+    AddLevel {
+        /// Название.
+        name: String,
+    },
+    /// Удалить этаж вместе со всем, что на нём стоит.
+    DeleteLevel {
+        /// Этаж.
+        id: String,
+    },
     /// Показывать раскладку отделки пола на плане.
     ShowFinishes {
         /// Показывать.
@@ -1144,6 +1161,13 @@ pub enum FromEngine {
         /// Расчёт.
         report: FinishReport,
     },
+    /// Сменился текущий этаж.
+    LevelChanged {
+        /// Этаж (`None` — первый).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        level: Option<String>,
+    },
     /// Смета текущего вида.
     Estimate {
         /// Смета.
@@ -1210,6 +1234,10 @@ pub struct DrawingRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[tsify(optional)]
     pub variant: Option<String>,
+    /// Этаж; без значения — первый.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub level: Option<String>,
     /// Дата для основной надписи (ММ.ГГ).
     pub date: String,
 }

@@ -235,6 +235,20 @@ impl Layer {
     }
 }
 
+/// Этаж: название и отметка пола. Первый этаж (элементы без поля `level`) —
+/// неявный, на отметке 0.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub struct Level {
+    /// Идентификатор.
+    pub id: String,
+    /// Название: «Этаж 2», «Мансарда».
+    pub name: String,
+    /// Отметка чистого пола от пола первого этажа, мм.
+    pub elevation: f64,
+}
+
 /// Узел — точка, в которой начинаются и заканчиваются стены.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
@@ -246,6 +260,10 @@ pub struct Node {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "wasm", tsify(optional))]
     pub variant: Option<String>,
+    /// Этаж (без значения — первый этаж).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub level: Option<String>,
     /// X, мм.
     pub x: f64,
     /// Y, мм (вниз).
@@ -435,6 +453,10 @@ pub struct Room {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "wasm", tsify(optional))]
     pub variant: Option<String>,
+    /// Этаж (без значения — первый этаж).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub level: Option<String>,
     /// Название.
     pub name: String,
     /// X точки подписи, мм.
@@ -483,6 +505,10 @@ pub struct Dimension {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "wasm", tsify(optional))]
     pub variant: Option<String>,
+    /// Этаж (без значения — первый этаж).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub level: Option<String>,
     /// Начало.
     pub start: Anchor,
     /// Конец.
@@ -507,6 +533,10 @@ pub struct Furniture {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "wasm", tsify(optional))]
     pub variant: Option<String>,
+    /// Этаж (без значения — первый этаж).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub level: Option<String>,
     /// Позиция каталога (`bed-double`) или `custom` для своей модели.
     pub item: String,
     /// Название.
@@ -622,6 +652,10 @@ pub struct Device {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "wasm", tsify(optional))]
     pub variant: Option<String>,
+    /// Этаж (без значения — первый этаж).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub level: Option<String>,
     /// Вид.
     pub kind: DeviceKind,
     /// Центр, мм.
@@ -756,6 +790,10 @@ pub struct PlumbingPoint {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "wasm", tsify(optional))]
     pub variant: Option<String>,
+    /// Этаж (без значения — первый этаж).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub level: Option<String>,
     /// Вид.
     pub kind: PlumbingKind,
     /// Система.
@@ -806,6 +844,10 @@ pub struct Pipe {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "wasm", tsify(optional))]
     pub variant: Option<String>,
+    /// Этаж (без значения — первый этаж).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub level: Option<String>,
     /// Система.
     pub system: PipeSystem,
     /// Условный диаметр, мм.
@@ -1124,6 +1166,10 @@ pub struct Leader {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "wasm", tsify(optional))]
     pub variant: Option<String>,
+    /// Этаж (без значения — первый этаж).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub level: Option<String>,
     /// X точки, на которую указывает выноска, мм.
     pub x: f64,
     /// Y точки, мм.
@@ -1145,6 +1191,10 @@ pub struct Underlay {
     pub id: String,
     /// Слой.
     pub layer: String,
+    /// Этаж (без значения — первый этаж).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub level: Option<String>,
     /// Путь файла изображения внутри `.oplan`, например `assets/<id>.png`.
     pub asset: String,
     /// Исходное имя файла.
@@ -1221,6 +1271,9 @@ pub struct Document {
     /// Объёмы строк сметы, заданные вручную.
     #[serde(default)]
     pub overrides: Vec<QuantityOverride>,
+    /// Этажи выше первого (первый — неявный).
+    #[serde(default)]
+    pub levels: Vec<Level>,
     /// Варианты перепланировки.
     #[serde(default)]
     pub variants: Vec<Variant>,
@@ -1278,6 +1331,7 @@ impl Document {
             finishes: Vec::new(),
             prices: Vec::new(),
             overrides: Vec::new(),
+            levels: Vec::new(),
             variants: Vec::new(),
             drawing: DrawingSettings::default(),
             site: Site::default(),
@@ -1350,6 +1404,12 @@ impl Document {
     #[must_use]
     pub fn pipe(&self, id: &str) -> Option<&Pipe> {
         self.pipes.iter().find(|p| p.id == id)
+    }
+
+    /// Этаж по идентификатору.
+    #[must_use]
+    pub fn level(&self, id: &str) -> Option<&Level> {
+        self.levels.iter().find(|l| l.id == id)
     }
 
     /// Вариант по идентификатору.

@@ -4,10 +4,7 @@
 use std::collections::{HashMap, HashSet};
 
 use glam::DVec2;
-use op_model::{
-    Anchor, Command, Document, Element, Variant, WallMaterial,
-    view::{demolished, project},
-};
+use op_model::{Anchor, Command, Document, Element, Variant, WallMaterial, view::demolished};
 
 use crate::{
     derived::Derived,
@@ -434,10 +431,58 @@ pub fn view_name(doc: &Document, variant: Option<&str>) -> String {
         .map_or_else(|| "Обмер (как есть)".to_owned(), |v| v.name.clone())
 }
 
-/// Сводка вида: площади помещений и изменения относительно обмера.
+/// Сводка вида по всем этажам: помещения этажей подряд (с названием этажа,
+/// если этажей несколько), площади, изменения и стоимость складываются.
 #[must_use]
 pub fn summary(doc: &Document, variant: Option<&str>) -> ViewSummary {
-    let projected = project(doc, variant);
+    let levels = op_model::view::levels(doc);
+    let many = levels.len() > 1;
+    let mut parts = levels.iter().map(|level| {
+        let mut s = summary_level(doc, variant, level.as_deref());
+        if many {
+            let name = level_name(doc, level.as_deref());
+            for r in &mut s.rooms {
+                r.name = format!("{name} · {}", r.name);
+            }
+        }
+        s
+    });
+    let Some(mut out) = parts.next() else {
+        return summary_level(doc, variant, None);
+    };
+    for s in parts {
+        out.rooms.extend(s.rooms);
+        out.total_area += s.total_area;
+        out.demolished_length += s.demolished_length;
+        out.demolished_area += s.demolished_area;
+        for m in s.new_walls {
+            match out.new_walls.iter_mut().find(|x| x.material == m.material) {
+                Some(x) => {
+                    x.length += m.length;
+                    x.area += m.area;
+                }
+                None => out.new_walls.push(m),
+            }
+        }
+        out.openings_added += s.openings_added;
+        out.openings_closed += s.openings_closed;
+        out.cost += s.cost;
+    }
+    out
+}
+
+/// Название этажа: первый — «Этаж 1».
+#[must_use]
+pub fn level_name(doc: &Document, level: Option<&str>) -> String {
+    level
+        .and_then(|l| doc.level(l))
+        .map_or_else(|| "Этаж 1".to_owned(), |l| l.name.clone())
+}
+
+/// Сводка вида на одном этаже.
+#[must_use]
+pub fn summary_level(doc: &Document, variant: Option<&str>, level: Option<&str>) -> ViewSummary {
+    let projected = op_model::view::project_level(doc, variant, level);
     let derived = Derived::new(&projected);
     // Метки в одной области (снесли перегородку) — одно помещение: площадь у первой,
     // остальные считаются слитыми и в список не входят.
@@ -462,7 +507,7 @@ pub fn summary(doc: &Document, variant: Option<&str>) -> ViewSummary {
         .collect();
     let total_area = rooms.iter().map(|r| r.area).sum();
     let height = |h: Option<f64>| h.unwrap_or(doc.default_ceiling_height) / 1000.0;
-    let survey = project(doc, None);
+    let survey = op_model::view::project_level(doc, None, level);
     let survey_derived = Derived::new(&survey);
     let removed = variant.map(|v| demolished(doc, v)).unwrap_or_default();
     let (mut demolished_length, mut demolished_area) = (0.0, 0.0);

@@ -2,7 +2,7 @@
 //! помещения с площадью, мебель габаритами — по итоговому виду (вариант или обмер).
 
 use op_export::ifc::{IfcBox, IfcModel, IfcOpening, IfcSpace, IfcStorey, IfcWall, OpeningFill};
-use op_model::{Document, OpeningKind, view::project};
+use op_model::{Document, OpeningKind};
 
 use crate::{derived::Derived, geometry};
 
@@ -113,11 +113,24 @@ fn timestamp(date: &str) -> String {
     }
 }
 
-/// IFC 4 итогового вида: вариант или (без варианта) обмер.
+/// IFC 4 итогового вида (вариант или, без варианта, обмер) — все этажи.
 #[must_use]
 pub fn export(doc: &Document, variant: Option<&str>, date: &str, file_name: &str) -> Vec<u8> {
-    let projected = project(doc, variant);
-    let derived = Derived::new(&projected);
+    let storeys = op_model::view::levels(doc)
+        .into_iter()
+        .map(|level| {
+            let level = level.as_deref();
+            let projected = op_model::view::project_level(doc, variant, level);
+            let derived = Derived::new(&projected);
+            storey(
+                &projected,
+                &derived,
+                level.unwrap_or("first"),
+                &crate::variants::level_name(doc, level),
+                op_model::view::elevation(doc, level),
+            )
+        })
+        .collect();
     let model = IfcModel {
         project: if doc.meta.title.trim().is_empty() {
             "OpenPlanner".into()
@@ -126,7 +139,7 @@ pub fn export(doc: &Document, variant: Option<&str>, date: &str, file_name: &str
         },
         address: doc.meta.address.clone(),
         timestamp: timestamp(date),
-        storeys: vec![storey(&projected, &derived, "main", "Этаж 1", 0.0)],
+        storeys,
     };
     op_export::ifc::write(&model, file_name).into_bytes()
 }

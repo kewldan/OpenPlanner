@@ -1067,6 +1067,7 @@ fn sheet_texts(sheet: &op_export::Sheet) -> Vec<String> {
 fn request(variant: Option<&str>) -> crate::protocol::DrawingRequest {
     crate::protocol::DrawingRequest {
         variant: variant.map(Into::into),
+        level: None,
         date: "11.26".into(),
     }
 }
@@ -1295,6 +1296,7 @@ fn big_square(s: &mut EngineState, side: f64) {
     for (i, (x, y)) in corners.iter().enumerate() {
         commands.push(Command::Put {
             element: Element::Node(op_model::Node {
+                level: None,
                 id: format!("n{i}"),
                 variant: None,
                 x: *x,
@@ -2172,6 +2174,7 @@ fn drain_checks_and_revision_access() {
     );
     // Ручная труба почти без уклона.
     let flat = op_model::Pipe {
+        level: None,
         id: "flat".into(),
         layer: LayerKind::Plumbing.id().into(),
         variant: None,
@@ -2714,4 +2717,117 @@ fn ifc_export_has_walls_openings_spaces_and_furniture() {
     );
     let info = s.drawings(&request(Some(&variant))).preview();
     assert!(info.file_names.ifc.ends_with(" — модель.ifc"));
+}
+
+// ---------------------------------------------------------------- этажи
+
+fn current_level(s: &EngineState) -> Option<String> {
+    s.level.clone()
+}
+
+#[test]
+fn levels_have_own_plans_and_add_up() {
+    let mut s = state();
+    two_rooms(&mut s);
+    s.handle(ToEngine::DefaultPrices);
+    let events = s.handle(ToEngine::AddLevel {
+        name: "Мансарда".into(),
+    });
+    assert!(!has_error(&events));
+    let level = current_level(&s).unwrap();
+    assert!(
+        events
+            .events
+            .iter()
+            .any(|e| matches!(e, FromEngine::LevelChanged { level: Some(l) } if *l == level))
+    );
+    let doc = s.document();
+    assert!((doc.levels[0].elevation - 3000.0).abs() < 1e-9);
+    // На новом этаже план пуст; новая комната — на нём.
+    assert!(s.projected.walls.is_empty() && s.derived.regions.is_empty());
+    rectangle(&mut s);
+    s.handle(ToEngine::FindRooms);
+    let doc = s.document();
+    assert_eq!(doc.walls.len(), 5 + 4);
+    assert_eq!(
+        doc.nodes
+            .iter()
+            .filter(|n| n.level.as_deref() == Some(level.as_str()))
+            .count(),
+        4
+    );
+    assert_eq!(s.projected.walls.len(), 4);
+    // Сводка и смета — по всем этажам, помещения с названием этажа.
+    let views = summaries(&s.snapshot());
+    let survey = &views[0];
+    assert_eq!(survey.rooms.len(), 3);
+    assert!(
+        survey
+            .rooms
+            .iter()
+            .any(|r| r.name.starts_with("Мансарда · "))
+    );
+    assert!(survey.rooms.iter().any(|r| r.name.starts_with("Этаж 1 · ")));
+    let report = estimate(&s.snapshot());
+    assert!(
+        report
+            .rooms
+            .iter()
+            .any(|g| g.name.starts_with("Мансарда · "))
+    );
+    assert!(report.rooms.iter().any(|g| g.name.starts_with("Этаж 1 · ")));
+    // В 3D нижний этаж — ниже текущего.
+    enable_3d(&mut s);
+    let scene = s.take_scene_3d().unwrap();
+    let low = scene
+        .opaque
+        .vertices
+        .iter()
+        .map(|v| v.pos[2])
+        .fold(f32::INFINITY, f32::min);
+    assert!(low < -2000.0, "{low}");
+    s.handle(ToEngine::Set3d {
+        options: crate::protocol::Options3d::default(),
+    });
+    // Чертежи этажа и IFC со всеми этажами.
+    let mut req = request(None);
+    req.level = Some(level.clone());
+    let set = s.drawings(&req);
+    assert!(set.name.contains("Мансарда"), "{}", set.name);
+    let ifc = String::from_utf8(
+        s.export_drawings(&request(None), crate::protocol::DrawingFormat::Ifc)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(ifc.matches("IFCBUILDINGSTOREY(").count(), 2);
+    // Первый этаж — свой план.
+    s.handle(ToEngine::SetLevel { level: None });
+    assert_eq!(s.projected.walls.len(), 5);
+    assert!(has_error(&s.handle(ToEngine::SetLevel {
+        level: Some("нет".into())
+    })));
+}
+
+#[test]
+fn deleting_a_level_removes_its_elements_in_one_step() {
+    let mut s = state();
+    two_rooms(&mut s);
+    s.handle(ToEngine::AddLevel {
+        name: String::new(),
+    });
+    let level = current_level(&s).unwrap();
+    assert_eq!(s.document().levels[0].name, "Этаж 2");
+    rectangle(&mut s);
+    furniture_tool(&mut s, "sofa");
+    click(&mut s, 2000.0, 3000.0);
+    let before = s.document().walls.len();
+    s.handle(ToEngine::DeleteLevel { id: level });
+    let doc = s.document();
+    assert!(doc.levels.is_empty() && doc.furniture.is_empty());
+    assert_eq!(doc.walls.len(), before - 4);
+    assert!(doc.nodes.iter().all(|n| n.level.is_none()));
+    assert_eq!(current_level(&s), None);
+    s.handle(ToEngine::Undo);
+    assert_eq!(s.document().walls.len(), before);
+    assert_eq!(s.document().furniture.len(), 1);
 }

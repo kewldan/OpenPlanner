@@ -36,6 +36,7 @@ pub fn new_wall(
         end.node.clone().unwrap_or_else(|| {
             let id = ids.generate();
             commands.push(put(Element::Node(Node {
+                level: None,
                 variant: None,
                 id: id.clone(),
                 x: end.pos.x,
@@ -238,6 +239,7 @@ pub fn translate(doc: &Document, ids: &[String], delta: DVec2) -> Vec<Command> {
     for n in &doc.nodes {
         if nodes.contains(n.id.as_str()) {
             commands.push(put(Element::Node(Node {
+                level: None,
                 variant: None,
                 id: n.id.clone(),
                 x: n.x + delta.x,
@@ -329,6 +331,7 @@ pub fn translate(doc: &Document, ids: &[String], delta: DVec2) -> Vec<Command> {
 pub fn move_node(doc: &Document, node: &str, to: DVec2, merge_into: Option<&str>) -> Vec<Command> {
     let Some(target) = merge_into.filter(|t| *t != node) else {
         return vec![put(Element::Node(Node {
+            level: None,
             variant: None,
             id: node.to_owned(),
             x: to.x,
@@ -446,6 +449,7 @@ mod tests {
                     swing: op_model::Side::Left,
                 })),
                 put(Element::Dimension(op_model::Dimension {
+                    level: None,
                     variant: None,
                     id: "d".into(),
                     layer: LayerKind::Dimensions.id().into(),

@@ -217,6 +217,39 @@ impl Element {
         }
     }
 
+    /// Этаж элемента (без значения — первый). У стены и проёма — по узлу стены.
+    #[must_use]
+    pub fn level(&self) -> Option<&str> {
+        match self {
+            Self::Node(e) => e.level.as_deref(),
+            Self::Room(e) => e.level.as_deref(),
+            Self::Dimension(e) => e.level.as_deref(),
+            Self::Leader(e) => e.level.as_deref(),
+            Self::Underlay(e) => e.level.as_deref(),
+            Self::Furniture(e) => e.level.as_deref(),
+            Self::Device(e) => e.level.as_deref(),
+            Self::PlumbingPoint(e) => e.level.as_deref(),
+            Self::Pipe(e) => e.level.as_deref(),
+            Self::Layer(_) | Self::Wall(_) | Self::Opening(_) | Self::Variant(_) => None,
+        }
+    }
+
+    /// Задаёт этаж нового элемента (стены и проёмы следуют за узлами).
+    pub fn set_level(&mut self, level: Option<String>) {
+        match self {
+            Self::Node(e) => e.level = level,
+            Self::Room(e) => e.level = level,
+            Self::Dimension(e) => e.level = level,
+            Self::Leader(e) => e.level = level,
+            Self::Underlay(e) => e.level = level,
+            Self::Furniture(e) => e.level = level,
+            Self::Device(e) => e.level = level,
+            Self::PlumbingPoint(e) => e.level = level,
+            Self::Pipe(e) => e.level = level,
+            Self::Layer(_) | Self::Wall(_) | Self::Opening(_) | Self::Variant(_) => {}
+        }
+    }
+
     /// Задаёт вариант нового элемента (для слоёв, подложек и вариантов — ничего).
     pub fn set_variant(&mut self, variant: Option<String>) {
         match self {
@@ -354,6 +387,11 @@ fn validate(doc: &Document, element: &Element) -> Result<(), CommandError> {
     {
         return Err(missing(v));
     }
+    if let Some(l) = element.level()
+        && doc.level(l).is_none()
+    {
+        return Err(missing(l));
+    }
     // Элемент варианта может опираться на обмер и на свой вариант, но не на чужой.
     let reachable = |other: Option<&str>| other.is_none() || other == scope;
     let foreign = |_: &str| CommandError::InvalidValue {
@@ -383,6 +421,9 @@ fn validate(doc: &Document, element: &Element) -> Result<(), CommandError> {
             }
             if w.a == w.b {
                 return Err(invalid("b", "стена должна соединять разные узлы"));
+            }
+            if doc.node(&w.a).map(|n| &n.level) != doc.node(&w.b).map(|n| &n.level) {
+                return Err(invalid("b", "стена должна соединять узлы одного этажа"));
             }
             positive("thickness", w.thickness, "толщина должна быть больше нуля")?;
             if let Some(h) = w.height {

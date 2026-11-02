@@ -532,20 +532,25 @@ pub fn report(doc: &Document, derived: &Derived, summary: &ViewSummary) -> Estim
             });
         }
     }
+    let order: Vec<String> = ctx.rooms.iter().map(|r| r.name.clone()).collect();
+    summarize(lines, &order)
+}
+
+/// Итоги по строкам: разделы, помещения (в порядке `order`, общие — в конце),
+/// закупки, работы, материалы.
+fn summarize(lines: Vec<EstimateLine>, order: &[String]) -> EstimateReport {
     let mut sections = Vec::new();
     let mut rooms = Vec::new();
     for line in &lines {
         add_to(&mut sections, &line.section, line);
         add_to(&mut rooms, &line.room_name, line);
     }
-    // Помещения — в порядке документа, общие работы — в конце.
-    let order = |name: &str| {
-        ctx.rooms
+    rooms.sort_by_key(|g| {
+        order
             .iter()
-            .position(|r| r.name == name)
+            .position(|n| *n == g.name)
             .unwrap_or(usize::MAX)
-    };
-    rooms.sort_by_key(|g| order(&g.name));
+    });
     let mut purchases: Vec<Purchase> = Vec::new();
     for line in lines.iter().filter(|l| l.kind == PriceKind::Material) {
         match purchases.iter_mut().find(|p| p.item == line.item) {
@@ -575,6 +580,30 @@ pub fn report(doc: &Document, derived: &Derived, summary: &ViewSummary) -> Estim
         materials,
         total: round2(works + materials),
     }
+}
+
+/// Смета из смет этажей: помещения получают название этажа впереди.
+#[must_use]
+pub fn combine(parts: Vec<(String, EstimateReport)>) -> EstimateReport {
+    if parts.len() == 1 {
+        return parts
+            .into_iter()
+            .next()
+            .map(|(_, r)| r)
+            .unwrap_or_else(|| summarize(Vec::new(), &[]));
+    }
+    let mut lines = Vec::new();
+    let mut order = Vec::new();
+    for (level, report) in parts {
+        for g in &report.rooms {
+            order.push(format!("{level} · {}", g.name));
+        }
+        lines.extend(report.lines.into_iter().map(|mut l| {
+            l.room_name = format!("{level} · {}", l.room_name);
+            l
+        }));
+    }
+    summarize(lines, &order)
 }
 
 // ---------------------------------------------------------------- таблицы и файлы

@@ -272,12 +272,14 @@ mod tests {
         Command::Batch {
             commands: vec![
                 put(Element::Node(Node {
+                    level: None,
                     variant: None,
                     id: "a".into(),
                     x: 0.0,
                     y: 0.0,
                 })),
                 put(Element::Node(Node {
+                    level: None,
                     variant: None,
                     id: "b".into(),
                     x: 3000.0,

@@ -59,6 +59,7 @@ export type {
   LayerKind,
   Leader,
   LengthInfo,
+  Level,
   LightScene,
   Material,
   MaterialAmount,

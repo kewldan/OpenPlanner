@@ -3,6 +3,7 @@ import { actions, isEnabled } from "../actions";
 import { format, isMacPlatform } from "../actions/shortcut";
 import { sendToEngine } from "../engine";
 import { t } from "../i18n";
+import { LevelPicker } from "../levels/LevelPicker";
 import { useProject } from "../project";
 import { catalogModes, type EditorMode, type SidebarTab, useEditor } from "../store/editor";
 import { enterReplan, enterSurvey } from "../variants/actions";
@@ -102,6 +103,7 @@ export function TopBar() {
           <Icon name="redo" />
         </IconButton>
       </div>
+      <LevelPicker />
       <div className={styles.spacer} />
       <Segmented label={t("mode.label")} value={mode} options={modes} onChange={setMode} />
       <div className={styles.spacer} />

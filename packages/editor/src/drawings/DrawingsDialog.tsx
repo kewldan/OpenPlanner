@@ -38,6 +38,7 @@ export function DrawingsDialog() {
   const setDialog = useEditor((s) => s.setDialog);
   const document = useEditor((s) => s.document);
   const summaries = useEditor((s) => s.summaries);
+  const level = useEditor((s) => s.level);
   const [variant, setVariant] = useState<string | null>(null);
   const [info, setInfo] = useState<DrawingSetInfo | null>(null);
   const [selected, setSelected] = useState(0);
@@ -55,7 +56,7 @@ export function DrawingsDialog() {
   useEffect(() => {
     if (!open || !document) return;
     let cancelled = false;
-    callEngine({ type: "drawingSet", request: drawingRequest(variant) })
+    callEngine({ type: "drawingSet", request: drawingRequest(variant, new Date(), level) })
       .then((next) => {
         if (!cancelled) setInfo(next);
       })
@@ -65,7 +66,7 @@ export function DrawingsDialog() {
     return () => {
       cancelled = true;
     };
-  }, [open, document, variant]);
+  }, [open, document, variant, level]);
 
   const urls = useMemo(
     () =>
@@ -92,7 +93,7 @@ export function DrawingsDialog() {
     setBusy(kind);
     setStatus(null);
     try {
-      const name = await exportDrawings(kind, drawingRequest(variant), info);
+      const name = await exportDrawings(kind, drawingRequest(variant, new Date(), level), info);
       if (name) setStatus({ text: t("drawings.saved", { name }), error: false });
     } catch (error) {
       setStatus({ text: error instanceof Error ? error.message : String(error), error: true });

@@ -49,6 +49,7 @@ pub fn commands(
         let asset = format!("assets/{id}.png");
         out.push(Command::asset(asset.clone(), raster.png.clone()));
         out.push(put(Element::Underlay(Underlay {
+            level: None,
             id,
             layer: LayerKind::Scan.id().into(),
             asset,
@@ -83,6 +84,7 @@ pub fn commands(
         .map(|p| {
             let id = ids.generate();
             out.push(put(Element::Node(Node {
+                level: None,
                 variant: None,
                 id: id.clone(),
                 x: p.x,
@@ -147,6 +149,7 @@ pub fn commands(
                 };
                 number += 1;
                 out.push(put(Element::Room(Room {
+                    level: None,
                     variant: None,
                     id: ids.generate(),
                     layer: LayerKind::Rooms.id().into(),

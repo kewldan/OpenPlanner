@@ -21,8 +21,12 @@ export function sheetDate(now: Date): string {
 }
 
 /** Запрос комплекта: вариант (или обмер) и сегодняшняя дата. */
-export function drawingRequest(variant: string | null, now = new Date()): DrawingRequest {
-  return { ...(variant ? { variant } : {}), date: sheetDate(now) };
+export function drawingRequest(
+  variant: string | null,
+  now = new Date(),
+  level: string | null = null,
+): DrawingRequest {
+  return { ...(variant ? { variant } : {}), ...(level ? { level } : {}), date: sheetDate(now) };
 }
 
 /** Имена PNG: один лист — файл, несколько — архив с файлами по листам. */

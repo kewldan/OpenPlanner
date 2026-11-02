@@ -131,6 +131,8 @@ export interface EditorState {
   finishes: FinishReport | null;
   /** Смета текущего вида. */
   estimate: EstimateReport | null;
+  /** Текущий этаж (`null` — первый). */
+  level: string | null;
   /** Открытая вкладка левой панели. */
   sidebarTab: SidebarTab;
   setSidebarTab: (tab: SidebarTab) => void;
@@ -185,6 +187,7 @@ export const useEditor = create<EditorState>()((set) => ({
   materialLibrary: [],
   finishes: null,
   estimate: null,
+  level: null,
   sidebarTab: "objects",
   setSidebarTab: (sidebarTab) => set({ sidebarTab }),
   setMode: (mode) => set({ mode }),
@@ -267,6 +270,8 @@ function reduce(acc: Partial<EditorState>, event: FromEngine): Partial<EditorSta
       return { ...acc, finishes: event.report };
     case "estimate":
       return { ...acc, estimate: event.report };
+    case "levelChanged":
+      return { ...acc, level: event.level ?? null };
     case "view3dChanged":
       return {
         ...acc,

@@ -55,6 +55,52 @@ pub fn project(doc: &Document, variant: Option<&str>) -> Document {
     out
 }
 
+/// Этажи документа по порядку: первый (`None`), затем добавленные по отметке.
+#[must_use]
+pub fn levels(doc: &Document) -> Vec<Option<String>> {
+    let mut extra: Vec<&crate::Level> = doc.levels.iter().collect();
+    extra.sort_by(|a, b| a.elevation.total_cmp(&b.elevation));
+    std::iter::once(None)
+        .chain(extra.into_iter().map(|l| Some(l.id.clone())))
+        .collect()
+}
+
+/// Отметка пола этажа, мм.
+#[must_use]
+pub fn elevation(doc: &Document, level: Option<&str>) -> f64 {
+    level
+        .and_then(|l| doc.level(l))
+        .map_or(0.0, |l| l.elevation)
+}
+
+/// Оставляет элементы одного этажа (`None` — первого). Стены и проёмы — по узлам стен.
+#[must_use]
+pub fn on_level(doc: &Document, level: Option<&str>) -> Document {
+    let mine = |l: &Option<String>| l.as_deref() == level;
+    let mut out = doc.clone();
+    out.nodes.retain(|e| mine(&e.level));
+    let nodes: HashSet<&str> = out.nodes.iter().map(|n| n.id.as_str()).collect();
+    out.walls
+        .retain(|w| nodes.contains(w.a.as_str()) && nodes.contains(w.b.as_str()));
+    let walls: HashSet<&str> = out.walls.iter().map(|w| w.id.as_str()).collect();
+    out.openings.retain(|o| walls.contains(o.wall.as_str()));
+    out.rooms.retain(|e| mine(&e.level));
+    out.dimensions.retain(|e| mine(&e.level));
+    out.leaders.retain(|e| mine(&e.level));
+    out.underlays.retain(|e| mine(&e.level));
+    out.furniture.retain(|e| mine(&e.level));
+    out.devices.retain(|e| mine(&e.level));
+    out.plumbing.retain(|e| mine(&e.level));
+    out.pipes.retain(|e| mine(&e.level));
+    out
+}
+
+/// Документ в виде `variant` на этаже `level`.
+#[must_use]
+pub fn project_level(doc: &Document, variant: Option<&str>, level: Option<&str>) -> Document {
+    on_level(&project(doc, variant), level)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -71,6 +117,7 @@ mod tests {
 
     fn node(id: &str, x: f64, variant: Option<&str>) -> Command {
         put(Element::Node(Node {
+            level: None,
             id: id.into(),
             variant: variant.map(Into::into),
             x,

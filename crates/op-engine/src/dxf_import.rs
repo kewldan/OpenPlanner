@@ -152,6 +152,7 @@ impl EngineState {
                 let asset = format!("assets/{id}.png");
                 self.images_insert(asset.clone(), decoded);
                 let underlay = Underlay {
+                    level: None,
                     id: id.clone(),
                     layer: LayerKind::Underlays.id().into(),
                     asset: asset.clone(),
@@ -202,6 +203,7 @@ impl EngineState {
                     let id = state.ids.generate();
                     commands.push(Command::Put {
                         element: Element::Node(Node {
+                            level: None,
                             id: id.clone(),
                             variant: None,
                             x: (p.x * 10.0).round() / 10.0,

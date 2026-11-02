@@ -170,6 +170,16 @@ export const ru = {
   "dxf.badThickness": "Толщина стен должна быть больше нуля",
   "dxf.import": "Импортировать",
 
+  "levels.current": "Этаж",
+  "levels.add": "Добавить этаж",
+  "levels.title": "Этажи",
+  "levels.rename": "Название этажа",
+  "levels.elevation": "±{value}",
+  "levels.remove": "Удалить этаж «{name}»",
+  "levels.removeOk": "Удалить",
+  "levels.cancel": "Отмена",
+  "levels.confirmRemove": "Удалить этаж «{name}» вместе со всем, что на нём нарисовано?",
+
   "circuit.lighting": "Освещение",
   "circuit.sockets": "Розетки",
   "circuit.power": "Силовая",

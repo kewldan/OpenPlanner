@@ -55,6 +55,8 @@ pub struct EngineState {
     pub(crate) derived: Derived,
     /// Что показывает холст.
     pub(crate) view: View,
+    /// Текущий этаж (`None` — первый).
+    pub(crate) level: Option<String>,
     /// Документ в текущем виде (обмер или вариант); инструменты работают с ним.
     pub(crate) projected: Document,
     /// Обмер и его производные — в виде варианта (для показа демонтажа).
@@ -107,6 +109,7 @@ impl EngineState {
             derived: Derived::new(&doc),
             projected: doc.clone(),
             view: View::Survey,
+            level: None,
             survey: None,
             camera_before_compare: None,
             history: History::new(doc),
@@ -195,9 +198,17 @@ impl EngineState {
     /// в обмере — каскад по элементам вариантов.
     pub(crate) fn adapt(&self, commands: Vec<Command>) -> Vec<Command> {
         let full = self.history.document();
-        match self.variant() {
+        let commands = match self.variant() {
             Some(v) => crate::variants::adapt_variant(full, v, self.options.material, commands),
             None => crate::variants::adapt_survey(full, commands),
+        };
+        // Новые элементы — на текущем этаже.
+        match &self.level {
+            Some(level) => commands
+                .into_iter()
+                .map(|c| assign_level(full, level, c))
+                .collect(),
+            None => commands,
         }
     }
 
@@ -231,6 +242,7 @@ impl EngineState {
                 self.plumbing_event(),
                 self.finishes_event(),
                 self.estimate_event(),
+                self.level_event(),
             ],
         }
     }
@@ -536,6 +548,9 @@ impl EngineState {
                     }],
                 }
             }
+            ToEngine::SetLevel { level } => self.set_level(level),
+            ToEngine::AddLevel { name } => self.add_level(name),
+            ToEngine::DeleteLevel { id } => self.delete_level(&id),
             ToEngine::DefaultPrices => {
                 let mut prices = self.history.document().prices.clone();
                 let before = prices.len();
@@ -610,7 +625,7 @@ impl EngineState {
         right: Option<&str>,
     ) -> [(Option<String>, DVec2); 2] {
         let full = self.history.document();
-        let projected = op_model::view::project(full, left);
+        let projected = op_model::view::project_level(full, left, self.level.as_deref());
         let derived = Derived::new(&projected);
         let (lo, hi) = derived.nodes.values().fold(
             (DVec2::splat(f64::MAX), DVec2::splat(f64::MIN)),
@@ -633,7 +648,8 @@ impl EngineState {
         let full = self.history.document();
         let mut scene = Scene::new();
         for (variant, offset) in self.compare_layout(left, right) {
-            let mut doc = op_model::view::project(full, variant.as_deref());
+            let mut doc =
+                op_model::view::project_level(full, variant.as_deref(), self.level.as_deref());
             crate::variants::translate(&mut doc, offset);
             let derived = Derived::new(&doc);
             scene.extend(draw::document(
@@ -645,7 +661,7 @@ impl EngineState {
                 None,
             ));
             if let Some(v) = &variant {
-                let mut survey = op_model::view::project(full, None);
+                let mut survey = op_model::view::project_level(full, None, self.level.as_deref());
                 crate::variants::translate(&mut survey, offset);
                 let survey_derived = Derived::new(&survey);
                 let ids = op_model::view::demolished(full, v);
@@ -713,6 +729,7 @@ impl EngineState {
         crate::sheets::build(
             self.history.document(),
             request.variant.as_deref(),
+            request.level.as_deref(),
             &request.date,
         )
     }
@@ -796,6 +813,7 @@ impl EngineState {
         let size = DVec2::new(f64::from(decoded.width), f64::from(decoded.height)) * mm_per_px;
         let origin = self.camera.center - size / 2.0;
         let underlay = Underlay {
+            level: None,
             id: id.clone(),
             layer: LayerKind::Underlays.id().into(),
             asset: asset.clone(),
@@ -850,6 +868,96 @@ impl EngineState {
         }
     }
 
+    pub(crate) fn level_event(&self) -> FromEngine {
+        FromEngine::LevelChanged {
+            level: self.level.clone(),
+        }
+    }
+
+    /// Переходит на этаж: выделение и шаг инструмента сбрасываются.
+    pub(crate) fn set_level(&mut self, level: Option<String>) -> Vec<FromEngine> {
+        if let Some(l) = &level
+            && self.history.document().level(l).is_none()
+        {
+            return vec![FromEngine::Error {
+                message: "Такого этажа нет".into(),
+            }];
+        }
+        self.level = level;
+        self.reset_interaction();
+        self.selection.clear();
+        self.hover = None;
+        self.cursor = None;
+        self.document_changed();
+        vec![
+            self.level_event(),
+            self.derived_event(),
+            self.selection_event(),
+            self.tool_event(),
+            self.electrical_event(),
+            self.plumbing_event(),
+            self.finishes_event(),
+        ]
+    }
+
+    /// Новый этаж над верхним (отметка — потолок плюс 300 мм перекрытия).
+    fn add_level(&mut self, name: String) -> Vec<FromEngine> {
+        let doc = self.history.document();
+        let top = doc.levels.iter().map(|l| l.elevation).fold(0.0, f64::max);
+        let id = self.ids.generate();
+        let mut levels = doc.levels.clone();
+        levels.push(op_model::Level {
+            id: id.clone(),
+            name: if name.trim().is_empty() {
+                format!("Этаж {}", levels.len() + 2)
+            } else {
+                name
+            },
+            elevation: top + doc.default_ceiling_height + 300.0,
+        });
+        let mut events = self.execute_all(vec![Command::SetLevels { levels }]);
+        events.extend(self.set_level(Some(id)));
+        events
+    }
+
+    /// Удаляет этаж со всеми элементами (обмера и вариантов) одним действием.
+    fn delete_level(&mut self, id: &str) -> Vec<FromEngine> {
+        let full = self.history.document();
+        if full.level(id).is_none() {
+            return vec![FromEngine::Error {
+                message: "Такого этажа нет".into(),
+            }];
+        }
+        let on = op_model::view::on_level(full, Some(id));
+        let derived = Derived::new(&on);
+        let ids: Vec<String> = all_ids(&on)
+            .into_iter()
+            .chain(on.nodes.iter().map(|n| n.id.as_str()))
+            .map(str::to_owned)
+            .collect();
+        let mut commands = crate::edit::delete(&on, &derived, &ids);
+        // Узлы, оставшиеся без стен в выделении, удаляются отдельно.
+        for n in &on.nodes {
+            if !commands
+                .iter()
+                .any(|c| matches!(c, Command::Remove { id } if id == &n.id))
+            {
+                commands.push(Command::Remove { id: n.id.clone() });
+            }
+        }
+        commands.push(Command::SetLevels {
+            levels: full.levels.iter().filter(|l| l.id != id).cloned().collect(),
+        });
+        if self.level.as_deref() == Some(id) {
+            self.level = None;
+        }
+        let mut events = self.apply(HistoryOp::Execute {
+            command: Command::batch(commands),
+        });
+        events.push(self.level_event());
+        events
+    }
+
     /// Смета текущего вида.
     pub(crate) fn estimate_event(&self) -> FromEngine {
         FromEngine::Estimate {
@@ -857,11 +965,25 @@ impl EngineState {
         }
     }
 
-    /// Смета текущего вида (в сравнении — обмер).
+    /// Смета текущего вида по всем этажам (в сравнении — обмер).
     #[must_use]
     pub fn estimate(&self) -> crate::protocol::EstimateReport {
-        let summary = crate::variants::summary(self.history.document(), self.variant());
-        crate::estimate::report(&self.projected, &self.derived, &summary)
+        let full = self.history.document();
+        let variant = self.variant();
+        let parts = op_model::view::levels(full)
+            .into_iter()
+            .map(|level| {
+                let level = level.as_deref();
+                let doc = op_model::view::project_level(full, variant, level);
+                let derived = Derived::new(&doc);
+                let summary = crate::variants::summary_level(full, variant, level);
+                (
+                    crate::variants::level_name(full, level),
+                    crate::estimate::report(&doc, &derived, &summary),
+                )
+            })
+            .collect();
+        crate::estimate::combine(parts)
     }
 
     /// Файл сметы текущего вида: XLSX (разделы, помещения, закупки) или CSV.
@@ -964,6 +1086,7 @@ impl EngineState {
         let [width, depth, height] = model.size.map(|v| v.round().max(1.0));
         let name = name.trim_end_matches(".glb").trim_end_matches(".GLB");
         let item = op_model::Furniture {
+            level: None,
             id: id.clone(),
             layer: LayerKind::Furniture.id().into(),
             variant: None,
@@ -1069,11 +1192,18 @@ impl EngineState {
         {
             self.view = View::Survey;
         }
+        // Этаж удалён (например, отменой его создания) — первый этаж.
+        if let Some(l) = &self.level
+            && full.level(l).is_none()
+        {
+            self.level = None;
+        }
         let variant = self.variant().map(str::to_owned);
-        self.projected = op_model::view::project(full, variant.as_deref());
+        let level = self.level.clone();
+        self.projected = op_model::view::project_level(full, variant.as_deref(), level.as_deref());
         self.derived = Derived::new(&self.projected);
         self.survey = variant.as_ref().map(|_| {
-            let survey = op_model::view::project(full, None);
+            let survey = op_model::view::project_level(full, None, level.as_deref());
             let derived = Derived::new(&survey);
             (survey, derived)
         });
@@ -1133,7 +1263,7 @@ impl EngineState {
         let commands = self.adapt(commands);
         let mut doc = self.history.document().clone();
         if Command::batch(commands).apply(&mut doc).is_ok() {
-            let doc = op_model::view::project(&doc, self.variant());
+            let doc = op_model::view::project_level(&doc, self.variant(), self.level.as_deref());
             let derived = Derived::new(&doc);
             self.preview = Some((doc, derived));
         } else {
@@ -1251,6 +1381,7 @@ impl EngineState {
             created.push(id.clone());
             commands.push(Command::Put {
                 element: Element::Room(op_model::Room {
+                    level: None,
                     variant: None,
                     id,
                     layer: LayerKind::Rooms.id().into(),
@@ -1278,7 +1409,11 @@ impl EngineState {
                 .compare_layout(left.as_deref(), right.as_deref())
                 .into_iter()
                 .flat_map(|(v, offset)| {
-                    let doc = op_model::view::project(self.history.document(), v.as_deref());
+                    let doc = op_model::view::project_level(
+                        self.history.document(),
+                        v.as_deref(),
+                        self.level.as_deref(),
+                    );
                     Derived::new(&doc)
                         .nodes
                         .values()
@@ -1400,6 +1535,25 @@ impl EngineState {
                 .element(id)
                 .is_some_and(|e| e.variant() == Some(v)),
         }
+    }
+}
+
+/// Помечает этажом новые элементы команды (которых нет в документе и у которых этажа нет).
+fn assign_level(doc: &Document, level: &str, command: Command) -> Command {
+    match command {
+        Command::Put { mut element, index } => {
+            if element.level().is_none() && doc.element(element.id()).is_none() {
+                element.set_level(Some(level.to_owned()));
+            }
+            Command::Put { element, index }
+        }
+        Command::Batch { commands } => Command::Batch {
+            commands: commands
+                .into_iter()
+                .map(|c| assign_level(doc, level, c))
+                .collect(),
+        },
+        other => other,
     }
 }
 

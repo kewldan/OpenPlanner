@@ -4,7 +4,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AssetData, Circuit, Document, DrawingSettings, Element, Finish, LightScene, Material,
+    AssetData, Circuit, Document, DrawingSettings, Element, Finish, Level, LightScene, Material,
     PriceItem, ProjectMeta, QuantityOverride, SavedView, Site, Surface, element,
 };
 
@@ -102,6 +102,11 @@ pub enum Command {
     SetFinishes {
         /// Отделка.
         finishes: Vec<Finish>,
+    },
+    /// Заменить список этажей (элементы удалённого этажа удаляются отдельными командами).
+    SetLevels {
+        /// Этажи.
+        levels: Vec<Level>,
     },
     /// Заменить прайс проекта.
     SetPrices {
@@ -296,6 +301,18 @@ impl Command {
                 let previous = std::mem::replace(&mut doc.finishes, finishes);
                 Ok(Self::SetFinishes { finishes: previous })
             }
+            Self::SetLevels { levels } => {
+                if levels.iter().any(|l| {
+                    l.id.is_empty() || l.name.trim().is_empty() || !l.elevation.is_finite()
+                }) {
+                    return Err(CommandError::InvalidValue {
+                        field: "levels",
+                        reason: "у этажа: идентификатор, название и отметка",
+                    });
+                }
+                let previous = std::mem::replace(&mut doc.levels, levels);
+                Ok(Self::SetLevels { levels: previous })
+            }
             Self::SetPrices { prices } => {
                 for p in &prices {
                     let numbers = [p.price, p.rate, p.reserve];
@@ -445,6 +462,7 @@ mod tests {
     fn node(id: &str, x: f64, y: f64) -> Command {
         Command::Put {
             element: Element::Node(Node {
+                level: None,
                 variant: None,
                 id: id.into(),
                 x,
@@ -554,6 +572,7 @@ mod tests {
         node("x", 0.0, 0.0).apply(&mut doc).unwrap();
         let err = Command::Put {
             element: Element::Dimension(Dimension {
+                level: None,
                 variant: None,
                 id: "x".into(),
                 layer: LayerKind::Dimensions.id().into(),

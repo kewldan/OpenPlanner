@@ -24,12 +24,33 @@ impl EngineState {
     /// 3D-сцена текущего вида (обмер или вариант).
     #[must_use]
     pub fn scene_3d(&self) -> Scene3D {
-        model3d::build(
+        let mut scene = model3d::build(
             &self.projected,
             &self.derived,
             &self.options_3d,
             &self.models,
-        )
+        );
+        // Этажи ниже текущего — под ним на своих отметках.
+        let full = self.history.document();
+        let here = op_model::view::elevation(full, self.level.as_deref());
+        for level in op_model::view::levels(full) {
+            let elevation = op_model::view::elevation(full, level.as_deref());
+            if level == self.level || elevation >= here {
+                continue;
+            }
+            let doc = op_model::view::project_level(full, self.variant(), level.as_deref());
+            let derived = crate::derived::Derived::new(&doc);
+            // Срез относится к текущему этажу: нижние показываются целиком.
+            let options = Options3d {
+                cut: None,
+                ..self.options_3d
+            };
+            let lower = model3d::build(&doc, &derived, &options, &self.models);
+            let dz = elevation - here;
+            scene.opaque.append(&shifted(&lower.opaque, dz));
+            scene.glass.append(&shifted(&lower.glass, dz));
+        }
+        scene
     }
 
     /// 3D-сцена, если она изменилась с прошлого вызова и 3D включён.
@@ -137,4 +158,15 @@ impl EngineState {
         self.options_3d.mode = self.camera_3d.mode;
         vec![self.view_3d_event()]
     }
+}
+
+/// Сетка, сдвинутая по высоте на `dz` мм.
+fn shifted(mesh: &op_render::three::Mesh, dz: f64) -> op_render::three::Mesh {
+    let mut out = mesh.clone();
+    #[allow(clippy::cast_possible_truncation)] // f32 достаточно для GPU
+    let dz = dz as f32;
+    for v in &mut out.vertices {
+        v.pos[2] += dz;
+    }
+    out
 }

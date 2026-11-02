@@ -701,6 +701,7 @@ impl EngineState {
             self.furniture_rotation,
         ));
         Some(op_model::Furniture {
+            level: None,
             id: String::new(),
             layer: LayerKind::Furniture.id().into(),
             variant: None,
@@ -757,6 +758,7 @@ impl EngineState {
             self.doc().default_ceiling_height
         };
         Some(op_model::Device {
+            level: None,
             id: String::new(),
             layer: LayerKind::Electrical.id().into(),
             variant: None,
@@ -815,6 +817,7 @@ impl EngineState {
         let (at, rotation) =
             snapped.unwrap_or((DVec2::new(round_to(p.x, 10.0), round_to(p.y, 10.0)), 0.0));
         Some(op_model::PlumbingPoint {
+            level: None,
             id: String::new(),
             layer: LayerKind::Plumbing.id().into(),
             variant: None,
@@ -923,6 +926,7 @@ impl EngineState {
         }
         let (system, diameter) = self.pipe;
         let pipe = op_model::Pipe {
+            level: None,
             id: self.ids.generate(),
             layer: LayerKind::Plumbing.id().into(),
             variant: None,
@@ -1231,6 +1235,7 @@ impl EngineState {
         let id = self.ids.generate();
         let number = self.doc().rooms.len() + 1;
         events.extend(self.execute_all(vec![put(Element::Room(Room {
+            level: None,
             variant: None,
             id: id.clone(),
             layer: LayerKind::Rooms.id().into(),
@@ -1291,6 +1296,7 @@ impl EngineState {
                 let offset = self.dimension_offset(start.0, end.0, p, alt);
                 self.data = ToolData::None;
                 events.extend(self.execute_all(vec![put(Element::Dimension(Dimension {
+                    level: None,
                     variant: None,
                     id: id.clone(),
                     layer: LayerKind::Dimensions.id().into(),
@@ -1343,6 +1349,7 @@ impl EngineState {
                 let id = self.ids.generate();
                 self.data = ToolData::None;
                 events.extend(self.execute_all(vec![put(Element::Leader(Leader {
+                    level: None,
                     variant: None,
                     id: id.clone(),
                     layer: LayerKind::Leaders.id().into(),

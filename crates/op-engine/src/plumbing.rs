@@ -382,6 +382,7 @@ pub fn outlets_for_fixtures(
         for spec in fixture_outlets(f) {
             let at = crate::furniture::to_plan(f, DVec2::new(spec.dx, -f.depth / 2.0));
             out.push(PlumbingPoint {
+                level: None,
                 id: new_id(),
                 layer: op_model::LayerKind::Plumbing.id().into(),
                 variant: None,
@@ -507,6 +508,7 @@ pub fn route_all(
             continue;
         };
         out.push(Pipe {
+            level: None,
             id: new_id(),
             layer: op_model::LayerKind::Plumbing.id().into(),
             variant: None,

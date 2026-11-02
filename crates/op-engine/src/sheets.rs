@@ -27,10 +27,7 @@ use op_export::{
     xlsx::{self, Worksheet},
 };
 use op_geom::shapes::{self, Shape};
-use op_model::{
-    Document, OpeningKind, Wall, WallMaterial,
-    view::{demolished, project},
-};
+use op_model::{Document, OpeningKind, Wall, WallMaterial, view::demolished};
 
 use crate::{
     derived::Derived,
@@ -147,8 +144,8 @@ pub struct SheetSet {
 /// Собирает комплект листов вида `variant` (`None` — только обмер).
 /// `date` — дата для основной надписи (ММ.ГГ).
 #[must_use]
-pub fn build(doc: &Document, variant: Option<&str>, date: &str) -> SheetSet {
-    let views = Views::new(doc, variant);
+pub fn build(doc: &Document, variant: Option<&str>, level: Option<&str>, date: &str) -> SheetSet {
+    let views = Views::new(doc, variant, level);
     let mut kinds = vec![Kind::Survey];
     if views.variant.is_some() {
         if !views.demolition_rows().is_empty() {
@@ -296,7 +293,11 @@ pub fn build(doc: &Document, variant: Option<&str>, date: &str) -> SheetSet {
         });
     }
 
-    let view = view_name(doc, views.variant.as_ref().map(|v| v.id.as_str()));
+    let mut view = view_name(doc, views.variant.as_ref().map(|v| v.id.as_str()));
+    // С этажами — название этажа в штампе и именах файлов.
+    if !doc.levels.is_empty() {
+        view = format!("{} · {view}", crate::variants::level_name(doc, level));
+    }
     let building = if doc.meta.title.trim().is_empty() {
         view.clone()
     } else {
@@ -751,11 +752,11 @@ fn opening_name(kind: OpeningKind) -> &'static str {
 }
 
 impl<'a> Views<'a> {
-    fn new(doc: &'a Document, variant: Option<&str>) -> Self {
-        let survey = project(doc, None);
+    fn new(doc: &'a Document, variant: Option<&str>, level: Option<&str>) -> Self {
+        let survey = op_model::view::project_level(doc, None, level);
         let survey_derived = Derived::new(&survey);
         let variant = variant.and_then(|id| doc.variant(id)).map(|v| {
-            let projected = project(doc, Some(&v.id));
+            let projected = op_model::view::project_level(doc, Some(&v.id), level);
             VariantView {
                 id: v.id.clone(),
                 derived: Derived::new(&projected),

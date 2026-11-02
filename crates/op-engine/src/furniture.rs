@@ -867,6 +867,7 @@ mod tests {
 
     fn bed(rotation: f64, mirrored: bool) -> Furniture {
         Furniture {
+            level: None,
             id: "f".into(),
             layer: op_model::LayerKind::Furniture.id().into(),
             variant: None,

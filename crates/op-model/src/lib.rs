@@ -14,7 +14,7 @@ pub mod view;
 pub use command::{Command, CommandError};
 pub use document::{
     Anchor, AssetData, Circuit, CircuitKind, Device, DeviceGroup, DeviceKind, Dimension, Document,
-    DrawingSettings, Finish, Furniture, Justification, Layer, LayerKind, Leader, LightScene,
+    DrawingSettings, Finish, Furniture, Justification, Layer, LayerKind, Leader, Level, LightScene,
     Material, MaterialKind, Measure, Node, Opening, OpeningKind, PaperFormat, Pipe, PipeSystem,
     PipeVertex, PlumbingKind, PlumbingPoint, PriceItem, PriceKind, PricePoint, ProjectMeta,
     QuantityOverride, Room, SavedView, Side, Site, Surface, TileLayout, TilePattern, Underlay,

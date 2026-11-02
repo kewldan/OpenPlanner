@@ -464,6 +464,7 @@ mod tests {
             .enumerate()
         {
             commands.push(put(Element::Node(Node {
+                level: None,
                 id: format!("n{i}"),
                 variant: None,
                 x: *x,
@@ -502,6 +503,7 @@ mod tests {
             })));
         }
         commands.push(put(Element::Room(Room {
+            level: None,
             id: "r".into(),
             layer: LayerKind::Rooms.id().into(),
             variant: None,

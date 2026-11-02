@@ -175,6 +175,13 @@
           "description": "Слой.",
           "type": "string"
         },
+        "level": {
+          "description": "Этаж (без значения — первый этаж).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "power": {
           "default": 0.0,
           "description": "Мощность нагрузки, Вт.",
@@ -365,6 +372,13 @@
           "description": "Слой.",
           "type": "string"
         },
+        "level": {
+          "description": "Этаж (без значения — первый этаж).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "offset": {
           "description": "Смещение размерной линии от линии между точками, мм (влево от направления начало → конец).",
           "format": "double",
@@ -497,6 +511,13 @@
         "layer": {
           "description": "Слой.",
           "type": "string"
+        },
+        "level": {
+          "description": "Этаж (без значения — первый этаж).",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "mirrored": {
           "default": false,
@@ -681,6 +702,13 @@
           "description": "Слой.",
           "type": "string"
         },
+        "level": {
+          "description": "Этаж (без значения — первый этаж).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "text": {
           "description": "Текст.",
           "type": "string"
@@ -721,6 +749,30 @@
         "textX",
         "textY",
         "text"
+      ],
+      "type": "object"
+    },
+    "Level": {
+      "description": "Этаж: название и отметка пола. Первый этаж (элементы без поля `level`) —\nнеявный, на отметке 0.",
+      "properties": {
+        "elevation": {
+          "description": "Отметка чистого пола от пола первого этажа, мм.",
+          "format": "double",
+          "type": "number"
+        },
+        "id": {
+          "description": "Идентификатор.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Название: «Этаж 2», «Мансарда».",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "elevation"
       ],
       "type": "object"
     },
@@ -1130,6 +1182,13 @@
           "description": "Идентификатор.",
           "type": "string"
         },
+        "level": {
+          "description": "Этаж (без значения — первый этаж).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "variant": {
           "description": "Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).",
           "type": [
@@ -1290,6 +1349,13 @@
           "description": "Слой.",
           "type": "string"
         },
+        "level": {
+          "description": "Этаж (без значения — первый этаж).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "points": {
           "description": "Вершины от прибора к стояку или коллектору.",
           "items": {
@@ -1420,6 +1486,13 @@
         "layer": {
           "description": "Слой.",
           "type": "string"
+        },
+        "level": {
+          "description": "Этаж (без значения — первый этаж).",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "rotation": {
           "default": 0.0,
@@ -1651,6 +1724,13 @@
           "description": "Слой.",
           "type": "string"
         },
+        "level": {
+          "description": "Этаж (без значения — первый этаж).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "name": {
           "description": "Название.",
           "type": "string"
@@ -1870,6 +1950,13 @@
         "layer": {
           "description": "Слой.",
           "type": "string"
+        },
+        "level": {
+          "description": "Этаж (без значения — первый этаж).",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "mmPerPx": {
           "description": "Масштаб: миллиметров плана в пикселе изображения.",
@@ -2094,6 +2181,14 @@
       "description": "Выноски.",
       "items": {
         "$ref": "#/$defs/Leader"
+      },
+      "type": "array"
+    },
+    "levels": {
+      "default": [],
+      "description": "Этажи выше первого (первый — неявный).",
+      "items": {
+        "$ref": "#/$defs/Level"
       },
       "type": "array"
     },

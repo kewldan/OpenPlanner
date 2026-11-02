@@ -14,7 +14,17 @@ pub(crate) type Migration = fn(Value) -> Result<Value, String>;
 /// `MIGRATIONS[i]` переводит формат `i + 1` в `i + 2`.
 const MIGRATIONS: &[Migration] = &[
     v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8, v8_to_v9, v9_to_v10,
+    v10_to_v11,
 ];
+
+/// Формат 11 (стадия 11): этажи.
+fn v10_to_v11(mut model: Value) -> Result<Value, String> {
+    let object = model.as_object_mut().ok_or("ожидался объект модели")?;
+    object
+        .entry("levels")
+        .or_insert_with(|| Value::Array(Vec::new()));
+    Ok(model)
+}
 
 /// Формат 10 (стадия 10): прайс проекта и объёмы сметы, заданные вручную.
 fn v9_to_v10(mut model: Value) -> Result<Value, String> {

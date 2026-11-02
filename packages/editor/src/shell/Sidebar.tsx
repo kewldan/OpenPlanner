@@ -2,6 +2,7 @@ import type {
   DeviceKind,
   Document,
   Layer,
+  Level,
   OpeningKind,
   PlumbingKind,
   View,
@@ -17,6 +18,8 @@ import { FinishPanel } from "../finish/FinishPanel";
 import { Catalog } from "../furniture/Catalog";
 import { formatNumber, type MessageKey, t } from "../i18n";
 import { formatArea } from "../inspector/format";
+import { levelList, setLevels } from "../levels/levels";
+import { platform } from "../platform";
 import { PlumbingPanel } from "../plumbing/PlumbingPanel";
 import { systemCodes } from "../plumbing/points";
 import { openScanWizard } from "../scan/store";
@@ -199,10 +202,20 @@ export function treeGroups(
   doc: Document,
   derived: DerivedInfo,
   view: View = { type: "survey" },
+  level: string | null = null,
 ): { key: MessageKey; items: TreeItem[] }[] {
   const demolished = demolishedIds(doc, viewVariant(view));
+  // Этаж: у стены — по узлу, у проёма — по стене.
+  const nodeLevel = new Map(doc.nodes.map((n) => [n.id, n.level ?? null]));
+  const wallLevel = new Map(doc.walls.map((w) => [w.id, nodeLevel.get(w.a) ?? null]));
+  const levelOf = (e: { id: string; level?: string; a?: string; wall?: string }) =>
+    e.wall !== undefined
+      ? (wallLevel.get(e.wall) ?? null)
+      : e.a !== undefined
+        ? (nodeLevel.get(e.a) ?? null)
+        : (e.level ?? null);
   const visible = <T extends { id: string; variant?: string }>(list: T[]) =>
-    list.filter((e) => visibleIn(view, e.variant));
+    list.filter((e) => visibleIn(view, e.variant) && levelOf(e) === level);
   const status = (e: { id: string; variant?: string }) =>
     statusOf(view, demolished, e.id, e.variant);
   const groups = [
@@ -285,7 +298,9 @@ export function treeGroups(
     },
     {
       key: "group.underlays",
-      items: doc.underlays.map((u) => ({ id: u.id, label: u.name })),
+      items: doc.underlays
+        .filter((u) => (u.level ?? null) === level)
+        .map((u) => ({ id: u.id, label: u.name })),
     },
   ];
   return groups.filter((group) => group.items.length > 0) as {
@@ -299,8 +314,9 @@ function ObjectTree() {
   const derived = useEditor((s) => s.derived);
   const selection = useEditor((s) => s.selection);
   const view = useEditor((s) => s.view);
+  const level = useEditor((s) => s.level);
   if (!doc) return null;
-  const groups = treeGroups(doc, derived, view);
+  const groups = treeGroups(doc, derived, view, level);
   if (groups.length === 0) return <p className={styles.empty}>{t("sidebar.empty")}</p>;
 
   const pick = (event: MouseEvent, id: string) => {
@@ -396,7 +412,63 @@ function Layers() {
         <Icon name="plus" />
         {t("layers.add")}
       </button>
+      <Levels />
     </div>
+  );
+}
+
+/** Этажи: название, отметка пола, удаление (со всем, что на этаже). */
+function Levels() {
+  const doc = useEditor((s) => s.document);
+  if (!doc || (doc.levels ?? []).length === 0) return null;
+  const levels = doc.levels ?? [];
+  const update = (id: string, patch: Partial<Level>) =>
+    setLevels(levels.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+  return (
+    <section className={styles.group} data-testid="level-list">
+      <h3 className={styles.groupTitle}>{t("levels.title")}</h3>
+      <ul className={styles.list}>
+        {levelList(doc).map((l) => (
+          <li key={l.id ?? ""} className={styles.layer}>
+            {l.id === null ? (
+              <span className={styles.layerName}>{l.name}</span>
+            ) : (
+              <input
+                className={styles.layerName}
+                aria-label={t("levels.rename")}
+                defaultValue={l.name}
+                onBlur={(e) => {
+                  const name = e.target.value.trim();
+                  if (name && name !== l.name && l.id) update(l.id, { name });
+                }}
+              />
+            )}
+            <span className={styles.count}>
+              {t("levels.elevation", { value: formatNumber(l.elevation) })}
+            </span>
+            {l.id !== null && (
+              <IconButton
+                label={t("levels.remove", { name: l.name })}
+                onClick={async () => {
+                  const id = l.id;
+                  if (
+                    id &&
+                    (await platform.confirm(t("levels.confirmRemove", { name: l.name }), {
+                      title: t("levels.title"),
+                      okLabel: t("levels.removeOk"),
+                      cancelLabel: t("levels.cancel"),
+                    }))
+                  )
+                    sendToEngine({ type: "deleteLevel", id });
+                }}
+              >
+                <Icon name="trash" />
+              </IconButton>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

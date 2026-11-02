@@ -280,6 +280,7 @@ impl EngineState {
                 };
                 if a.distance(b) > 1e-6 {
                     let d = op_model::Dimension {
+                        level: None,
                         variant: None,
                         id: String::new(),
                         layer: String::new(),
