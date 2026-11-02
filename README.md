@@ -68,6 +68,12 @@ E2E по веб-сборке (Playwright, Chromium):
 cd apps/desktop && bunx vite build && bunx playwright test
 ```
 
+E2E настоящего десктопного окна (Linux: Xvfb, openbox, xdotool, imagemagick, webkit2gtk-driver и `cargo install tauri-driver`):
+
+```bash
+cd apps/desktop && bunx tauri build --debug --no-bundle && cd ../.. && bash scripts/desktop-e2e.sh
+```
+
 ## Структура
 
 ```

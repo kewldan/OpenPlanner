@@ -2413,6 +2413,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-dialog",
  "tempfile",
+ "webkit2gtk",
 ]
 
 [[package]]

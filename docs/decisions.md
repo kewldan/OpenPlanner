@@ -164,3 +164,12 @@ Tauri (нативный Rust)
 ## 2026-11-01 · Тесты TS: bun test + Playwright
 
 Юнит-тесты фронтенда — `bun test`. E2E — Playwright по веб-сборке в Chromium (WebGL2 через SwiftShader в CI).
+
+## 2026-11-02 · Linux: включаем WebGL в воркерах WebKitGTK
+
+WebKitGTK по умолчанию не даёт WebGL2 в `OffscreenCanvas` внутри Web Worker (флаг `AllowWebGLInWorkers` стабилен, но выключен), и движок на Linux не запускался. Нативная часть при старте включает этот флаг через API WebKitGTK 2.42+ и перезагружает страницу (`apps/desktop/src-tauri/src/linux.rs`). Найдено при запуске настоящего окна под Xvfb; сборка в CI этого не ловила.
+
+## 2026-11-02 · Проверка десктопа в CI
+
+- Самопроверка на macOS, Windows и Linux: собранное приложение запускается с `OPENPLANNER_SELFTEST=<файл>`, ждёт старта движка и записывает бэкенд GPU (`scripts/desktop-selftest.sh`).
+- На Linux дополнительно — e2e настоящего окна (Xvfb + openbox, tauri-driver/WebKitWebDriver, xdotool): нативные диалоги сохранения и открытия, файлы и журнал на диске, восстановление после `kill -9` (`scripts/desktop-e2e.sh`). На macOS WebDriver для Tauri недоступен, поэтому там только самопроверка.
