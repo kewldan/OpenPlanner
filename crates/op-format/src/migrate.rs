@@ -12,7 +12,22 @@ use crate::{FORMAT_VERSION, FormatError};
 pub(crate) type Migration = fn(Value) -> Result<Value, String>;
 
 /// `MIGRATIONS[i]` переводит формат `i + 1` в `i + 2`.
-const MIGRATIONS: &[Migration] = &[v1_to_v2];
+const MIGRATIONS: &[Migration] = &[v1_to_v2, v2_to_v3];
+
+/// Формат 3 (стадия 2): системный слой «Скан» в самом низу.
+fn v2_to_v3(mut model: Value) -> Result<Value, String> {
+    let layers = model
+        .get_mut("layers")
+        .and_then(Value::as_array_mut)
+        .ok_or("ожидался список слоёв")?;
+    if !layers.iter().any(|l| l["id"] == "layer-scan") {
+        layers.insert(
+            0,
+            serde_json::json!({ "id": "layer-scan", "name": "Скан", "visible": true, "locked": false, "system": "scan" }),
+        );
+    }
+    Ok(model)
+}
 
 /// Формат 2 (стадия 1): слои и элементы обмера.
 fn v1_to_v2(mut model: Value) -> Result<Value, String> {
@@ -113,7 +128,8 @@ mod tests {
         let model =
             json!({ "meta": { "title": "Кв.", "address": "" }, "defaultCeilingHeight": 2700.0 });
         let migrated = migrate(model, 1).unwrap();
-        assert_eq!(migrated["layers"].as_array().map(Vec::len), Some(6));
+        assert_eq!(migrated["layers"].as_array().map(Vec::len), Some(7));
+        assert_eq!(migrated["layers"][0]["id"], json!("layer-scan"));
         assert_eq!(migrated["walls"], json!([]));
         assert_eq!(migrated["meta"]["title"], json!("Кв."));
     }

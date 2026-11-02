@@ -580,7 +580,7 @@ fn every_element_survives_json() {
         .chain(doc.leaders.iter().cloned().map(Element::Leader))
         .chain(doc.underlays.iter().cloned().map(Element::Underlay))
         .collect();
-    assert_eq!(elements.len(), 6 + 4 + 4 + 1 + 1 + 1 + 1 + 1);
+    assert_eq!(elements.len(), 7 + 4 + 4 + 1 + 1 + 1 + 1 + 1);
     for element in elements {
         let command = Command::Put {
             element,
@@ -590,6 +590,88 @@ fn every_element_survives_json() {
         let back: Command = serde_json::from_str(&json).unwrap();
         assert_eq!(back, command, "{json}");
     }
+}
+
+fn scan_request(mode: crate::protocol::ScanImportMode) -> (crate::protocol::ScanImport, Vec<u8>) {
+    let glb = op_scan::io::write_glb(&op_scan::synth::mesh(&op_scan::synth::apartment(0.2)));
+    let result = op_scan::analyze(&glb, &mut |_| {}).unwrap();
+    (
+        crate::protocol::ScanImport {
+            params: op_scan::ScanParams {
+                ceiling_height: result.ceiling_height,
+                ..op_scan::ScanParams::default()
+            },
+            result,
+            answers: Vec::new(),
+            mode,
+            name: "квартира.glb".into(),
+        },
+        glb,
+    )
+}
+
+#[test]
+fn scan_import_is_one_step() {
+    let mut s = state();
+    let (request, glb) = scan_request(crate::protocol::ScanImportMode::Plan);
+    let events = s.import_scan(&request, Some(glb.clone()));
+    assert!(
+        !has_error(&events),
+        "{:?}",
+        events
+            .events
+            .iter()
+            .find(|e| matches!(e, FromEngine::Error { .. }))
+    );
+    let doc = s.document();
+    assert_eq!(doc.rooms.len(), 2, "две комнаты");
+    assert!(doc.walls.len() >= 5, "{}", doc.walls.len());
+    assert_eq!(doc.openings.len(), 4);
+    assert_eq!(doc.underlays.len(), 1);
+    assert_eq!(doc.underlays[0].layer, LayerKind::Scan.id());
+    assert!(
+        doc.assets
+            .keys()
+            .any(|k| k.starts_with("scan/") && k.ends_with(".glb"))
+    );
+    assert!((doc.default_ceiling_height - 2700.0).abs() <= 20.0);
+    let mut areas: Vec<f64> = events
+        .events
+        .iter()
+        .find_map(|e| match e {
+            FromEngine::DerivedChanged { rooms, .. } => {
+                Some(rooms.iter().map(|r| r.area).collect())
+            }
+            _ => None,
+        })
+        .unwrap();
+    areas.sort_by(f64::total_cmp);
+    assert!(
+        (areas[0] - 13.52).abs() < 0.25 && (areas[1] - 14.0).abs() < 0.25,
+        "{areas:?}"
+    );
+
+    // Файл: исходный скан и вид сверху сохраняются.
+    let bytes = s.export_file("test").unwrap();
+    let mut other = state();
+    other.import_file(&bytes).unwrap();
+    assert_eq!(other.document().assets, s.document().assets);
+
+    // Одна отмена убирает весь импорт.
+    s.handle(ToEngine::Undo);
+    assert!(s.document().walls.is_empty() && s.document().assets.is_empty());
+}
+
+#[test]
+fn scan_underlay_only() {
+    let mut s = state();
+    let (mut request, _) = scan_request(crate::protocol::ScanImportMode::UnderlayOnly);
+    request.params.keep_source = false;
+    s.import_scan(&request, None);
+    let doc = s.document();
+    assert!(doc.walls.is_empty());
+    assert_eq!(doc.underlays.len(), 1);
+    assert_eq!(doc.assets.len(), 1);
 }
 
 #[test]

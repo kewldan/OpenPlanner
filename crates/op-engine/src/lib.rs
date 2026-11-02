@@ -11,6 +11,7 @@ pub mod hit;
 pub mod ids;
 mod overlay;
 pub mod protocol;
+pub mod scan_import;
 pub mod snap;
 mod state;
 #[cfg(test)]

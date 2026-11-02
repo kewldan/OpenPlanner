@@ -6,7 +6,8 @@
 //! manifest.json   версия формата, приложение
 //! model.json      документ проекта
 //! assets/         двоичные файлы проекта (изображения подложек)
-//! scan/ previews/ renders/ prices/   — появятся на следующих стадиях
+//! scan/           исходные файлы сканов
+//! previews/ renders/ prices/   — появятся на следующих стадиях
 //! ```
 //!
 //! Крейт не зависит от модели приложения: документ передаётся как любой
@@ -23,7 +24,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
 
 /// Текущая версия формата.
-pub const FORMAT_VERSION: u32 = 2;
+pub const FORMAT_VERSION: u32 = 3;
 
 /// Имя файла манифеста внутри контейнера.
 pub const MANIFEST_PATH: &str = "manifest.json";
@@ -31,6 +32,8 @@ pub const MANIFEST_PATH: &str = "manifest.json";
 pub const MODEL_PATH: &str = "model.json";
 /// Папка двоичных файлов внутри контейнера.
 pub const ASSETS_DIR: &str = "assets/";
+/// Папка исходных файлов сканов.
+pub const SCAN_DIR: &str = "scan/";
 
 /// Двоичный файл контейнера: путь внутри архива и содержимое.
 pub type Asset = (String, Vec<u8>);
@@ -127,10 +130,13 @@ where
     Ok(zip.finish()?)
 }
 
-/// Путь допустим для двоичного файла: внутри `assets/`, без выхода наверх.
+/// Путь допустим для двоичного файла: внутри `assets/` или `scan/`, без выхода наверх.
 #[must_use]
 pub fn is_asset_path(path: &str) -> bool {
-    path.starts_with(ASSETS_DIR) && path.len() > ASSETS_DIR.len() && !path.contains("..")
+    [ASSETS_DIR, SCAN_DIR]
+        .iter()
+        .any(|dir| path.starts_with(dir) && path.len() > dir.len())
+        && !path.contains("..")
 }
 
 /// Читает контейнер и возвращает манифест, модель и двоичные файлы.
@@ -164,7 +170,7 @@ where
     let mut assets = Vec::with_capacity(paths.len());
     for path in paths {
         let mut file = zip.by_name(&path)?;
-        let mut bytes = Vec::new();
+        let mut bytes = Vec::with_capacity(usize::try_from(file.size()).unwrap_or(0));
         file.read_to_end(&mut bytes)?;
         assets.push((path, bytes));
     }
@@ -203,7 +209,12 @@ mod tests {
             Cursor::new(Vec::new()),
             &manifest,
             &model,
-            [("assets/a.png", image), ("../evil", image)],
+            [
+                ("assets/a.png", image),
+                ("scan/room.glb", image),
+                ("../evil", image),
+                ("scan/../x", image),
+            ],
         )
         .unwrap()
         .into_inner();
@@ -212,7 +223,13 @@ mod tests {
             read(Cursor::new(bytes)).unwrap();
         assert_eq!(read_manifest, manifest);
         assert_eq!(read_model, model);
-        assert_eq!(assets, vec![("assets/a.png".to_owned(), vec![1, 2, 3])]);
+        assert_eq!(
+            assets,
+            vec![
+                ("assets/a.png".to_owned(), vec![1, 2, 3]),
+                ("scan/room.glb".to_owned(), vec![1, 2, 3])
+            ]
+        );
     }
 
     #[test]
