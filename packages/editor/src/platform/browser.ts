@@ -1,4 +1,10 @@
-import { baseName, IMAGE_EXTENSIONS, type Platform, PROJECT_EXTENSION } from "./types";
+import {
+  baseName,
+  IMAGE_EXTENSIONS,
+  type Platform,
+  PROJECT_EXTENSION,
+  SCAN_EXTENSIONS,
+} from "./types";
 
 const JOURNAL_PREFIX = "openplanner.journal:";
 
@@ -53,6 +59,12 @@ export const browserPlatform: Platform = {
 
   async openImage() {
     const file = await pickFile(IMAGE_EXTENSIONS.map((ext) => `.${ext}`).join(","));
+    if (!file) return null;
+    return { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) };
+  },
+
+  async openScan() {
+    const file = await pickFile(SCAN_EXTENSIONS.map((ext) => `.${ext}`).join(","));
     if (!file) return null;
     return { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) };
   },

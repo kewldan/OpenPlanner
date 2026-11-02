@@ -23,6 +23,7 @@ const paths = {
   trash: "M4 6h12M8 6V4h4v2M6 6l1 11h6l1-11",
   chevron: "M7 5l5 5-5 5",
   rooms: "M3 3h14v14H3zM10 3v14",
+  scan: "M3 7V4h3M14 4h3v3M17 13v3h-3M6 16H3v-3M6 10h8M8 7.5h4M8 12.5h4",
 } as const;
 
 export type IconName = keyof typeof paths;

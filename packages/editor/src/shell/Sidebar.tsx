@@ -6,6 +6,7 @@ import { format, isMacPlatform } from "../actions/shortcut";
 import { sendToEngine } from "../engine";
 import { formatNumber, type MessageKey, t } from "../i18n";
 import { formatArea } from "../inspector/format";
+import { openScanWizard } from "../scan/store";
 import { type DerivedInfo, useEditor } from "../store/editor";
 import { Icon, type IconName } from "./icons";
 import styles from "./Sidebar.module.css";
@@ -46,6 +47,9 @@ export function Toolbar() {
         );
       })}
       <div className={styles.separator} />
+      <IconButton label={t("tool.importScan")} disabled={!ready} onClick={openScanWizard}>
+        <Icon name="scan" />
+      </IconButton>
       <IconButton label={t("tool.underlay")} disabled={!ready} onClick={() => void addUnderlay()}>
         <Icon name="image" />
       </IconButton>

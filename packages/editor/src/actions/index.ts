@@ -3,6 +3,7 @@ import { callEngine, sendToEngine } from "../engine";
 import { t } from "../i18n";
 import { platform } from "../platform";
 import { project } from "../project";
+import { openScanWizard } from "../scan/store";
 import { useEditor } from "../store/editor";
 import { applyTheme } from "../theme";
 import type { Shortcut } from "./shortcut";
@@ -174,6 +175,16 @@ export const actions: readonly Action[] = [
     run: () => sendToEngine({ type: "findRooms" }),
   },
   ...toolActions,
+  {
+    id: "file.importScan",
+    title: "Импортировать скан…",
+    group: "file",
+    keywords: "lidar polycam roomplan glb облако точек обмер распознать",
+    keys: [{ code: "KeyI", mod: true }],
+    inInputs: true,
+    enabled: notBusy,
+    run: openScanWizard,
+  },
   {
     id: "file.addUnderlay",
     title: "Добавить подложку…",
