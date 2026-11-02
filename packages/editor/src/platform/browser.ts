@@ -1,4 +1,12 @@
-import { baseName, IMAGE_EXTENSIONS, type Platform, PROJECT_EXTENSION } from "./types";
+import {
+  baseName,
+  exportExtension,
+  exportFormats,
+  IMAGE_EXTENSIONS,
+  type Platform,
+  PROJECT_EXTENSION,
+  SCAN_EXTENSIONS,
+} from "./types";
 
 const JOURNAL_PREFIX = "openplanner.journal:";
 
@@ -21,8 +29,8 @@ function pickFile(accept: string): Promise<File | null> {
   });
 }
 
-function download(bytes: Uint8Array, name: string) {
-  const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "application/zip" }));
+function download(bytes: Uint8Array, name: string, type = "application/zip") {
+  const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type }));
   const link = document.createElement("a");
   link.href = url;
   link.download = name;
@@ -57,12 +65,24 @@ export const browserPlatform: Platform = {
     return { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) };
   },
 
+  async openScan() {
+    const file = await pickFile(SCAN_EXTENSIONS.map((ext) => `.${ext}`).join(","));
+    if (!file) return null;
+    return { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) };
+  },
+
   async chooseSaveTarget(suggestedName) {
     return { path: null, name: baseName(suggestedName) };
   },
 
   async writeProject(bytes, target) {
     download(bytes, `${target.name}.${PROJECT_EXTENSION}`);
+  },
+
+  async saveExport(bytes, name) {
+    const ext = exportExtension(name);
+    download(bytes, name, ext ? exportFormats[ext].mime : "application/octet-stream");
+    return true;
   },
 
   journal: {

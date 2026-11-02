@@ -1,0 +1,123 @@
+.root {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: var(--space-6);
+  padding: var(--space-6);
+  max-height: calc(100vh - 120px);
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.pick {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--text-3);
+}
+
+.pick select {
+  height: var(--control-h);
+  min-width: 0;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--field);
+  color: var(--text);
+  font: inherit;
+}
+
+.heading {
+  margin: var(--space-4) 0 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.hint,
+.status,
+.warning {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-3);
+}
+
+.status {
+  color: var(--accent-text);
+}
+
+.warning {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.formats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+  overflow: auto;
+}
+
+.page {
+  display: block;
+  width: 100%;
+  max-height: 62vh;
+  object-fit: contain;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px var(--line-2);
+}
+
+.thumbs {
+  display: flex;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0 0 var(--space-2);
+  list-style: none;
+  overflow-x: auto;
+}
+
+.thumb {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 132px;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--text-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.thumb:hover {
+  background: var(--hover);
+}
+
+.thumb[aria-current="true"] {
+  background: var(--sel);
+  color: var(--text);
+}
+
+.thumb img {
+  width: 100%;
+  aspect-ratio: 1.414;
+  object-fit: contain;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px var(--line);
+}

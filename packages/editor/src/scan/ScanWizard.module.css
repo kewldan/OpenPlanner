@@ -1,0 +1,274 @@
+.steps {
+  margin: 0;
+  padding: var(--space-5) var(--space-6);
+  display: flex;
+  gap: var(--space-6);
+  list-style: none;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-3);
+}
+
+.steps li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.steps li[aria-current="step"] {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.stepNumber {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--field);
+  font-size: var(--text-xs);
+}
+
+.steps li[aria-current="step"] .stepNumber {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.content {
+  padding: var(--space-6);
+  min-height: 320px;
+}
+
+.drop {
+  min-height: 300px;
+  border: 1.5px dashed var(--line-2);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  text-align: center;
+  padding: var(--space-6);
+}
+
+.dropOver {
+  border-color: var(--accent);
+  background: var(--sel);
+}
+
+.center {
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+}
+
+.lead {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.muted {
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--text-sm);
+}
+
+.error {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+
+.progress {
+  width: 360px;
+  height: 6px;
+  accent-color: var(--accent);
+}
+
+.review {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: var(--space-6);
+}
+
+.preview {
+  width: 100%;
+  height: 420px;
+  background: var(--canvas-bg);
+  border-radius: var(--radius-md);
+}
+
+.wall {
+  stroke: #3b3b37;
+  stroke-linecap: square;
+}
+
+.removed {
+  stroke: var(--danger);
+  stroke-opacity: 0.55;
+  stroke-dasharray: 120 90;
+}
+
+.added {
+  stroke: var(--accent);
+  stroke-dasharray: 160 100;
+}
+
+.opening {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 40;
+  stroke-opacity: 0.7;
+}
+
+.marker circle {
+  fill: var(--panel);
+  stroke: #c2410c;
+  stroke-width: 40;
+}
+
+.marker text {
+  font-size: 300px;
+  font-weight: 600;
+  fill: #c2410c;
+}
+
+.marker[data-highlight="true"] circle {
+  fill: #c2410c;
+}
+
+.marker[data-highlight="true"] text {
+  fill: #fff;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-height: 0;
+}
+
+.summary {
+  margin: 0;
+  font-weight: 600;
+}
+
+.issues {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-height: 300px;
+  overflow: auto;
+}
+
+.issue {
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--field);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.issue[data-highlight="true"] {
+  box-shadow: inset 0 0 0 1.5px #c2410c;
+}
+
+.issueHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.issueNumber {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #c2410c;
+  color: #fff;
+  font-size: var(--text-xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.issueTitle {
+  flex: 1;
+  font-weight: 600;
+}
+
+.confidence {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-2);
+}
+
+.choice {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.choice button {
+  flex: 1;
+  height: var(--control-h);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.choice button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.actions {
+  margin-top: auto;
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-4);
+}
+
+.params {
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 28px;
+}
+
+.failure {
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  text-align: center;
+}
+
+.failureActions {
+  display: flex;
+  gap: var(--space-4);
+}

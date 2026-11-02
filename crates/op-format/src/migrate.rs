@@ -12,7 +12,51 @@ use crate::{FORMAT_VERSION, FormatError};
 pub(crate) type Migration = fn(Value) -> Result<Value, String>;
 
 /// `MIGRATIONS[i]` переводит формат `i + 1` в `i + 2`.
-const MIGRATIONS: &[Migration] = &[v1_to_v2];
+const MIGRATIONS: &[Migration] = &[v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5];
+
+/// Формат 5 (стадия 4): графы основной надписи и настройки чертежей.
+fn v4_to_v5(mut model: Value) -> Result<Value, String> {
+    let object = model.as_object_mut().ok_or("ожидался объект модели")?;
+    object
+        .entry("drawing")
+        .or_insert_with(|| serde_json::json!({ "paper": "a3Landscape" }));
+    let meta = object
+        .get_mut("meta")
+        .and_then(Value::as_object_mut)
+        .ok_or("ожидались сведения о проекте")?;
+    for key in ["designation", "organization", "developer", "checker"] {
+        meta.entry(key)
+            .or_insert_with(|| Value::String(String::new()));
+    }
+    meta.entry("stage")
+        .or_insert_with(|| Value::String("Р".into()));
+    Ok(model)
+}
+
+/// Формат 4 (стадия 3): варианты перепланировки. Элементы без поля
+/// `variant` остаются элементами обмера.
+fn v3_to_v4(mut model: Value) -> Result<Value, String> {
+    let object = model.as_object_mut().ok_or("ожидался объект модели")?;
+    object
+        .entry("variants")
+        .or_insert_with(|| Value::Array(Vec::new()));
+    Ok(model)
+}
+
+/// Формат 3 (стадия 2): системный слой «Скан» в самом низу.
+fn v2_to_v3(mut model: Value) -> Result<Value, String> {
+    let layers = model
+        .get_mut("layers")
+        .and_then(Value::as_array_mut)
+        .ok_or("ожидался список слоёв")?;
+    if !layers.iter().any(|l| l["id"] == "layer-scan") {
+        layers.insert(
+            0,
+            serde_json::json!({ "id": "layer-scan", "name": "Скан", "visible": true, "locked": false, "system": "scan" }),
+        );
+    }
+    Ok(model)
+}
 
 /// Формат 2 (стадия 1): слои и элементы обмера.
 fn v1_to_v2(mut model: Value) -> Result<Value, String> {
@@ -113,8 +157,10 @@ mod tests {
         let model =
             json!({ "meta": { "title": "Кв.", "address": "" }, "defaultCeilingHeight": 2700.0 });
         let migrated = migrate(model, 1).unwrap();
-        assert_eq!(migrated["layers"].as_array().map(Vec::len), Some(6));
+        assert_eq!(migrated["layers"].as_array().map(Vec::len), Some(7));
+        assert_eq!(migrated["layers"][0]["id"], json!("layer-scan"));
         assert_eq!(migrated["walls"], json!([]));
+        assert_eq!(migrated["variants"], json!([]));
         assert_eq!(migrated["meta"]["title"], json!("Кв."));
     }
 
@@ -128,5 +174,20 @@ mod tests {
     fn reports_failed_migration() {
         let err = migrate_with(json!([]), 1, CHAIN).unwrap_err();
         assert!(matches!(err, FormatError::Migration { from: 1, .. }));
+    }
+}
+
+#[cfg(test)]
+mod format5 {
+    use super::*;
+
+    #[test]
+    #[allow(clippy::unwrap_used)] // тест
+    fn v4_gets_title_block_fields_and_drawing_settings() {
+        let model = serde_json::json!({ "meta": { "title": "Кв", "address": "" }, "variants": [] });
+        let model = migrate(model, 4).unwrap();
+        assert_eq!(model["meta"]["stage"], "Р");
+        assert_eq!(model["meta"]["designation"], "");
+        assert_eq!(model["drawing"]["paper"], "a3Landscape");
     }
 }

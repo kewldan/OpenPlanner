@@ -41,10 +41,59 @@ pub mod palette {
     pub fn accent() -> Color {
         Color::hex(0x0A7C4E, 1.0)
     }
-    /// Ошибка.
+    /// Ошибка и демонтаж.
     #[must_use]
     pub fn danger() -> Color {
         Color::hex(0xC2410C, 1.0)
+    }
+    /// Новые стены по материалу.
+    #[must_use]
+    pub fn material(material: Option<op_model::WallMaterial>) -> Color {
+        match material {
+            Some(op_model::WallMaterial::AeratedConcrete) => Color::hex(0x7E95AD, 1.0),
+            Some(op_model::WallMaterial::Gypsum) => Color::hex(0xC9AE5D, 1.0),
+            Some(op_model::WallMaterial::Brick) => Color::hex(0xB0583E, 1.0),
+            None => Color::hex(0x0A7C4E, 1.0),
+        }
+    }
+}
+
+/// Демонтаж в виде варианта: обмер, его производные и демонтируемые элементы.
+#[derive(Debug, Clone, Copy)]
+pub struct Demolition<'a> {
+    /// Обмер.
+    pub survey: &'a Document,
+    /// Производные обмера.
+    pub derived: &'a Derived,
+    /// Демонтируемые элементы.
+    pub ids: &'a std::collections::HashSet<String>,
+}
+
+/// Демонтируемые стены — красным пунктиром со светлой заливкой, заложенные
+/// проёмы — пунктирным символом.
+pub fn demolition(scene: &mut Scene, d: &Demolition<'_>) {
+    let red = palette::danger();
+    for w in d.survey.walls.iter().filter(|w| d.ids.contains(&w.id)) {
+        if let Some(outline) = d.derived.wall_outlines.get(&w.id)
+            && !outline.is_empty()
+        {
+            scene.fill(&[outline], red.with_alpha(0.13));
+            for i in 0..outline.len() {
+                scene.dashed(outline[i], outline[(i + 1) % outline.len()], 1.5, 5.0, red);
+            }
+        }
+    }
+    for o in d
+        .survey
+        .openings
+        .iter()
+        .filter(|o| d.ids.contains(&o.id) && !d.ids.contains(&o.wall))
+    {
+        if let Some(g) = geometry::opening(d.survey, d.derived, o) {
+            for i in 0..g.rect.len() {
+                scene.dashed(g.rect[i], g.rect[(i + 1) % g.rect.len()], 1.5, 4.0, red);
+            }
+        }
     }
 }
 
@@ -121,13 +170,21 @@ pub fn document(
         }
     }
 
-    for shape in &derived.wall_shapes {
-        let mut contours: Vec<&[DVec2]> = vec![&shape.outer];
-        contours.extend(shape.holes.iter().map(Vec::as_slice));
-        scene.fill(&contours, palette::wall());
-        scene.polyline(&shape.outer, true, 1.0, palette::ink());
-        for hole in &shape.holes {
-            scene.polyline(hole, true, 1.0, palette::ink());
+    let groups = std::iter::once((palette::wall(), &derived.wall_shapes)).chain(
+        derived
+            .new_wall_shapes
+            .iter()
+            .map(|(m, shapes)| (palette::material(*m), shapes)),
+    );
+    for (color, shapes) in groups {
+        for shape in shapes {
+            let mut contours: Vec<&[DVec2]> = vec![&shape.outer];
+            contours.extend(shape.holes.iter().map(Vec::as_slice));
+            scene.fill(&contours, color);
+            scene.polyline(&shape.outer, true, 1.0, palette::ink());
+            for hole in &shape.holes {
+                scene.polyline(hole, true, 1.0, palette::ink());
+            }
         }
     }
 
@@ -192,7 +249,49 @@ pub fn document(
     scene
 }
 
-/// Символ проёма: откосы, створка двери с дугой, стекло окна.
+/// Куда рисуется символ: сцена холста или лист чертежа.
+pub trait Pen {
+    /// Отрезок; `weight` — толщина относительно основной линии символа.
+    fn line(&mut self, a: DVec2, b: DVec2, weight: f64);
+    /// Штриховой отрезок.
+    fn dashed(&mut self, a: DVec2, b: DVec2, weight: f64);
+    /// Вспомогательная ломаная (дуга открывания двери).
+    fn faint(&mut self, points: &[DVec2], weight: f64);
+}
+
+/// Перо сцены холста: толщины в пикселях экрана.
+struct ScenePen<'a> {
+    scene: &'a mut Scene,
+    color: Color,
+    width: f32,
+}
+
+impl ScenePen<'_> {
+    #[allow(clippy::cast_possible_truncation)] // относительная толщина — единицы
+    fn width(&self, weight: f64) -> f32 {
+        self.width * weight as f32
+    }
+}
+
+impl Pen for ScenePen<'_> {
+    fn line(&mut self, a: DVec2, b: DVec2, weight: f64) {
+        let width = self.width(weight);
+        self.scene.line(a, b, width, self.color);
+    }
+
+    fn dashed(&mut self, a: DVec2, b: DVec2, weight: f64) {
+        let width = self.width(weight);
+        self.scene.dashed(a, b, width, 4.0, self.color);
+    }
+
+    fn faint(&mut self, points: &[DVec2], weight: f64) {
+        let width = self.width(weight);
+        self.scene
+            .polyline(points, false, width, self.color.with_alpha(0.7));
+    }
+}
+
+/// Символ проёма на сцене холста.
 pub fn opening_symbol(
     scene: &mut Scene,
     g: &geometry::OpeningGeometry,
@@ -202,33 +301,39 @@ pub fn opening_symbol(
     color: Color,
     width: f32,
 ) {
+    let mut pen = ScenePen {
+        scene,
+        color,
+        width,
+    };
+    opening_lines(&mut pen, g, kind, hinge_at_end, swing);
+}
+
+/// Символ проёма: откосы, створка двери с дугой, стекло окна.
+pub fn opening_lines(
+    pen: &mut impl Pen,
+    g: &geometry::OpeningGeometry,
+    kind: OpeningKind,
+    hinge_at_end: bool,
+    swing: Side,
+) {
     let (n, l, r) = (g.normal, g.left, g.right);
     // Откосы поперёк стены.
     for p in [g.start, g.end] {
-        scene.line(p + n * l, p - n * r, width, color);
+        pen.line(p + n * l, p - n * r, 1.0);
     }
     match kind {
         OpeningKind::Window => {
-            scene.line(g.start + n * l, g.end + n * l, width, color);
-            scene.line(g.start - n * r, g.end - n * r, width, color);
+            pen.line(g.start + n * l, g.end + n * l, 1.0);
+            pen.line(g.start - n * r, g.end - n * r, 1.0);
             let mid = (l - r) / 2.0;
             let gap = ((l + r) * 0.12).max(10.0);
-            scene.line(
-                g.start + n * (mid + gap),
-                g.end + n * (mid + gap),
-                width,
-                color,
-            );
-            scene.line(
-                g.start + n * (mid - gap),
-                g.end + n * (mid - gap),
-                width,
-                color,
-            );
+            pen.line(g.start + n * (mid + gap), g.end + n * (mid + gap), 1.0);
+            pen.line(g.start + n * (mid - gap), g.end + n * (mid - gap), 1.0);
         }
         OpeningKind::Arch => {
-            scene.dashed(g.start + n * l, g.end + n * l, width, 4.0, color);
-            scene.dashed(g.start - n * r, g.end - n * r, width, 4.0, color);
+            pen.dashed(g.start + n * l, g.end + n * l, 1.0);
+            pen.dashed(g.start - n * r, g.end - n * r, 1.0);
         }
         OpeningKind::Door => {
             let side = if swing == Side::Left { 1.0 } else { -1.0 };
@@ -242,7 +347,7 @@ pub fn opening_symbol(
             let free = free + n * side * face;
             let leaf = hinge.distance(free);
             let open = hinge + n * side * leaf;
-            scene.line(hinge, open, width * 1.6, color);
+            pen.line(hinge, open, 1.6);
             let a0 = (free - hinge).y.atan2((free - hinge).x);
             let a1 = (open - hinge).y.atan2((open - hinge).x);
             let mut delta = a1 - a0;
@@ -252,8 +357,7 @@ pub fn opening_symbol(
             while delta < -std::f64::consts::PI {
                 delta += std::f64::consts::TAU;
             }
-            let points = arc(hinge, leaf, a0, a0 + delta);
-            scene.polyline(&points, false, width * 0.8, color.with_alpha(0.7));
+            pen.faint(&arc(hinge, leaf, a0, a0 + delta), 0.8);
         }
     }
 }

@@ -2533,10 +2533,12 @@ dependencies = [
  "image",
  "js-sys",
  "log",
+ "op-export",
  "op-format",
  "op-geom",
  "op-model",
  "op-render",
+ "op-scan",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
@@ -2545,11 +2547,20 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "wgpu",
+ "zip",
 ]
 
 [[package]]
 name = "op-export"
 version = "0.0.0"
+dependencies = [
+ "ab_glyph",
+ "base64 0.23.1",
+ "flate2",
+ "glam",
+ "thiserror 2.0.21",
+ "zip",
+]
 
 [[package]]
 name = "op-format"
@@ -2599,6 +2610,19 @@ dependencies = [
 [[package]]
 name = "op-scan"
 version = "0.0.0"
+dependencies = [
+ "glam",
+ "op-geom",
+ "op-model",
+ "png",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tsify",
+ "wasm-bindgen",
+ "zip",
+]
 
 [[package]]
 name = "openplanner-desktop"
@@ -3273,6 +3297,16 @@ dependencies = [
  "js-sys",
  "serde",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "serde_bytes"
+version = "0.11.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5d440709e79d88e51ac01c4b72fc6cb7314017bb7da9eeff678aa94c10e3ea8"
+dependencies = [
+ "serde",
+ "serde_core",
 ]
 
 [[package]]

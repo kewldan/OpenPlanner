@@ -36,6 +36,7 @@ pub fn new_wall(
         end.node.clone().unwrap_or_else(|| {
             let id = ids.generate();
             commands.push(put(Element::Node(Node {
+                variant: None,
                 id: id.clone(),
                 x: end.pos.x,
                 y: end.pos.y,
@@ -46,6 +47,8 @@ pub fn new_wall(
     let a = node(start, &mut commands);
     let b = node(end, &mut commands);
     commands.push(put(Element::Wall(Wall {
+        material: None,
+        variant: None,
         id: ids.generate(),
         layer: LayerKind::Walls.id().into(),
         a,
@@ -170,6 +173,7 @@ pub fn translate(doc: &Document, ids: &[String], delta: DVec2) -> Vec<Command> {
     for n in &doc.nodes {
         if nodes.contains(n.id.as_str()) {
             commands.push(put(Element::Node(Node {
+                variant: None,
                 id: n.id.clone(),
                 x: n.x + delta.x,
                 y: n.y + delta.y,
@@ -226,6 +230,7 @@ pub fn translate(doc: &Document, ids: &[String], delta: DVec2) -> Vec<Command> {
 pub fn move_node(doc: &Document, node: &str, to: DVec2, merge_into: Option<&str>) -> Vec<Command> {
     let Some(target) = merge_into.filter(|t| *t != node) else {
         return vec![put(Element::Node(Node {
+            variant: None,
             id: node.to_owned(),
             x: to.x,
             y: to.y,
@@ -329,6 +334,7 @@ mod tests {
             &mut doc,
             vec![
                 put(Element::Opening(op_model::Opening {
+                    variant: None,
                     id: "o".into(),
                     layer: LayerKind::Openings.id().into(),
                     wall: wall.id.clone(),
@@ -341,6 +347,7 @@ mod tests {
                     swing: op_model::Side::Left,
                 })),
                 put(Element::Dimension(op_model::Dimension {
+                    variant: None,
                     id: "d".into(),
                     layer: LayerKind::Dimensions.id().into(),
                     start: Anchor::Node {

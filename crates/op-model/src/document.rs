@@ -12,6 +12,72 @@ pub struct ProjectMeta {
     pub title: String,
     /// Адрес объекта.
     pub address: String,
+    /// Обозначение (шифр) комплекта чертежей.
+    #[serde(default)]
+    pub designation: String,
+    /// Организация или исполнитель.
+    #[serde(default)]
+    pub organization: String,
+    /// Стадия проектирования («Р» — рабочая документация).
+    #[serde(default)]
+    pub stage: String,
+    /// Разработал.
+    #[serde(default)]
+    pub developer: String,
+    /// Проверил.
+    #[serde(default)]
+    pub checker: String,
+}
+
+/// Формат листа.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub enum PaperFormat {
+    /// A3 альбомный, 420 × 297 мм.
+    #[default]
+    A3Landscape,
+    /// A3 книжный, 297 × 420 мм.
+    A3Portrait,
+    /// A4 альбомный, 297 × 210 мм.
+    A4Landscape,
+    /// A4 книжный, 210 × 297 мм.
+    A4Portrait,
+}
+
+impl PaperFormat {
+    /// Все форматы.
+    pub const ALL: [Self; 4] = [
+        Self::A3Landscape,
+        Self::A3Portrait,
+        Self::A4Landscape,
+        Self::A4Portrait,
+    ];
+
+    /// Ширина и высота, мм.
+    #[must_use]
+    pub fn size(self) -> (f64, f64) {
+        match self {
+            Self::A3Landscape => (420.0, 297.0),
+            Self::A3Portrait => (297.0, 420.0),
+            Self::A4Landscape => (297.0, 210.0),
+            Self::A4Portrait => (210.0, 297.0),
+        }
+    }
+}
+
+/// Настройки комплекта чертежей.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub struct DrawingSettings {
+    /// Формат листов.
+    #[serde(default)]
+    pub paper: PaperFormat,
+    /// Знаменатель масштаба (50 — 1:50); без значения — подбирается по размеру плана.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub scale: Option<u32>,
 }
 
 /// Системный слой: в него попадают новые элементы своего типа.
@@ -31,11 +97,14 @@ pub enum LayerKind {
     Leaders,
     /// Подложки.
     Underlays,
+    /// Скан: вид сверху импортированного скана.
+    Scan,
 }
 
 impl LayerKind {
-    /// Все системные слои в порядке по умолчанию.
-    pub const ALL: [Self; 6] = [
+    /// Все системные слои в порядке по умолчанию (первый — снизу).
+    pub const ALL: [Self; 7] = [
+        Self::Scan,
         Self::Underlays,
         Self::Rooms,
         Self::Walls,
@@ -54,6 +123,7 @@ impl LayerKind {
             Self::Dimensions => "layer-dimensions",
             Self::Leaders => "layer-leaders",
             Self::Underlays => "layer-underlays",
+            Self::Scan => "layer-scan",
         }
     }
 
@@ -67,6 +137,7 @@ impl LayerKind {
             Self::Dimensions => "Размеры",
             Self::Leaders => "Выноски",
             Self::Underlays => "Подложка",
+            Self::Scan => "Скан",
         }
     }
 }
@@ -111,6 +182,10 @@ impl Layer {
 pub struct Node {
     /// Идентификатор.
     pub id: String,
+    /// Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub variant: Option<String>,
     /// X, мм.
     pub x: f64,
     /// Y, мм (вниз).
@@ -140,6 +215,10 @@ pub struct Wall {
     pub id: String,
     /// Слой.
     pub layer: String,
+    /// Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub variant: Option<String>,
     /// Начальный узел.
     pub a: String,
     /// Конечный узел.
@@ -152,6 +231,52 @@ pub struct Wall {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "wasm", tsify(optional))]
     pub height: Option<f64>,
+    /// Материал (для новых перегородок).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub material: Option<WallMaterial>,
+}
+
+/// Материал стены.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub enum WallMaterial {
+    /// Газобетон.
+    AeratedConcrete,
+    /// Гипсокартон на каркасе.
+    Gypsum,
+    /// Кирпич.
+    Brick,
+}
+
+impl WallMaterial {
+    /// Все материалы.
+    pub const ALL: [Self; 3] = [Self::AeratedConcrete, Self::Gypsum, Self::Brick];
+
+    /// Толщина перегородки по умолчанию, мм.
+    #[must_use]
+    pub fn default_thickness(self) -> f64 {
+        match self {
+            Self::AeratedConcrete | Self::Gypsum => 100.0,
+            Self::Brick => 120.0,
+        }
+    }
+}
+
+/// Вариант перепланировки: новые элементы (с полем `variant`) и демонтаж
+/// элементов обмера. Обмер общий: его правка попадает во все варианты.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub struct Variant {
+    /// Идентификатор.
+    pub id: String,
+    /// Название, например «Вариант А».
+    pub name: String,
+    /// Элементы обмера, которые в этом варианте демонтируются.
+    #[serde(default)]
+    pub demolished: Vec<String>,
 }
 
 impl Wall {
@@ -212,6 +337,10 @@ pub struct Opening {
     pub id: String,
     /// Слой.
     pub layer: String,
+    /// Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub variant: Option<String>,
     /// Стена.
     pub wall: String,
     /// Тип.
@@ -242,6 +371,10 @@ pub struct Room {
     pub id: String,
     /// Слой.
     pub layer: String,
+    /// Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub variant: Option<String>,
     /// Название.
     pub name: String,
     /// X точки подписи, мм.
@@ -286,6 +419,10 @@ pub struct Dimension {
     pub id: String,
     /// Слой.
     pub layer: String,
+    /// Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub variant: Option<String>,
     /// Начало.
     pub start: Anchor,
     /// Конец.
@@ -303,6 +440,10 @@ pub struct Leader {
     pub id: String,
     /// Слой.
     pub layer: String,
+    /// Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "wasm", tsify(optional))]
+    pub variant: Option<String>,
     /// X точки, на которую указывает выноска, мм.
     pub x: f64,
     /// Y точки, мм.
@@ -370,6 +511,12 @@ pub struct Document {
     pub leaders: Vec<Leader>,
     /// Подложки.
     pub underlays: Vec<Underlay>,
+    /// Варианты перепланировки.
+    #[serde(default)]
+    pub variants: Vec<Variant>,
+    /// Настройки чертежей.
+    #[serde(default)]
+    pub drawing: DrawingSettings,
     /// Двоичные файлы проекта по путям внутри `.oplan`. В `model.json` не входят.
     #[serde(skip)]
     #[schemars(skip)]
@@ -393,7 +540,8 @@ impl Document {
         Self {
             meta: ProjectMeta {
                 title: title.into(),
-                address: String::new(),
+                stage: "Р".into(),
+                ..ProjectMeta::default()
             },
             default_ceiling_height: Self::DEFAULT_CEILING_HEIGHT,
             layers: LayerKind::ALL.into_iter().map(Layer::system).collect(),
@@ -404,6 +552,8 @@ impl Document {
             dimensions: Vec::new(),
             leaders: Vec::new(),
             underlays: Vec::new(),
+            variants: Vec::new(),
+            drawing: DrawingSettings::default(),
             assets: BTreeMap::new(),
         }
     }
@@ -448,6 +598,12 @@ impl Document {
     #[must_use]
     pub fn leader(&self, id: &str) -> Option<&Leader> {
         self.leaders.iter().find(|l| l.id == id)
+    }
+
+    /// Вариант по идентификатору.
+    #[must_use]
+    pub fn variant(&self, id: &str) -> Option<&Variant> {
+        self.variants.iter().find(|v| v.id == id)
     }
 
     /// Подложка по идентификатору.

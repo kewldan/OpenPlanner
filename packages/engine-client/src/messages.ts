@@ -1,29 +1,58 @@
 // Обёртка протокола между UI-потоком и воркером.
 // Типы ToEngine/FromEngine генерируются из Rust (crates/op-engine/src/protocol.rs) через tsify.
 
-import type { FromEngine, ToEngine } from "../wasm/op_engine";
+import type {
+  DrawingFormat,
+  DrawingRequest,
+  DrawingSetInfo,
+  FromEngine,
+  ScanImport,
+  ScanResult,
+  ToEngine,
+} from "../wasm/op_engine";
 
 export type {
   Anchor,
   Command,
   Dimension,
   Document,
+  DrawingFormat,
+  DrawingRequest,
+  DrawingSetInfo,
+  DrawingSettings,
   Element,
   EngineEvents,
+  ExportNames,
   FromEngine,
   HistoryOp,
+  IssueKind,
   Justification,
   Layer,
   LayerKind,
   Leader,
   LengthInfo,
+  MaterialAmount,
   Node,
   Opening,
   OpeningKind,
+  PaperFormat,
   PointerPhase,
   ProjectMeta,
   Room,
+  RoomArea,
   RoomInfo,
+  ScanAnswer,
+  ScanFailure,
+  ScanFormat,
+  ScanImport,
+  ScanImportMode,
+  ScanIssue,
+  ScanOpening,
+  ScanParams,
+  ScanRaster,
+  ScanResult,
+  ScanWall,
+  SheetPreview,
   Side,
   SnapKind,
   ToEngine,
@@ -31,7 +60,11 @@ export type {
   ToolOptions,
   ToolStep,
   Underlay,
+  Variant,
+  View,
+  ViewSummary,
   Wall,
+  WallMaterial,
 } from "../wasm/op_engine";
 
 /** Вызов движка, на который приходит ответ. */
@@ -39,18 +72,26 @@ export type EngineCall =
   | { type: "exportFile"; generator: string }
   | { type: "importFile"; bytes: Uint8Array }
   | { type: "addUnderlay"; bytes: Uint8Array; name: string }
+  | { type: "importScan"; request: ScanImport; source?: Uint8Array }
   | { type: "replayJournal"; text: string }
   | { type: "journalHeader" }
-  | { type: "documentTitle" };
+  | { type: "documentTitle" }
+  | { type: "drawingSet"; request: DrawingRequest }
+  | { type: "exportDrawings"; request: DrawingRequest; format: DrawingFormat }
+  | { type: "zipFiles"; names: string[]; files: Uint8Array[] };
 
 /** Тип результата вызова. */
 export interface EngineCallResult {
   exportFile: Uint8Array;
   importFile: undefined;
   addUnderlay: undefined;
+  importScan: undefined;
   replayJournal: undefined;
   journalHeader: string;
   documentTitle: string;
+  drawingSet: DrawingSetInfo;
+  exportDrawings: Uint8Array;
+  zipFiles: Uint8Array;
 }
 
 /** UI → воркер. */
@@ -72,3 +113,14 @@ export type WorkerResponse =
   | { kind: "result"; id: number; value: unknown }
   | { kind: "failure"; id: number; message: string }
   | { kind: "fatal"; message: string };
+
+/** UI → воркер распознавания. */
+export interface ScanWorkerRequest {
+  bytes: Uint8Array;
+}
+
+/** Воркер распознавания → UI. */
+export type ScanWorkerResponse =
+  | { kind: "progress"; stage: number; count: number }
+  | { kind: "result"; result: ScanResult }
+  | { kind: "error"; message: string };

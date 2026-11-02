@@ -71,6 +71,13 @@
         "start": {
           "$ref": "#/$defs/Anchor",
           "description": "Начало."
+        },
+        "variant": {
+          "description": "Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -80,6 +87,26 @@
         "end",
         "offset"
       ],
+      "type": "object"
+    },
+    "DrawingSettings": {
+      "description": "Настройки комплекта чертежей.",
+      "properties": {
+        "paper": {
+          "$ref": "#/$defs/PaperFormat",
+          "default": "a3Landscape",
+          "description": "Формат листов."
+        },
+        "scale": {
+          "description": "Знаменатель масштаба (50 — 1:50); без значения — подбирается по размеру плана.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "Justification": {
@@ -173,6 +200,11 @@
           "const": "underlays",
           "description": "Подложки.",
           "type": "string"
+        },
+        {
+          "const": "scan",
+          "description": "Скан: вид сверху импортированного скана.",
+          "type": "string"
         }
       ]
     },
@@ -200,6 +232,13 @@
           "description": "Y начала полки, мм.",
           "format": "double",
           "type": "number"
+        },
+        "variant": {
+          "description": "Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "x": {
           "description": "X точки, на которую указывает выноска, мм.",
@@ -229,6 +268,13 @@
         "id": {
           "description": "Идентификатор.",
           "type": "string"
+        },
+        "variant": {
+          "description": "Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "x": {
           "description": "X, мм.",
@@ -288,6 +334,13 @@
           "default": "left",
           "description": "Сторона стены, в которую открывается дверь."
         },
+        "variant": {
+          "description": "Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "wall": {
           "description": "Стена.",
           "type": "string"
@@ -330,11 +383,61 @@
         }
       ]
     },
+    "PaperFormat": {
+      "description": "Формат листа.",
+      "oneOf": [
+        {
+          "const": "a3Landscape",
+          "description": "A3 альбомный, 420 × 297 мм.",
+          "type": "string"
+        },
+        {
+          "const": "a3Portrait",
+          "description": "A3 книжный, 297 × 420 мм.",
+          "type": "string"
+        },
+        {
+          "const": "a4Landscape",
+          "description": "A4 альбомный, 297 × 210 мм.",
+          "type": "string"
+        },
+        {
+          "const": "a4Portrait",
+          "description": "A4 книжный, 210 × 297 мм.",
+          "type": "string"
+        }
+      ]
+    },
     "ProjectMeta": {
       "description": "Сведения о проекте, которые попадают в основную надпись чертежей.",
       "properties": {
         "address": {
           "description": "Адрес объекта.",
+          "type": "string"
+        },
+        "checker": {
+          "default": "",
+          "description": "Проверил.",
+          "type": "string"
+        },
+        "designation": {
+          "default": "",
+          "description": "Обозначение (шифр) комплекта чертежей.",
+          "type": "string"
+        },
+        "developer": {
+          "default": "",
+          "description": "Разработал.",
+          "type": "string"
+        },
+        "organization": {
+          "default": "",
+          "description": "Организация или исполнитель.",
+          "type": "string"
+        },
+        "stage": {
+          "default": "",
+          "description": "Стадия проектирования («Р» — рабочая документация).",
           "type": "string"
         },
         "title": {
@@ -370,6 +473,13 @@
         "name": {
           "description": "Название.",
           "type": "string"
+        },
+        "variant": {
+          "description": "Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "x": {
           "description": "X точки подписи, мм.",
@@ -472,6 +582,32 @@
       ],
       "type": "object"
     },
+    "Variant": {
+      "description": "Вариант перепланировки: новые элементы (с полем `variant`) и демонтаж\nэлементов обмера. Обмер общий: его правка попадает во все варианты.",
+      "properties": {
+        "demolished": {
+          "default": [],
+          "description": "Элементы обмера, которые в этом варианте демонтируются.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "description": "Идентификатор.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Название, например «Вариант А».",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "type": "object"
+    },
     "Wall": {
       "description": "Стена между двумя узлами.",
       "properties": {
@@ -503,10 +639,28 @@
           "description": "Слой.",
           "type": "string"
         },
+        "material": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WallMaterial"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Материал (для новых перегородок)."
+        },
         "thickness": {
           "description": "Толщина, мм.",
           "format": "double",
           "type": "number"
+        },
+        "variant": {
+          "description": "Вариант, в котором элемент новый; без значения — элемент обмера (общий для всех вариантов).",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -518,6 +672,26 @@
         "justification"
       ],
       "type": "object"
+    },
+    "WallMaterial": {
+      "description": "Материал стены.",
+      "oneOf": [
+        {
+          "const": "aeratedConcrete",
+          "description": "Газобетон.",
+          "type": "string"
+        },
+        {
+          "const": "gypsum",
+          "description": "Гипсокартон на каркасе.",
+          "type": "string"
+        },
+        {
+          "const": "brick",
+          "description": "Кирпич.",
+          "type": "string"
+        }
+      ]
     }
   },
   "$id": "https://github.com/kewldan/OpenPlanner/schema/model.schema.json",
@@ -535,6 +709,13 @@
         "$ref": "#/$defs/Dimension"
       },
       "type": "array"
+    },
+    "drawing": {
+      "$ref": "#/$defs/DrawingSettings",
+      "default": {
+        "paper": "a3Landscape"
+      },
+      "description": "Настройки чертежей."
     },
     "layers": {
       "description": "Слои в порядке отрисовки (первый — снизу).",
@@ -579,6 +760,14 @@
       "description": "Подложки.",
       "items": {
         "$ref": "#/$defs/Underlay"
+      },
+      "type": "array"
+    },
+    "variants": {
+      "default": [],
+      "description": "Варианты перепланировки.",
+      "items": {
+        "$ref": "#/$defs/Variant"
       },
       "type": "array"
     },

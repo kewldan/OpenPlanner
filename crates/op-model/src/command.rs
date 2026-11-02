@@ -3,7 +3,7 @@ use std::sync::Arc;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{AssetData, Document, Element, element};
+use crate::{AssetData, Document, DrawingSettings, Element, ProjectMeta, element};
 
 /// Ошибка применения команды. Документ при ошибке не меняется.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -59,6 +59,16 @@ pub enum Command {
     SetDefaultCeilingHeight {
         /// Новая высота, мм.
         height: f64,
+    },
+    /// Заменить сведения о проекте целиком (графы основной надписи).
+    SetMeta {
+        /// Новые сведения.
+        meta: ProjectMeta,
+    },
+    /// Изменить настройки чертежей.
+    SetDrawing {
+        /// Новые настройки.
+        drawing: DrawingSettings,
     },
     /// Добавить элемент или заменить элемент с тем же идентификатором.
     Put {
@@ -122,6 +132,20 @@ impl Command {
                 }
                 let previous = std::mem::replace(&mut doc.default_ceiling_height, height);
                 Ok(Self::SetDefaultCeilingHeight { height: previous })
+            }
+            Self::SetMeta { meta } => {
+                let previous = std::mem::replace(&mut doc.meta, meta);
+                Ok(Self::SetMeta { meta: previous })
+            }
+            Self::SetDrawing { drawing } => {
+                if drawing.scale.is_some_and(|s| s == 0 || s > 10_000) {
+                    return Err(CommandError::InvalidValue {
+                        field: "scale",
+                        reason: "масштаб должен быть от 1:1 до 1:10000",
+                    });
+                }
+                let previous = std::mem::replace(&mut doc.drawing, drawing);
+                Ok(Self::SetDrawing { drawing: previous })
             }
             Self::Put { element, index } => {
                 let id = element.id().to_owned();
@@ -238,6 +262,7 @@ mod tests {
     fn node(id: &str, x: f64, y: f64) -> Command {
         Command::Put {
             element: Element::Node(Node {
+                variant: None,
                 id: id.into(),
                 x,
                 y,
@@ -249,6 +274,8 @@ mod tests {
     fn wall(id: &str, a: &str, b: &str) -> Command {
         Command::Put {
             element: Element::Wall(Wall {
+                material: None,
+                variant: None,
                 id: id.into(),
                 layer: LayerKind::Walls.id().into(),
                 a: a.into(),
@@ -344,6 +371,7 @@ mod tests {
         node("x", 0.0, 0.0).apply(&mut doc).unwrap();
         let err = Command::Put {
             element: Element::Dimension(Dimension {
+                variant: None,
                 id: "x".into(),
                 layer: LayerKind::Dimensions.id().into(),
                 start: Anchor::Point { x: 0.0, y: 0.0 },

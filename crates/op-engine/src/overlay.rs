@@ -20,7 +20,7 @@ use crate::{
     tools::{DragKind, ToolData},
 };
 
-/// Обводка элемента цветом.
+/// Обводка элемента цветом. `false` — элемента нет в документе.
 fn outline(
     scene: &mut Scene,
     doc: &Document,
@@ -29,29 +29,29 @@ fn outline(
     id: &str,
     color: Color,
     width: f32,
-) {
+) -> bool {
     if let Some(o) = derived.wall_outlines.get(id) {
         scene.polyline(o, true, width, color);
-        return;
+        return true;
     }
     if let Some(o) = doc.opening(id) {
         if let Some(g) = geometry::opening(doc, derived, o) {
             scene.polyline(&g.rect, true, width, color);
             draw::opening_symbol(scene, &g, o.kind, o.hinge_at_end, o.swing, color, width);
         }
-        return;
+        return true;
     }
     if doc.room(id).is_some() {
         if let Some(&i) = derived.room_regions.get(id) {
             scene.polyline(&derived.regions[i].contour, true, width, color);
         }
-        return;
+        return true;
     }
     if let Some(d) = doc.dimension(id) {
         if let Some(g) = geometry::dimension(derived, d) {
             draw::dimension_symbol(scene, font, &g, color, width);
         }
-        return;
+        return true;
     }
     if let Some(l) = doc.leader(id) {
         let text = DVec2::new(l.text_x, l.text_y);
@@ -62,7 +62,7 @@ fn outline(
             width,
             color,
         );
-        return;
+        return true;
     }
     if let Some(u) = doc.underlay(id) {
         let (lo, hi) = geometry::underlay_rect(u);
@@ -72,7 +72,9 @@ fn outline(
             width,
             color,
         );
+        return true;
     }
+    false
 }
 
 fn snap_marker(scene: &mut Scene, p: DVec2, kind: Option<SnapKind>) {
@@ -115,27 +117,34 @@ impl EngineState {
         let accent = palette::accent();
         let px = self.camera.px_per_mm;
 
-        if self.tool == Tool::Select
+        let survey = self.survey.as_ref();
+        let mark = |scene: &mut Scene, id: &str, color: Color, width: f32| {
+            if !outline(scene, doc, derived, font, id, color, width)
+                && let Some((s, d)) = survey
+            {
+                outline(scene, s, d, font, id, color, width);
+            }
+        };
+        if matches!(self.tool, Tool::Select | Tool::Demolish)
             && let Some(id) = &self.hover
             && !self.selection.contains(id)
             && self.drag.is_none()
         {
-            outline(
-                &mut scene,
-                doc,
-                derived,
-                font,
-                id,
-                accent.with_alpha(0.55),
-                1.5,
-            );
+            let color = if self.tool == Tool::Demolish {
+                palette::danger()
+            } else {
+                accent
+            };
+            mark(&mut scene, id, color.with_alpha(0.7), 2.0);
         }
         for id in &self.selection {
-            outline(&mut scene, doc, derived, font, id, accent, 2.0);
+            mark(&mut scene, id, accent, 2.0);
         }
         if self.tool == Tool::Select && !self.drag.as_ref().is_some_and(|d| d.active) {
             for h in hit::handles(doc, derived, &self.selection) {
-                scene.handle(h.pos, 9.0, accent);
+                if self.owns(h.kind.target()) {
+                    scene.handle(h.pos, 9.0, accent);
+                }
             }
         }
 
@@ -220,6 +229,7 @@ impl EngineState {
                 };
                 if a.distance(b) > 1e-6 {
                     let d = op_model::Dimension {
+                        variant: None,
                         id: String::new(),
                         layer: String::new(),
                         start: op_model::Anchor::Point { x: a.x, y: a.y },

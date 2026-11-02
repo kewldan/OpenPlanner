@@ -7,6 +7,8 @@ import type {
   Tool,
   ToolOptions,
   ToolStep,
+  View,
+  ViewSummary,
 } from "@openplanner/engine-client";
 import { create } from "zustand";
 
@@ -19,7 +21,7 @@ export type EditorMode =
   | "plumbing"
   | "finish";
 
-export type EditorDialog = "palette" | "shortcuts" | null;
+export type EditorDialog = "palette" | "shortcuts" | "scan" | "compare" | "drawings" | null;
 
 export type EngineStatus =
   | { state: "starting" }
@@ -66,6 +68,14 @@ export interface EditorState {
   cursor: CursorInfo | null;
   /** Элемент, которому нужен ввод текста (новая выноска). */
   editText: string | null;
+  /** Что показывает холст: обмер, вариант, сравнение. */
+  view: View;
+  /** Вид до сравнения — куда вернуться. */
+  previousView: View;
+  /** Последний открытый вариант. */
+  lastVariant: string | null;
+  /** Сводка обмера и вариантов. */
+  summaries: ViewSummary[];
   setMode: (mode: EditorMode) => void;
   setDialog: (dialog: EditorDialog) => void;
   setViewport: (width: number, height: number) => void;
@@ -100,6 +110,10 @@ export const useEditor = create<EditorState>()((set) => ({
   toolOptions: { wallThickness: 120, justification: "center" },
   cursor: null,
   editText: null,
+  view: { type: "survey" },
+  previousView: { type: "survey" },
+  lastVariant: null,
+  summaries: [],
   setMode: (mode) => set({ mode }),
   setDialog: (dialog) => set({ dialog }),
   setViewport: (width, height) => set({ viewport: { width, height } }),
@@ -144,6 +158,15 @@ function reduce(acc: Partial<EditorState>, event: FromEngine): Partial<EditorSta
       };
     case "editText":
       return { ...acc, editText: event.id };
+    case "viewModeChanged":
+      return {
+        ...acc,
+        view: event.view,
+        mode: event.view.type === "survey" ? "measure" : "replan",
+        ...(event.view.type === "variant" ? { lastVariant: event.view.id } : {}),
+      };
+    case "variantsSummary":
+      return { ...acc, summaries: event.views };
     case "error":
       return { ...acc, lastError: event.message };
     case "journal":

@@ -11,11 +11,14 @@ pub mod hit;
 pub mod ids;
 mod overlay;
 pub mod protocol;
+pub mod scan_import;
+pub mod sheets;
 pub mod snap;
 mod state;
 #[cfg(test)]
 mod tests;
 pub mod tools;
+pub mod variants;
 #[cfg(target_arch = "wasm32")]
 mod wasm;
 

@@ -3,6 +3,7 @@ import { type PointerEvent, useEffect, useRef, useState } from "react";
 import { sendToEngine, startEngine } from "../engine";
 import { t } from "../i18n";
 import { useEditor } from "../store/editor";
+import { exitCompare } from "../variants/actions";
 import { NumericInput } from "./NumericInput";
 import styles from "./PlanCanvas.module.css";
 
@@ -168,12 +169,32 @@ export function PlanCanvas() {
       onContextMenu={(event) => event.preventDefault()}
     >
       <NumericInput />
+      <CompareBanner />
       {engine.state === "starting" && <div className={styles.overlay}>{t("status.starting")}</div>}
       {engine.state === "failed" && (
         <div className={[styles.overlay, styles.error].join(" ")} role="alert">
           {t("error.engine", { message: engine.message })}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Плашка синхронного просмотра двух вариантов. */
+function CompareBanner() {
+  const label = useEditor((s) => {
+    if (s.view.type !== "compare") return null;
+    const name = (id: string | undefined) =>
+      s.summaries.find((x) => (x.variant ?? undefined) === id)?.name ?? "";
+    return t("compare.banner", { left: name(s.view.left), right: name(s.view.right) });
+  });
+  if (!label) return null;
+  return (
+    <div className={styles.banner} data-testid="compare-banner">
+      <span>{label}</span>
+      <button type="button" onClick={exitCompare}>
+        {t("compare.exit")}
+      </button>
     </div>
   );
 }

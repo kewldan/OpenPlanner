@@ -21,6 +21,13 @@ if (!APP || !WORK || !SHOTS) throw new Error("нужны переменные AP
 const TITLE = "//label[text()='Название']/following::input[1]";
 const PROJECT = join(WORK, "kv.oplan");
 const JOURNAL = `${PROJECT}.journal`;
+const SCAN = new URL("../e2e/fixtures/apartment.glb", import.meta.url).pathname;
+// Текущая версия формата — из op-format, чтобы тест не устаревал при каждом её повышении.
+const FORMAT_VERSION = Number(
+  readFileSync(new URL("../../../crates/op-format/src/lib.rs", import.meta.url), "utf8").match(
+    /FORMAT_VERSION: u32 = (\d+)/,
+  )?.[1],
+);
 
 rmSync(WORK, { recursive: true, force: true });
 mkdirSync(WORK, { recursive: true });
@@ -139,7 +146,7 @@ async function main() {
   const manifest = JSON.parse(readZipEntry(PROJECT, "manifest.json"));
   assert(model.meta.title === "Комендантский пр.", "в файле правильное название");
   assert(
-    manifest.formatVersion === 2,
+    manifest.formatVersion === FORMAT_VERSION,
     `манифест: ${manifest.generator}, формат ${manifest.formatVersion}`,
   );
   assert(existsSync(JOURNAL), "рядом с файлом создан журнал");
@@ -242,6 +249,40 @@ async function main() {
     return saved.walls.length === 4 && saved.rooms.length === 1;
   });
   assert(true, "в model.json четыре стены и помещение");
+
+  // ── 5. Импорт скана через нативный диалог ───────────────────────────────────
+  step("новый проект и ⌘I → мастер импорта скана");
+  // Пока проект дописывает сохранение, файловые команды недоступны — повторяем.
+  await waitFor("новый проект", async () => {
+    if ((await session.text()).includes("Пусто")) return true;
+    key("ctrl+n");
+    await sleep(800);
+    return (await session.text()).includes("Пусто");
+  });
+  key("ctrl+i");
+  await waitFor("мастер импорта", async () => (await session.text()).includes("Импорт скана"));
+  before = windows();
+  await session.click(await session.find("//button[contains(., 'Выбрать файл')]"));
+  const scanDialog = await waitNewWindow("диалог выбора скана", before);
+  await sleep(500);
+  key("ctrl+l");
+  xdo("type", "--delay", "20", SCAN);
+  await confirmDialog(scanDialog.id);
+  await waitFor(
+    "распознавание",
+    async () => (await session.text()).includes("Стен: 5, проёмов: 4"),
+    90_000,
+  );
+  assert(true, "скан распознан в воркере: 5 стен, 4 проёма");
+  shot("08-scan-review");
+  await session.click(await session.find("//button[contains(., 'Далее')]"));
+  await session.click(await session.find("//button[contains(., 'Импортировать')]"));
+  await waitFor("помещения из скана", async () => {
+    const text = await session.text();
+    return text.includes("14,00 м²") && text.includes("13,52 м²");
+  });
+  assert(true, "помещения 14,00 и 13,52 м²");
+  shot("09-scan-imported");
 
   await session.close();
   console.log("\nвсе проверки десктопа пройдены");

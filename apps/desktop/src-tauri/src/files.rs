@@ -1,7 +1,8 @@
 //! Файловые сервисы: проекты `.oplan` и журналы автосохранения.
 //!
-//! Команды принимают только пути с расширениями `.oplan` и `.oplan.journal`,
-//! чтобы фронтенд не мог через них читать или писать произвольные файлы.
+//! Команды принимают только пути с расширениями `.oplan` и `.oplan.journal`
+//! (и файлов экспорта для записи экспорта), чтобы фронтенд не мог через них
+//! читать или писать произвольные файлы.
 
 // Команды Tauri получают аргументы по значению — так устроен IPC.
 #![allow(clippy::needless_pass_by_value)]
@@ -48,6 +49,26 @@ fn is_image(path: &Path) -> bool {
         .is_some_and(|ext| IMAGE_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
 }
 
+/// Файлы скана: сетки, облака точек, архивы экспорта, данные комнаты.
+const SCAN_EXTENSIONS: [&str; 5] = ["glb", "zip", "ply", "obj", "json"];
+/// Наибольший размер файла скана.
+const MAX_SCAN_BYTES: u64 = 1 << 30;
+
+fn is_scan(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| SCAN_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+}
+
+/// Файлы экспорта: чертежи, изображения листов, ведомости, архивы.
+const EXPORT_EXTENSIONS: [&str; 6] = ["pdf", "svg", "dxf", "png", "xlsx", "zip"];
+
+fn is_export(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| EXPORT_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+}
+
 fn check(path: &Path, ok: fn(&Path) -> bool) -> CmdResult<()> {
     if ok(path) {
         Ok(())
@@ -91,9 +112,23 @@ pub fn read_image(path: PathBuf) -> CmdResult<Response> {
         .map_err(|err| io_error("прочитать", &path, &err))
 }
 
-/// Записывает файл проекта. Тело запроса — байты, путь — в заголовке `x-path`.
+/// Читает файл скана (GLB, ZIP, PLY, OBJ, JSON) до 1 ГБ.
 #[tauri::command]
-pub fn write_project(request: Request<'_>) -> CmdResult<()> {
+pub fn read_scan(path: PathBuf) -> CmdResult<Response> {
+    check(&path, is_scan)?;
+    let size = fs::metadata(&path)
+        .map_err(|err| io_error("прочитать", &path, &err))?
+        .len();
+    if size > MAX_SCAN_BYTES {
+        return Err(format!("файл «{}» больше 1 ГБ", path.display()));
+    }
+    fs::read(&path)
+        .map(Response::new)
+        .map_err(|err| io_error("прочитать", &path, &err))
+}
+
+/// Путь и байты бинарной записи: тело запроса — байты, путь — в заголовке `x-path`.
+fn binary_write<'a>(request: &'a Request<'_>) -> CmdResult<(PathBuf, &'a [u8])> {
     let header = request
         .headers()
         .get(PATH_HEADER)
@@ -105,10 +140,25 @@ pub fn write_project(request: Request<'_>) -> CmdResult<()> {
             .map_err(|_| "путь файла не в UTF-8")?
             .into_owned(),
     );
-    check(&path, is_project)?;
     let InvokeBody::Raw(bytes) = request.body() else {
         return Err("ожидались байты файла".into());
     };
+    Ok((path, bytes))
+}
+
+/// Записывает файл проекта.
+#[tauri::command]
+pub fn write_project(request: Request<'_>) -> CmdResult<()> {
+    let (path, bytes) = binary_write(&request)?;
+    check(&path, is_project)?;
+    write_atomic(&path, bytes).map_err(|err| io_error("сохранить", &path, &err))
+}
+
+/// Записывает файл экспорта (PDF, SVG, DXF, PNG, XLSX, ZIP).
+#[tauri::command]
+pub fn write_export(request: Request<'_>) -> CmdResult<()> {
+    let (path, bytes) = binary_write(&request)?;
+    check(&path, is_export)?;
     write_atomic(&path, bytes).map_err(|err| io_error("сохранить", &path, &err))
 }
 
@@ -187,9 +237,15 @@ mod tests {
         assert!(!is_project(Path::new("/etc/passwd")));
         assert!(is_image(Path::new("/home/u/план.JPG")));
         assert!(!is_image(Path::new("/home/u/план.svg")));
+        assert!(is_scan(Path::new("/home/u/скан.GLB")));
+        assert!(!is_scan(Path::new("/home/u/скан.exe")));
         assert!(is_journal(Path::new("/x/кв.oplan.journal")));
         assert!(!is_journal(Path::new("/x/кв.journal")));
         assert!(!is_journal(Path::new("/x/кв.oplan")));
+        assert!(is_export(Path::new("/x/Кв — Вариант А.PDF")));
+        assert!(is_export(Path::new("/x/листы.zip")));
+        assert!(!is_export(Path::new("/x/кв.oplan")));
+        assert!(!is_export(Path::new("/x/.bashrc")));
     }
 
     #[test]

@@ -3,8 +3,10 @@ import { callEngine, sendToEngine } from "../engine";
 import { t } from "../i18n";
 import { platform } from "../platform";
 import { project } from "../project";
+import { openScanWizard } from "../scan/store";
 import { useEditor } from "../store/editor";
 import { applyTheme } from "../theme";
+import { exitCompare } from "../variants/actions";
 import type { Shortcut } from "./shortcut";
 
 export type ActionGroup = "file" | "edit" | "tools" | "view" | "help";
@@ -51,6 +53,8 @@ export async function addUnderlay(): Promise<void> {
   }
 }
 
+const editable = () => useEditor.getState().view.type !== "compare";
+
 function tool(id: Tool, code: string, keywords: string): Action {
   return {
     id: `tool.${id}`,
@@ -58,6 +62,7 @@ function tool(id: Tool, code: string, keywords: string): Action {
     group: "tools",
     keywords,
     keys: [{ code }],
+    enabled: id === "demolish" ? () => useEditor.getState().view.type === "variant" : editable,
     run: () => sendToEngine({ type: "setTool", tool: id }),
   };
 }
@@ -73,6 +78,7 @@ export const toolActions: readonly Action[] = [
   tool("dimension", "KeyM", "размерная линия измерить"),
   tool("leader", "KeyL", "текст подпись примечание"),
   tool("calibrate", "KeyK", "масштаб подложки"),
+  tool("demolish", "KeyX", "перепланировка снос убрать стену"),
 ];
 
 /** Все команды приложения. Порядок — порядок в палитре. */
@@ -157,7 +163,10 @@ export const actions: readonly Action[] = [
     group: "edit",
     keywords: "отмена снять выделение",
     keys: [{ code: "Escape" }],
-    run: () => sendToEngine({ type: "cancel" }),
+    run: () => {
+      if (useEditor.getState().view.type === "compare") exitCompare();
+      else sendToEngine({ type: "cancel" });
+    },
   },
   {
     id: "edit.finish",
@@ -174,6 +183,26 @@ export const actions: readonly Action[] = [
     run: () => sendToEngine({ type: "findRooms" }),
   },
   ...toolActions,
+  {
+    id: "file.importScan",
+    title: "Импортировать скан…",
+    group: "file",
+    keywords: "lidar polycam roomplan glb облако точек обмер распознать",
+    keys: [{ code: "KeyI", mod: true }],
+    inInputs: true,
+    enabled: notBusy,
+    run: openScanWizard,
+  },
+  {
+    id: "file.drawings",
+    title: "Чертежи и экспорт…",
+    group: "file",
+    keywords: "листы pdf dxf svg png xlsx печать штамп пакет бригада экспорт",
+    keys: [{ code: "KeyP", mod: true }],
+    inInputs: true,
+    enabled: notBusy,
+    run: () => useEditor.getState().setDialog("drawings"),
+  },
   {
     id: "file.addUnderlay",
     title: "Добавить подложку…",

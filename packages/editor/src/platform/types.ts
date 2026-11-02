@@ -45,10 +45,17 @@ export interface Platform {
   openProject(): Promise<OpenedFile | null>;
   /** Выбрать изображение PNG или JPEG. `null` — пользователь передумал. */
   openImage(): Promise<PickedImage | null>;
+  /** Выбрать файл скана (GLB, ZIP, PLY, OBJ, JSON). `null` — пользователь передумал. */
+  openScan(): Promise<PickedImage | null>;
   /** Спросить, куда сохранить проект. `null` — пользователь отменил выбор. */
   chooseSaveTarget(suggestedName: string): Promise<SavedFile | null>;
   /** Записать проект туда, куда выбрал пользователь. */
   writeProject(bytes: Uint8Array, target: SavedFile): Promise<void>;
+  /**
+   * Сохранить файл экспорта (PDF, DXF, SVG, PNG, XLSX, ZIP) под предложенным именем.
+   * `false` — пользователь отменил выбор.
+   */
+  saveExport(bytes: Uint8Array, fileName: string): Promise<boolean>;
   journal: JournalStore;
   confirm(message: string, options: ConfirmOptions): Promise<boolean>;
   alert(message: string, title: string): Promise<void>;
@@ -59,6 +66,33 @@ export const PROJECT_EXTENSION = "oplan";
 
 /** Расширения изображений для подложки. */
 export const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg"] as const;
+
+/** Расширения файлов скана. */
+export const SCAN_EXTENSIONS = ["glb", "zip", "ply", "obj", "json"] as const;
+
+/** Расширения файлов экспорта; десктоп пишет только их. */
+export const EXPORT_EXTENSIONS = ["pdf", "svg", "dxf", "png", "xlsx", "zip"] as const;
+
+export type ExportExtension = (typeof EXPORT_EXTENSIONS)[number];
+
+/** Расширение файла экспорта по имени; `null`, если такой экспорт не поддерживается. */
+export function exportExtension(fileName: string): ExportExtension | null {
+  const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+  return (EXPORT_EXTENSIONS as readonly string[]).includes(ext) ? (ext as ExportExtension) : null;
+}
+
+/** MIME-тип и название формата для диалога сохранения. */
+export const exportFormats: Record<ExportExtension, { mime: string; label: string }> = {
+  pdf: { mime: "application/pdf", label: "PDF" },
+  svg: { mime: "image/svg+xml", label: "SVG" },
+  dxf: { mime: "image/vnd.dxf", label: "DXF" },
+  png: { mime: "image/png", label: "PNG" },
+  xlsx: {
+    mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    label: "Таблица Excel",
+  },
+  zip: { mime: "application/zip", label: "Архив ZIP" },
+};
 
 /** Имя файла без папок. */
 export function fileName(path: string): string {

@@ -4,7 +4,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Dimension, Document, Layer, Leader, Node, Opening, Room, Underlay, Wall, command::CommandError,
+    Dimension, Document, Layer, Leader, Node, Opening, Room, Underlay, Variant, Wall,
+    command::CommandError,
 };
 
 /// Любой элемент документа с идентификатором.
@@ -28,6 +29,8 @@ pub enum Element {
     Leader(Leader),
     /// Подложка.
     Underlay(Underlay),
+    /// Вариант перепланировки.
+    Variant(Variant),
 }
 
 /// Применяет `$body` к списку документа, соответствующему варианту элемента.
@@ -83,7 +86,14 @@ macro_rules! each_kind {
         if r.is_some() {
             return r;
         }
-        let $list = &mut doc.underlays;
+        let r = {
+            let $list = &mut doc.underlays;
+            $body
+        };
+        if r.is_some() {
+            return r;
+        }
+        let $list = &mut doc.variants;
         $body
     }};
 }
@@ -108,7 +118,7 @@ macro_rules! stored {
     )*};
 }
 stored!(
-    Layer, Node, Wall, Opening, Room, Dimension, Leader, Underlay
+    Layer, Node, Wall, Opening, Room, Dimension, Leader, Underlay, Variant
 );
 
 fn take<T: Stored>(list: &mut Vec<T>, id: &str) -> Option<(Element, usize)> {
@@ -133,6 +143,34 @@ impl Element {
             Self::Dimension(e) => &e.id,
             Self::Leader(e) => &e.id,
             Self::Underlay(e) => &e.id,
+            Self::Variant(e) => &e.id,
+        }
+    }
+
+    /// Вариант, в котором элемент новый (у элементов обмера — нет).
+    #[must_use]
+    pub fn variant(&self) -> Option<&str> {
+        match self {
+            Self::Node(e) => e.variant.as_deref(),
+            Self::Wall(e) => e.variant.as_deref(),
+            Self::Opening(e) => e.variant.as_deref(),
+            Self::Room(e) => e.variant.as_deref(),
+            Self::Dimension(e) => e.variant.as_deref(),
+            Self::Leader(e) => e.variant.as_deref(),
+            Self::Layer(_) | Self::Underlay(_) | Self::Variant(_) => None,
+        }
+    }
+
+    /// Задаёт вариант нового элемента (для слоёв, подложек и вариантов — ничего).
+    pub fn set_variant(&mut self, variant: Option<String>) {
+        match self {
+            Self::Node(e) => e.variant = variant,
+            Self::Wall(e) => e.variant = variant,
+            Self::Opening(e) => e.variant = variant,
+            Self::Room(e) => e.variant = variant,
+            Self::Dimension(e) => e.variant = variant,
+            Self::Leader(e) => e.variant = variant,
+            Self::Layer(_) | Self::Underlay(_) | Self::Variant(_) => {}
         }
     }
 
@@ -140,7 +178,7 @@ impl Element {
     #[must_use]
     pub fn layer(&self) -> Option<&str> {
         match self {
-            Self::Layer(_) | Self::Node(_) => None,
+            Self::Layer(_) | Self::Node(_) | Self::Variant(_) => None,
             Self::Wall(e) => Some(&e.layer),
             Self::Opening(e) => Some(&e.layer),
             Self::Room(e) => Some(&e.layer),
@@ -204,6 +242,7 @@ pub(crate) fn put(
         Element::Dimension(e) => put_into!(doc.dimensions, e),
         Element::Leader(e) => put_into!(doc.leaders, e),
         Element::Underlay(e) => put_into!(doc.underlays, e),
+        Element::Variant(e) => put_into!(doc.variants, e),
     }
     Ok(previous)
 }
@@ -241,6 +280,18 @@ fn validate(doc: &Document, element: &Element) -> Result<(), CommandError> {
     {
         return Err(missing(layer));
     }
+    let scope = element.variant();
+    if let Some(v) = scope
+        && doc.variant(v).is_none()
+    {
+        return Err(missing(v));
+    }
+    // Элемент варианта может опираться на обмер и на свой вариант, но не на чужой.
+    let reachable = |other: Option<&str>| other.is_none() || other == scope;
+    let foreign = |_: &str| CommandError::InvalidValue {
+        field: "variant",
+        reason: "элемент ссылается на другой вариант",
+    };
     match element {
         Element::Layer(l) => {
             if l.name.trim().is_empty() {
@@ -255,8 +306,11 @@ fn validate(doc: &Document, element: &Element) -> Result<(), CommandError> {
         Element::Node(n) => finite("x", &[n.x, n.y])?,
         Element::Wall(w) => {
             for node in [&w.a, &w.b] {
-                if doc.node(node).is_none() {
+                let Some(n) = doc.node(node) else {
                     return Err(missing(node));
+                };
+                if !reachable(n.variant.as_deref()) {
+                    return Err(foreign(node));
                 }
             }
             if w.a == w.b {
@@ -268,8 +322,11 @@ fn validate(doc: &Document, element: &Element) -> Result<(), CommandError> {
             }
         }
         Element::Opening(o) => {
-            if doc.wall(&o.wall).is_none() {
+            let Some(wall) = doc.wall(&o.wall) else {
                 return Err(missing(&o.wall));
+            };
+            if !reachable(wall.variant.as_deref()) {
+                return Err(foreign(&o.wall));
             }
             finite("offset", &[o.offset])?;
             positive("width", o.width, "ширина должна быть больше нуля")?;
@@ -291,6 +348,11 @@ fn validate(doc: &Document, element: &Element) -> Result<(), CommandError> {
                     crate::Anchor::Node { node } if doc.node(node).is_none() => {
                         return Err(missing(node));
                     }
+                    crate::Anchor::Node { node }
+                        if !reachable(doc.node(node).and_then(|n| n.variant.as_deref())) =>
+                    {
+                        return Err(foreign(node));
+                    }
                     crate::Anchor::Point { x, y } => finite("x", &[*x, *y])?,
                     crate::Anchor::Node { .. } => {}
                 }
@@ -305,6 +367,11 @@ fn validate(doc: &Document, element: &Element) -> Result<(), CommandError> {
             }
             if !doc.assets.contains_key(&u.asset) {
                 return Err(missing(&u.asset));
+            }
+        }
+        Element::Variant(v) => {
+            if v.name.trim().is_empty() {
+                return Err(invalid("name", "у варианта должно быть название"));
             }
         }
     }
@@ -335,11 +402,46 @@ pub(crate) fn ensure_unreferenced(doc: &Document, element: &Element) -> Result<(
                 })
         }
         Element::Wall(_) => doc.openings.iter().any(|o| o.wall == id),
+        Element::Variant(_) => {
+            let own = |v: &Option<String>| v.as_deref() == Some(id);
+            doc.nodes.iter().any(|e| own(&e.variant))
+                || doc.walls.iter().any(|e| own(&e.variant))
+                || doc.openings.iter().any(|e| own(&e.variant))
+                || doc.rooms.iter().any(|e| own(&e.variant))
+                || doc.dimensions.iter().any(|e| own(&e.variant))
+                || doc.leaders.iter().any(|e| own(&e.variant))
+        }
         _ => false,
     };
     if referenced {
         Err(CommandError::Referenced { id: id.to_owned() })
     } else {
         Ok(())
+    }
+}
+
+impl Document {
+    /// Элемент любого типа по идентификатору.
+    #[must_use]
+    pub fn element(&self, id: &str) -> Option<Element> {
+        macro_rules! look {
+            ($($list:ident => $variant:ident),*) => {$(
+                if let Some(e) = self.$list.iter().find(|e| e.id == id) {
+                    return Some(Element::$variant(e.clone()));
+                }
+            )*};
+        }
+        look!(
+            layers => Layer,
+            nodes => Node,
+            walls => Wall,
+            openings => Opening,
+            rooms => Room,
+            dimensions => Dimension,
+            leaders => Leader,
+            underlays => Underlay,
+            variants => Variant
+        );
+        None
     }
 }
