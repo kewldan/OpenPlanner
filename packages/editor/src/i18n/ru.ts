@@ -28,6 +28,15 @@ export const ru = {
   "sidebar.empty": "Пусто. Нарисуйте стены инструментом «Стена» (W) или добавьте подложку.",
   "sidebar.tabs": "Панель объектов",
   "sidebar.variants": "Варианты",
+  "sidebar.catalog": "Каталог",
+
+  "catalog.search": "Найти в каталоге",
+  "catalog.empty": "Ничего не найдено",
+  "catalog.hint":
+    "Щёлкните позицию и поставьте её на план или перетащите на план. У стены предмет встаёт к ней спинкой.",
+  "catalog.import": "Своя модель GLB…",
+  "catalog.size": "{width} × {depth}",
+  "catalog.custom": "Своя модель",
 
   "group.walls": "Стены",
   "group.openings": "Проёмы",
@@ -35,6 +44,7 @@ export const ru = {
   "group.dimensions": "Размеры",
   "group.leaders": "Выноски",
   "group.underlays": "Подложки",
+  "group.furniture": "Мебель",
   "item.wall": "Стена {length}",
   "item.door": "Дверь {width}",
   "item.window": "Окно {width}",
@@ -161,6 +171,7 @@ export const ru = {
   "tool.leader": "Выноска",
   "tool.calibrate": "Калибровка подложки",
   "tool.demolish": "Демонтаж",
+  "tool.furniture": "Мебель",
   "tool.underlay": "Добавить подложку",
 
   "step.idle": "Щелчок — выбрать, Shift — добавить, рамкой — несколько; ручки правят точки",
@@ -179,6 +190,8 @@ export const ru = {
   "step.calibrateDistance": "Введите настоящую длину отрезка",
   "step.demolishPick":
     "Щёлкните стену, проём или помещение обмера — демонтаж; повторный щелчок отменяет",
+  "step.furniturePlace":
+    "Щёлкните, чтобы поставить предмет; у стены он встаёт к ней спинкой · [ ] — повернуть · Alt — без привязки · Esc — выйти",
   "step.unavailable": "Сравнение вариантов: план только для просмотра · Esc — выйти",
 
   "snap.endpoint": "конец",
@@ -228,6 +241,13 @@ export const ru = {
   "inspector.leader": "Выноска",
   "inspector.text": "Текст",
   "inspector.underlay": "Подложка",
+  "inspector.furniture": "Мебель",
+  "inspector.catalogItem": "Позиция",
+  "inspector.depth": "Глубина",
+  "inspector.elevation": "Над полом",
+  "inspector.rotation": "Поворот",
+  "inspector.rotate": "Повернуть на 90°",
+  "inspector.mirror": "Отразить",
   "inspector.file": "Файл",
   "inspector.scale": "Масштаб",
   "inspector.opacity": "Прозрачность",

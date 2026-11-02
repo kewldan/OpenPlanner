@@ -60,6 +60,19 @@ export const desktopPlatform: Platform = {
     return { name: fileName(path), bytes: new Uint8Array(buffer) };
   },
 
+  async openModel() {
+    const path = await open({
+      title: "Своя модель мебели",
+      multiple: false,
+      directory: false,
+      filters: [{ name: "Модель GLB", extensions: ["glb"] }],
+    });
+    if (typeof path !== "string") return null;
+    // GLB читается той же командой, что и сканы (проверка расширения и размера).
+    const buffer = await invoke<ArrayBuffer>("read_scan", { path });
+    return { name: fileName(path), bytes: new Uint8Array(buffer) };
+  },
+
   async chooseSaveTarget(suggestedName) {
     const chosen = await save({ title: "Сохранить проект", defaultPath: suggestedName, filters });
     if (!chosen) return null;

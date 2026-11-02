@@ -47,6 +47,8 @@ export interface Platform {
   openImage(): Promise<PickedImage | null>;
   /** Выбрать файл скана (GLB, ZIP, PLY, OBJ, JSON). `null` — пользователь передумал. */
   openScan(): Promise<PickedImage | null>;
+  /** Выбрать свою модель мебели (GLB). `null` — пользователь передумал. */
+  openModel(): Promise<PickedImage | null>;
   /** Спросить, куда сохранить проект. `null` — пользователь отменил выбор. */
   chooseSaveTarget(suggestedName: string): Promise<SavedFile | null>;
   /** Записать проект туда, куда выбрал пользователь. */

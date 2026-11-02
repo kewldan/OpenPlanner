@@ -1,6 +1,7 @@
 import type { PointerPhase } from "@openplanner/engine-client";
-import { type PointerEvent, useEffect, useRef, useState } from "react";
+import { type MouseEvent, type PointerEvent, useEffect, useRef, useState } from "react";
 import { sendToEngine, startEngine } from "../engine";
+import { DRAG_TYPE } from "../furniture/items";
 import { t } from "../i18n";
 import { useEditor } from "../store/editor";
 import { exitCompare } from "../variants/actions";
@@ -10,6 +11,7 @@ import styles from "./PlanCanvas.module.css";
 
 /** Инструменты, которые рисуют: курсор — перекрестие. */
 const drawingTools = new Set([
+  "furniture",
   "wall",
   "door",
   "window",
@@ -174,7 +176,7 @@ export function PlanCanvas() {
     };
   }, []);
 
-  const point = (event: PointerEvent<HTMLDivElement>, phase: PointerPhase) => {
+  const point = (event: MouseEvent<HTMLDivElement>, phase: PointerPhase) => {
     const rect = event.currentTarget.getBoundingClientRect();
     sendToEngine({
       type: "pointer",
@@ -276,6 +278,19 @@ export function PlanCanvas() {
         }
       }}
       onContextMenu={(event) => event.preventDefault()}
+      // Позиция каталога, перетащенная на план: превью у курсора, отпускание ставит предмет.
+      onDragOver={(event) => {
+        if (in3d() || !event.dataTransfer.types.includes(DRAG_TYPE)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+        point(event, "move");
+      }}
+      onDrop={(event) => {
+        if (in3d() || !event.dataTransfer.types.includes(DRAG_TYPE)) return;
+        event.preventDefault();
+        point(event, "down");
+        point(event, "up");
+      }}
     >
       <NumericInput />
       <CompareBanner />

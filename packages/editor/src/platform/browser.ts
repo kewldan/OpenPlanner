@@ -71,6 +71,12 @@ export const browserPlatform: Platform = {
     return { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) };
   },
 
+  async openModel() {
+    const file = await pickFile(".glb");
+    if (!file) return null;
+    return { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) };
+  },
+
   async chooseSaveTarget(suggestedName) {
     return { path: null, name: baseName(suggestedName) };
   },

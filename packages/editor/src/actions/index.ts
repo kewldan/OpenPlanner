@@ -62,6 +62,14 @@ const editable = () => {
 
 const in3d = () => useEditor.getState().three.options.enabled;
 
+/** Есть ли что поворачивать: инструмент «Мебель» или выделенная мебель. */
+const furnitureActive = () => {
+  const { tool, selection, document } = useEditor.getState();
+  if (!editable()) return false;
+  if (tool === "furniture") return true;
+  return (document?.furniture ?? []).some((f) => selection.includes(f.id));
+};
+
 function tool(id: Tool, code: string, keywords: string): Action {
   return {
     id: `tool.${id}`,
@@ -255,6 +263,43 @@ export const actions: readonly Action[] = [
     keys: [{ code: "Digit0", mod: true }],
     inInputs: true,
     run: () => sendToEngine({ type: "zoomToScale", denominator: 50 }),
+  },
+  {
+    id: "furniture.rotate",
+    title: "Повернуть мебель по часовой",
+    group: "edit",
+    keywords: "мебель поворот 90",
+    keys: [{ code: "BracketRight" }],
+    enabled: furnitureActive,
+    run: () => sendToEngine({ type: "transformFurniture", rotate: 90, mirror: false }),
+  },
+  {
+    id: "furniture.rotateBack",
+    title: "Повернуть мебель против часовой",
+    group: "edit",
+    keywords: "мебель поворот 90",
+    keys: [{ code: "BracketLeft" }],
+    enabled: furnitureActive,
+    run: () => sendToEngine({ type: "transformFurniture", rotate: -90, mirror: false }),
+  },
+  {
+    id: "furniture.mirror",
+    title: "Отразить мебель",
+    group: "edit",
+    keywords: "мебель зеркально",
+    keys: [{ code: "KeyF" }],
+    enabled: furnitureActive,
+    run: () => sendToEngine({ type: "transformFurniture", rotate: 0, mirror: true }),
+  },
+  {
+    id: "furniture.catalog",
+    title: "Каталог мебели",
+    group: "tools",
+    keywords: "мебель расстановка кровать диван кухня",
+    run: () => {
+      useEditor.getState().setMode("furniture");
+      useEditor.getState().setSidebarTab("catalog");
+    },
   },
   {
     id: "view.toggle3d",

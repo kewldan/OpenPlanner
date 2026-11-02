@@ -60,4 +60,17 @@ describe("useEditor.applyEvents", () => {
     expect(state.selection).toEqual(["w"]);
     expect(state.cursor).toEqual({ x: 1, y: 2, snap: "endpoint", length: null, angle: null });
   });
+
+  test("режим «Мебель» не сбрасывается правками, другие режимы следуют за видом", () => {
+    useEditor.setState({ mode: "furniture" });
+    useEditor
+      .getState()
+      .applyEvents([{ type: "viewModeChanged", view: { type: "variant", id: "v" } }]);
+    expect(useEditor.getState().mode).toBe("furniture");
+    useEditor.setState({ mode: "measure" });
+    useEditor
+      .getState()
+      .applyEvents([{ type: "viewModeChanged", view: { type: "variant", id: "v" } }]);
+    expect(useEditor.getState().mode).toBe("replan");
+  });
 });

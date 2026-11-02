@@ -4,10 +4,11 @@ import { type KeyboardEvent, type MouseEvent, useState } from "react";
 import { addUnderlay, isEnabled, toolActions } from "../actions";
 import { format, isMacPlatform } from "../actions/shortcut";
 import { sendToEngine } from "../engine";
+import { Catalog } from "../furniture/Catalog";
 import { formatNumber, type MessageKey, t } from "../i18n";
 import { formatArea } from "../inspector/format";
 import { openScanWizard } from "../scan/store";
-import { type DerivedInfo, useEditor } from "../store/editor";
+import { type DerivedInfo, type SidebarTab, useEditor } from "../store/editor";
 import { demolishedIds, type Status, statusOf, viewVariant, visibleIn } from "../variants/status";
 import { Variants } from "../variants/Variants";
 import { Icon, type IconName } from "./icons";
@@ -63,15 +64,21 @@ export function Toolbar() {
   );
 }
 
-type Tab = "objects" | "layers" | "variants";
+const tabTitles: Record<SidebarTab, MessageKey> = {
+  objects: "sidebar.objects",
+  catalog: "sidebar.catalog",
+  layers: "sidebar.layers",
+  variants: "sidebar.variants",
+};
 
-/** Левая панель: дерево объектов и слои. */
+/** Левая панель: дерево объектов, каталог мебели, слои, варианты. */
 export function Sidebar() {
-  const [tab, setTab] = useState<Tab>("objects");
+  const tab = useEditor((s) => s.sidebarTab);
+  const setTab = useEditor((s) => s.setSidebarTab);
   return (
     <aside className={styles.panel} aria-label={t("sidebar.objects")}>
       <div className={styles.tabs} role="tablist" aria-label={t("sidebar.tabs")}>
-        {(["objects", "layers", "variants"] as const).map((value) => (
+        {(["objects", "catalog", "layers", "variants"] as const).map((value) => (
           <button
             key={value}
             type="button"
@@ -80,18 +87,20 @@ export function Sidebar() {
             className={styles.tab}
             onClick={() => setTab(value)}
           >
-            {t(
-              value === "objects"
-                ? "sidebar.objects"
-                : value === "layers"
-                  ? "sidebar.layers"
-                  : "sidebar.variants",
-            )}
+            {t(tabTitles[value])}
           </button>
         ))}
       </div>
       <div className={styles.body} role="tabpanel">
-        {tab === "objects" ? <ObjectTree /> : tab === "layers" ? <Layers /> : <Variants />}
+        {tab === "objects" ? (
+          <ObjectTree />
+        ) : tab === "catalog" ? (
+          <Catalog />
+        ) : tab === "layers" ? (
+          <Layers />
+        ) : (
+          <Variants />
+        )}
       </div>
     </aside>
   );
@@ -167,6 +176,15 @@ export function treeGroups(
       items: visible(doc.leaders).map((l) => ({ id: l.id, label: l.text || "—" })),
     },
     {
+      key: "group.furniture",
+      items: visible(doc.furniture ?? []).map((f) => ({
+        id: f.id,
+        label: f.name,
+        meta: `${formatNumber(f.width)}×${formatNumber(f.depth)}`,
+        status: status(f),
+      })),
+    },
+    {
       key: "group.underlays",
       items: doc.underlays.map((u) => ({ id: u.id, label: u.name })),
     },
@@ -238,10 +256,15 @@ function putLayer(layer: Layer) {
 }
 
 function layerUsage(doc: Document, id: string): number {
-  return [doc.walls, doc.openings, doc.rooms, doc.dimensions, doc.leaders, doc.underlays].reduce(
-    (sum, list) => sum + list.filter((e) => e.layer === id).length,
-    0,
-  );
+  return [
+    doc.walls,
+    doc.openings,
+    doc.rooms,
+    doc.dimensions,
+    doc.leaders,
+    doc.underlays,
+    doc.furniture ?? [],
+  ].reduce((sum, list) => sum + list.filter((e) => e.layer === id).length, 0);
 }
 
 function Layers() {

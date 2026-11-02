@@ -12,7 +12,7 @@ import styles from "./TopBar.module.css";
 const modes: readonly { value: EditorMode; label: string; disabled: boolean }[] = [
   { value: "measure", label: t("mode.measure"), disabled: false },
   { value: "replan", label: t("mode.replan"), disabled: false },
-  { value: "furniture", label: t("mode.furniture"), disabled: true },
+  { value: "furniture", label: t("mode.furniture"), disabled: false },
   { value: "electric", label: t("mode.electric"), disabled: true },
   { value: "light", label: t("mode.light"), disabled: true },
   { value: "plumbing", label: t("mode.plumbing"), disabled: true },
@@ -50,8 +50,16 @@ export function TopBar() {
     return s.summaries.find((x) => x.variant === id)?.name ?? t("variants.survey");
   });
   const setMode = (next: EditorMode) => {
-    if (next === "replan") enterReplan();
-    else enterSurvey();
+    // «Мебель» не меняет вид (обмер или вариант) — открывает каталог.
+    if (next === "furniture") {
+      useEditor.getState().setMode("furniture");
+      useEditor.getState().setSidebarTab("catalog");
+    } else {
+      useEditor.getState().setMode(next);
+      useEditor.getState().setSidebarTab("objects");
+      if (next === "replan") enterReplan();
+      else enterSurvey();
+    }
   };
   const in3d = useEditor((s) => s.three.options.enabled);
   const comparing = view.type === "compare";

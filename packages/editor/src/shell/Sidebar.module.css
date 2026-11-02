@@ -24,10 +24,12 @@
   flex: none;
   display: flex;
   align-items: center;
-  gap: var(--space-5);
-  padding: 0 var(--space-6);
+  gap: var(--space-4);
+  padding: 0 var(--space-5);
   border-bottom: 1px solid var(--line);
   font-weight: 600;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
 .inactive {
@@ -49,7 +51,9 @@
 
 .tab {
   height: 100%;
+  flex: none;
   padding: 0;
+  white-space: nowrap;
   border: 0;
   background: none;
   font: inherit;

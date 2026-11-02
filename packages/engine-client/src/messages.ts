@@ -16,6 +16,7 @@ export type {
   CameraAction,
   CameraInfo,
   CameraMode,
+  CatalogEntry,
   Command,
   Dimension,
   Document,
@@ -27,6 +28,7 @@ export type {
   EngineEvents,
   ExportNames,
   FromEngine,
+  Furniture,
   HistoryOp,
   IssueKind,
   Justification,
@@ -86,7 +88,8 @@ export type EngineCall =
   | { type: "documentTitle" }
   | { type: "drawingSet"; request: DrawingRequest }
   | { type: "exportDrawings"; request: DrawingRequest; format: DrawingFormat }
-  | { type: "zipFiles"; names: string[]; files: Uint8Array[] };
+  | { type: "zipFiles"; names: string[]; files: Uint8Array[] }
+  | { type: "importFurniture"; bytes: Uint8Array; name: string };
 
 /** Тип результата вызова. */
 export interface EngineCallResult {
@@ -100,6 +103,7 @@ export interface EngineCallResult {
   drawingSet: DrawingSetInfo;
   exportDrawings: Uint8Array;
   zipFiles: Uint8Array;
+  importFurniture: undefined;
 }
 
 /** UI → воркер. */

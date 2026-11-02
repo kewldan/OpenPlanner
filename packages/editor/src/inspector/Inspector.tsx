@@ -2,6 +2,7 @@ import type {
   Dimension,
   Document,
   Element,
+  Furniture,
   Justification,
   Leader,
   Opening,
@@ -101,7 +102,8 @@ type Selected =
   | { type: "room"; element: Room }
   | { type: "dimension"; element: Dimension }
   | { type: "leader"; element: Leader }
-  | { type: "underlay"; element: Underlay };
+  | { type: "underlay"; element: Underlay }
+  | { type: "furniture"; element: Furniture };
 
 /** Элемент документа по идентификатору. */
 export function findElement(doc: Document, id: string): Selected | null {
@@ -117,6 +119,8 @@ export function findElement(doc: Document, id: string): Selected | null {
   if (leader) return { type: "leader", element: leader };
   const underlay = doc.underlays.find((e) => e.id === id);
   if (underlay) return { type: "underlay", element: underlay };
+  const furniture = (doc.furniture ?? []).find((e) => e.id === id);
+  if (furniture) return { type: "furniture", element: furniture };
   return null;
 }
 
@@ -355,6 +359,7 @@ const sectionTitles: Record<Selected["type"], () => string> = {
   dimension: () => t("inspector.dimension"),
   leader: () => t("inspector.leader"),
   underlay: () => t("inspector.underlay"),
+  furniture: () => t("inspector.furniture"),
 };
 
 function StatusSection({ selected, demolished }: { selected: Selected; demolished: boolean }) {
@@ -369,7 +374,10 @@ function StatusSection({ selected, demolished }: { selected: Selected; demolishe
       ? t(`opening.${selected.element.kind}`)
       : sectionTitles[selected.type]();
   const demolishable =
-    selected.type === "wall" || selected.type === "opening" || selected.type === "room";
+    selected.type === "wall" ||
+    selected.type === "opening" ||
+    selected.type === "room" ||
+    selected.type === "furniture";
   return (
     <Section title={title}>
       {selected.type === "wall" && length !== undefined && (
@@ -436,7 +444,85 @@ function ElementFields({ selected, document }: { selected: Selected; document: D
       return <LeaderSection leader={selected.element} document={document} />;
     case "underlay":
       return <UnderlaySection underlay={selected.element} document={document} />;
+    case "furniture":
+      return <FurnitureSection furniture={selected.element} document={document} />;
   }
+}
+
+function FurnitureSection({ furniture, document }: { furniture: Furniture; document: Document }) {
+  const catalog = useEditor((s) => s.catalog);
+  const update = (patch: Partial<Furniture>) => put({ type: "furniture", ...furniture, ...patch });
+  const positive = (apply: (value: number) => void) =>
+    numberCommit((value) => {
+      if (value > 0) apply(value);
+      else useEditor.setState({ lastError: "значение должно быть больше нуля" });
+    });
+  const item = catalog.find((c) => c.id === furniture.item)?.name ?? t("catalog.custom");
+  return (
+    <Section title={t("inspector.furniture")}>
+      <CommitField
+        label={t("inspector.name")}
+        value={furniture.name}
+        onCommit={(name) => update({ name: name.trim() || furniture.name })}
+      />
+      <CommitField label={t("inspector.catalogItem")} readOnly value={item} onCommit={() => {}} />
+      <CommitField
+        label={t("inspector.width")}
+        unit={t("unit.mm")}
+        numeric
+        value={String(Math.round(furniture.width))}
+        onCommit={positive((width) => update({ width }))}
+      />
+      <CommitField
+        label={t("inspector.depth")}
+        unit={t("unit.mm")}
+        numeric
+        value={String(Math.round(furniture.depth))}
+        onCommit={positive((depth) => update({ depth }))}
+      />
+      <CommitField
+        label={t("inspector.height")}
+        unit={t("unit.mm")}
+        numeric
+        value={String(Math.round(furniture.height))}
+        onCommit={positive((height) => update({ height }))}
+      />
+      <CommitField
+        label={t("inspector.elevation")}
+        unit={t("unit.mm")}
+        numeric
+        value={String(Math.round(furniture.elevation ?? 0))}
+        onCommit={numberCommit((elevation) => update({ elevation: Math.max(0, elevation) }))}
+      />
+      <CommitField
+        label={t("inspector.rotation")}
+        unit={t("unit.deg")}
+        numeric
+        value={formatNumber(furniture.rotation ?? 0)}
+        onCommit={numberCommit((rotation) => update({ rotation: ((rotation % 360) + 360) % 360 }))}
+      />
+      <div className={styles.buttons}>
+        <Button
+          variant="outline"
+          onClick={() => sendToEngine({ type: "transformFurniture", rotate: 90, mirror: false })}
+        >
+          {t("inspector.rotate")}
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => sendToEngine({ type: "transformFurniture", rotate: 0, mirror: true })}
+        >
+          {t("inspector.mirror")}
+        </Button>
+      </div>
+      <LayerSelect
+        document={document}
+        value={furniture.layer}
+        onChange={(layer) => update({ layer })}
+      />
+      <DeleteButton />
+    </Section>
+  );
 }
 
 function WallSection({ wall, document }: { wall: Wall; document: Document }) {

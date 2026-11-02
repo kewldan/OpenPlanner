@@ -1,5 +1,6 @@
 import type {
   CameraInfo,
+  CatalogEntry,
   Document,
   FromEngine,
   LengthInfo,
@@ -25,6 +26,9 @@ export type EditorMode =
   | "finish";
 
 export type EditorDialog = "palette" | "shortcuts" | "scan" | "compare" | "drawings" | null;
+
+/** Вкладка левой панели. */
+export type SidebarTab = "objects" | "layers" | "variants" | "catalog";
 
 export type EngineStatus =
   | { state: "starting" }
@@ -81,6 +85,11 @@ export interface EditorState {
   summaries: ViewSummary[];
   /** 3D-вид: настройки, камера и солнце (если включено). */
   three: { options: Options3d; camera: CameraInfo | null; sun: SunInfo | null };
+  /** Каталог мебели из движка. */
+  catalog: CatalogEntry[];
+  /** Открытая вкладка левой панели. */
+  sidebarTab: SidebarTab;
+  setSidebarTab: (tab: SidebarTab) => void;
   setMode: (mode: EditorMode) => void;
   setDialog: (dialog: EditorDialog) => void;
   setViewport: (width: number, height: number) => void;
@@ -124,13 +133,21 @@ export const useEditor = create<EditorState>()((set) => ({
     camera: null,
     sun: null,
   },
+  catalog: [],
+  sidebarTab: "objects",
+  setSidebarTab: (sidebarTab) => set({ sidebarTab }),
   setMode: (mode) => set({ mode }),
   setDialog: (dialog) => set({ dialog }),
   setViewport: (width, height) => set({ viewport: { width, height } }),
   setEngine: (engine) => set({ engine }),
   clearEditText: () => set({ editText: null }),
   applyEvents: (events) =>
-    set((state) => events.reduce<Partial<EditorState>>(reduce, { lastError: state.lastError })),
+    set((state) =>
+      events.reduce<Partial<EditorState>>(reduce, {
+        lastError: state.lastError,
+        mode: state.mode,
+      }),
+    ),
 }));
 
 function reduce(acc: Partial<EditorState>, event: FromEngine): Partial<EditorState> {
@@ -172,11 +189,19 @@ function reduce(acc: Partial<EditorState>, event: FromEngine): Partial<EditorSta
       return {
         ...acc,
         view: event.view,
-        mode: event.view.type === "survey" ? "measure" : "replan",
+        // Режим «Мебель» работает в любом виде и сохраняется, пока его не сменят.
+        mode:
+          acc.mode === "furniture"
+            ? "furniture"
+            : event.view.type === "survey"
+              ? "measure"
+              : "replan",
         ...(event.view.type === "variant" ? { lastVariant: event.view.id } : {}),
       };
     case "variantsSummary":
       return { ...acc, summaries: event.views };
+    case "catalog":
+      return { ...acc, catalog: event.items };
     case "view3dChanged":
       return {
         ...acc,
