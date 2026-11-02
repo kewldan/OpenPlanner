@@ -7,7 +7,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::{
     EngineState,
-    protocol::{EngineEvents, ScanImport, ToEngine},
+    protocol::{DrawingFormat, DrawingRequest, DrawingSetInfo, EngineEvents, ScanImport, ToEngine},
 };
 
 /// Распознаёт скан (GLB, OBJ, PLY, ZIP, RoomPlan JSON). Вызывается в
@@ -197,6 +197,59 @@ impl Engine {
     #[wasm_bindgen(js_name = journalHeader)]
     pub fn journal_header() -> Result<String, JsError> {
         Ok(op_format::journal::header_line()?)
+    }
+
+    /// Комплект чертежей для предпросмотра: листы в SVG, масштаб, предупреждения.
+    ///
+    /// # Errors
+    ///
+    /// Запрос не соответствует протоколу.
+    #[wasm_bindgen(js_name = drawingSet)]
+    #[allow(clippy::needless_pass_by_value)] // wasm-bindgen принимает аргументы только по значению
+    pub fn drawing_set(&self, request: Ts<DrawingRequest>) -> Result<Ts<DrawingSetInfo>, JsError> {
+        let request = request.to_rust()?;
+        Ok(self.state.drawings(&request).preview().into_ts()?)
+    }
+
+    /// Файл экспорта чертежей.
+    ///
+    /// # Errors
+    ///
+    /// Запрос не соответствует протоколу или файл не записался.
+    #[wasm_bindgen(js_name = exportDrawings)]
+    #[allow(clippy::needless_pass_by_value)] // wasm-bindgen принимает аргументы только по значению
+    pub fn export_drawings(
+        &self,
+        request: Ts<DrawingRequest>,
+        format: Ts<DrawingFormat>,
+    ) -> Result<Vec<u8>, JsError> {
+        let request = request.to_rust()?;
+        let format = format.to_rust()?;
+        self.state
+            .drawings(&request)
+            .export(format)
+            .map_err(|err| JsError::new(&err.to_string()))
+    }
+
+    /// ZIP-архив из файлов (PNG листов, растеризованных в UI).
+    ///
+    /// # Errors
+    ///
+    /// Списки разной длины или ошибка архива.
+    #[wasm_bindgen(js_name = zipFiles)]
+    #[allow(clippy::needless_pass_by_value)] // wasm-bindgen принимает аргументы только по значению
+    pub fn zip_files(
+        names: Vec<String>,
+        files: Vec<js_sys::Uint8Array>,
+    ) -> Result<Vec<u8>, JsError> {
+        if names.len() != files.len() {
+            return Err(JsError::new("имён и файлов должно быть поровну"));
+        }
+        let files: Vec<(String, Vec<u8>)> = names
+            .into_iter()
+            .zip(files.iter().map(js_sys::Uint8Array::to_vec))
+            .collect();
+        op_export::zip(&files).map_err(|err| JsError::new(&err.to_string()))
     }
 
     /// Рисует кадр.

@@ -475,6 +475,82 @@ pub struct EngineEvents {
     pub events: Vec<FromEngine>,
 }
 
+/// Формат экспорта чертежей (PNG растеризует UI из SVG листов).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub enum DrawingFormat {
+    /// Векторный PDF со слоями: все листы в одном файле.
+    Pdf,
+    /// SVG по листу; несколько листов — ZIP.
+    Svg,
+    /// DXF плана по слоям, по листу; несколько листов — ZIP.
+    Dxf,
+    /// Ведомости и экспликации в XLSX.
+    Xlsx,
+    /// «Пакет для бригады»: PDF чертежей и XLSX ведомостей в ZIP.
+    Bundle,
+}
+
+/// Запрос комплекта чертежей.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct DrawingRequest {
+    /// Вариант перепланировки; без значения — только обмер.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub variant: Option<String>,
+    /// Дата для основной надписи (ММ.ГГ).
+    pub date: String,
+}
+
+/// Лист комплекта для предпросмотра.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct SheetPreview {
+    /// Название листа.
+    pub title: String,
+    /// Ширина листа, мм.
+    pub width: f64,
+    /// Высота листа, мм.
+    pub height: f64,
+    /// Лист в SVG, текст — контурами (одинаково выглядит везде, годится для PNG).
+    pub svg: String,
+}
+
+/// Комплект чертежей для окна «Чертежи».
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct DrawingSetInfo {
+    /// Листы по порядку.
+    pub sheets: Vec<SheetPreview>,
+    /// Знаменатель масштаба планов.
+    pub scale: u32,
+    /// Масштаб подобран автоматически.
+    pub auto_scale: bool,
+    /// Предупреждения (план не помещается, план пуст).
+    pub warnings: Vec<String>,
+    /// Основа имён файлов экспорта.
+    pub name: String,
+    /// Имена файлов экспорта по форматам.
+    pub file_names: ExportNames,
+}
+
+/// Имена файлов экспорта (несколько листов SVG или DXF — ZIP).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportNames {
+    /// PDF.
+    pub pdf: String,
+    /// SVG или ZIP с ними.
+    pub svg: String,
+    /// DXF или ZIP с ними.
+    pub dxf: String,
+    /// XLSX.
+    pub xlsx: String,
+    /// «Пакет для бригады».
+    pub bundle: String,
+}
+
 /// Что импортировать из скана.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]

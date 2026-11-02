@@ -1022,3 +1022,258 @@ fn protocol_json_shape() {
         r#"{"type":"pointer","phase":"down","x":1.0,"y":2.0,"shift":false,"alt":false}"#
     );
 }
+
+// ---------------------------------------------------------------- чертежи
+
+fn sheet_texts(sheet: &op_export::Sheet) -> Vec<String> {
+    let viewports = sheet.viewports.iter().flat_map(|v| v.items.iter());
+    sheet
+        .paper
+        .iter()
+        .chain(viewports)
+        .filter_map(|i| match &i.shape {
+            op_export::Shape::Text(t) => Some(t.text.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+fn request(variant: Option<&str>) -> crate::protocol::DrawingRequest {
+    crate::protocol::DrawingRequest {
+        variant: variant.map(Into::into),
+        date: "11.26".into(),
+    }
+}
+
+/// Две комнаты с дверью в перегородке и окном в верхней стене; вариант: перегородка
+/// демонтирована, новая из ГКЛ поперёк, окно заложено.
+fn replanned(s: &mut EngineState) -> String {
+    two_rooms(s);
+    tool(s, Tool::Door);
+    assert!(!has_error(&click(s, 2500.0, 3000.0)));
+    tool(s, Tool::Window);
+    assert!(!has_error(&click(s, 1750.0, 1000.0)));
+    let window = s.document().openings[1].id.clone();
+    tool(s, Tool::Select);
+    s.handle(ToEngine::CreateVariant {
+        name: "Вариант А".into(),
+        copy_of: None,
+    });
+    let v = variant_id(s);
+    let wall = partition(s);
+    s.handle(ToEngine::SetDemolished {
+        ids: vec![wall, window],
+        demolished: true,
+    });
+    s.handle(ToEngine::SetToolOptions {
+        options: crate::protocol::ToolOptions {
+            wall_thickness: 100.0,
+            justification: op_model::Justification::Center,
+            material: Some(op_model::WallMaterial::Gypsum),
+        },
+    });
+    tool(s, Tool::Wall);
+    click(s, 1000.0, 2000.0);
+    click(s, 4000.0, 2000.0);
+    s.handle(ToEngine::Cancel);
+    s.handle(ToEngine::FindRooms);
+    v
+}
+
+#[test]
+fn survey_sheet_with_title_block_and_schedule() {
+    let mut s = state();
+    two_rooms(&mut s);
+    let mut meta = s.document().meta.clone();
+    meta.title = "Квартира".into();
+    meta.address = "Москва, ул. Тверская, 1, кв. 5".into();
+    meta.designation = "2026-01-АР".into();
+    meta.developer = "Иванов".into();
+    assert!(!has_error(&s.handle(ToEngine::Command {
+        command: Command::SetMeta { meta },
+    })));
+
+    let set = s.drawings(&request(None));
+    assert_eq!(set.sheets.len(), 1);
+    assert_eq!(set.sheets[0].title, "Обмерный план");
+    assert_eq!(set.scale, 50, "квартира на A3 — в 1:50");
+    assert!(set.auto_scale && set.warnings.is_empty());
+    assert_eq!(set.name, "Квартира — Обмер (как есть)");
+    let texts = sheet_texts(&set.sheets[0]);
+    for expected in [
+        "2026-01-АР",
+        "Иванов",
+        "11.26",
+        "Р",
+        "Экспликация помещений",
+        "1. Помещение 1",
+        "Обмерный план (М 1:50)",
+    ] {
+        assert!(texts.iter().any(|t| t == expected), "{expected}: {texts:?}");
+    }
+    // Экспликация: две комнаты 1,38 × 3,88 м (оси через 1500 мм, стены 120 мм).
+    let table = &set.worksheets[0].tables[0];
+    assert_eq!(table.rows.len(), 2);
+    assert_eq!(table.rows[0][2].display(), "5,35", "{:?}", table.rows[0]);
+
+    let pdf = set.export(crate::protocol::DrawingFormat::Pdf).unwrap();
+    assert!(pdf.starts_with(b"%PDF"));
+    assert_eq!(set.extension(crate::protocol::DrawingFormat::Svg), "svg");
+    let svg = set.export(crate::protocol::DrawingFormat::Svg).unwrap();
+    assert!(svg.starts_with(b"<svg"));
+    let dxf = set.export(crate::protocol::DrawingFormat::Dxf).unwrap();
+    assert!(String::from_utf8_lossy(&dxf).contains("AC1009"));
+    let preview = set.preview();
+    assert!(preview.sheets[0].svg.contains("<path"));
+}
+
+#[test]
+fn variant_sheet_set_lists_demolition_and_partitions() {
+    let mut s = state();
+    let v = replanned(&mut s);
+    let set = s.drawings(&request(Some(&v)));
+    let titles: Vec<&str> = set.sheets.iter().map(|s| s.title.as_str()).collect();
+    assert_eq!(
+        titles,
+        [
+            "Обмерный план",
+            "План демонтажа",
+            "План монтажа перегородок",
+            "План помещений"
+        ]
+    );
+    // Все листы в одном масштабе и с одним положением плана.
+    let first = &set.sheets[0].viewports[0];
+    for sheet in &set.sheets {
+        let vp = &sheet.viewports[0];
+        assert!((vp.center - first.center).length() < 1e-9);
+        assert!((vp.denominator - 50.0).abs() < 1e-9);
+    }
+    // Номера листов в основной надписи.
+    let texts = sheet_texts(&set.sheets[1]);
+    assert!(texts.iter().any(|t| t == "2") && texts.iter().any(|t| t == "4"));
+    assert!(texts.iter().any(|t| t == "Д1"), "марка на плане: {texts:?}");
+
+    // Демонтаж: перегородка 4 м × 2,7 м (дверь уходит вместе с ней).
+    let demolition = &set
+        .worksheets
+        .iter()
+        .find(|w| w.name == "Демонтаж")
+        .unwrap()
+        .tables[0];
+    assert_eq!(demolition.rows.len(), 1, "{:?}", demolition.rows);
+    assert_eq!(demolition.rows[0][3], op_export::Cell::number(4.0, 2));
+    assert_eq!(demolition.rows[0][5], op_export::Cell::number(10.8, 2));
+
+    // Монтаж: перегородка из ГКЛ 3 м и закладка окна.
+    let construction = &set
+        .worksheets
+        .iter()
+        .find(|w| w.name == "Монтаж")
+        .unwrap()
+        .tables;
+    let names: Vec<String> = construction[0]
+        .rows
+        .iter()
+        .map(|r| r[1].display())
+        .collect();
+    assert_eq!(
+        names,
+        ["Перегородка: ГКЛ", "Закладка проёма (оконный)"],
+        "{names:?}"
+    );
+    assert_eq!(construction[0].rows[0][3], op_export::Cell::number(3.0, 2));
+    let materials: Vec<String> = construction[1]
+        .rows
+        .iter()
+        .map(|r| r[0].display())
+        .collect();
+    assert_eq!(materials, ["ГКЛ", "Закладка проёмов"]);
+
+    // Пакет для бригады: PDF и XLSX в одном архиве.
+    let bundle = set.export(crate::protocol::DrawingFormat::Bundle).unwrap();
+    let archive = zip::ZipArchive::new(std::io::Cursor::new(bundle)).unwrap();
+    let mut files: Vec<String> = archive
+        .file_names()
+        .map(|n| n.unwrap().into_owned())
+        .collect();
+    files.sort_unstable();
+    assert_eq!(
+        files,
+        [
+            "Новый проект — Вариант А — ведомости.xlsx",
+            "Новый проект — Вариант А.pdf"
+        ]
+    );
+    // Несколько листов SVG — архив.
+    assert_eq!(set.extension(crate::protocol::DrawingFormat::Svg), "zip");
+    let svgs = set.export(crate::protocol::DrawingFormat::Svg).unwrap();
+    let archive = zip::ZipArchive::new(std::io::Cursor::new(svgs)).unwrap();
+    assert_eq!(archive.len(), 4);
+}
+
+#[test]
+fn drawing_scale_follows_plan_size_and_settings() {
+    // План 40 × 30 м в 1:50 на A3 не помещается — подбирается 1:200.
+    let s = &mut state();
+    big_square(s, 40_000.0);
+    let set = s.drawings(&request(None));
+    assert_eq!(set.scale, 200);
+    assert!(set.warnings.is_empty());
+
+    // Заданный масштаб не помещается — предупреждение.
+    s.handle(ToEngine::Command {
+        command: Command::SetDrawing {
+            drawing: op_model::DrawingSettings {
+                paper: op_model::PaperFormat::A4Portrait,
+                scale: Some(50),
+            },
+        },
+    });
+    let set = s.drawings(&request(None));
+    assert_eq!(set.scale, 50);
+    assert!(!set.auto_scale);
+    assert_eq!(set.warnings.len(), 1, "{:?}", set.warnings);
+    assert!((set.sheets[0].size.x - 210.0).abs() < 1e-9);
+}
+
+/// Квадрат стен со стороной `side` мм от начала координат — командами.
+fn big_square(s: &mut EngineState, side: f64) {
+    let corners = [
+        (0.0, 0.0),
+        (side, 0.0),
+        (side, side * 0.75),
+        (0.0, side * 0.75),
+    ];
+    let mut commands = Vec::new();
+    for (i, (x, y)) in corners.iter().enumerate() {
+        commands.push(Command::Put {
+            element: Element::Node(op_model::Node {
+                id: format!("n{i}"),
+                variant: None,
+                x: *x,
+                y: *y,
+            }),
+            index: None,
+        });
+    }
+    for i in 0..4 {
+        commands.push(Command::Put {
+            element: Element::Wall(op_model::Wall {
+                id: format!("w{i}"),
+                layer: LayerKind::Walls.id().into(),
+                variant: None,
+                a: format!("n{i}"),
+                b: format!("n{}", (i + 1) % 4),
+                thickness: 200.0,
+                justification: op_model::Justification::Center,
+                height: None,
+                material: None,
+            }),
+            index: None,
+        });
+    }
+    assert!(!has_error(&s.handle(ToEngine::Command {
+        command: Command::Batch { commands },
+    })));
+}

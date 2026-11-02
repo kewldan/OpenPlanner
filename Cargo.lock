@@ -2533,6 +2533,7 @@ dependencies = [
  "image",
  "js-sys",
  "log",
+ "op-export",
  "op-format",
  "op-geom",
  "op-model",
@@ -2546,6 +2547,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "wgpu",
+ "zip",
 ]
 
 [[package]]

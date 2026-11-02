@@ -12,7 +12,10 @@ use crate::{
     derived::Derived,
     draw, geometry,
     ids::IdGen,
-    protocol::{EngineEvents, FromEngine, ToEngine, Tool, ToolOptions, ToolStep, View},
+    protocol::{
+        DrawingRequest, EngineEvents, FromEngine, ToEngine, Tool, ToolOptions, ToolStep, View,
+    },
+    sheets::SheetSet,
     snap::Snap,
     tools::{Drag, ToolData},
 };
@@ -497,6 +500,16 @@ impl EngineState {
             doc.assets.iter().map(|(k, v)| (k.as_str(), v.as_slice())),
         )?;
         Ok(cursor.into_inner())
+    }
+
+    /// Комплект чертежей текущего документа.
+    #[must_use]
+    pub fn drawings(&self, request: &DrawingRequest) -> SheetSet {
+        crate::sheets::build(
+            self.history.document(),
+            request.variant.as_deref(),
+            &request.date,
+        )
     }
 
     /// Открывает проект из контейнера `.oplan`. История начинается заново.

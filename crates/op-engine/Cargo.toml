@@ -14,6 +14,7 @@ crate-type = ["cdylib", "rlib"]
 glam.workspace = true
 image.workspace = true
 log.workspace = true
+op-export.workspace = true
 op-format.workspace = true
 op-geom.workspace = true
 op-model = { workspace = true, features = ["wasm"] }
@@ -36,3 +37,4 @@ workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+zip.workspace = true
