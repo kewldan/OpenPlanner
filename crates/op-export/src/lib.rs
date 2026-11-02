@@ -8,6 +8,7 @@
 pub mod font;
 pub mod frame;
 pub mod hatch;
+pub mod pdf;
 pub mod sheet;
 pub mod table;
 
