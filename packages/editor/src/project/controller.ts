@@ -167,6 +167,11 @@ export class ProjectController {
    * открыть новую версию; несохранённые правки при этом сохраняются копией рядом.
    */
   async checkExternal(): Promise<void> {
+    // Без файла или без изменений — ничего не блокируем: команды пользователя идут дальше.
+    const before = this.store.getState();
+    if (!before.path || before.busy || this.#stamp === null) return;
+    const changed = await this.platform.fileStamp(before.path);
+    if (changed === null || changed === this.#stamp) return;
     await this.#exclusive(async () => {
       const { path, name } = this.store.getState();
       if (!path || this.#stamp === null) return;
