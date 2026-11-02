@@ -1388,3 +1388,29 @@ pub struct ScanImport {
     /// Имя исходного файла.
     pub name: String,
 }
+
+/// Файл, который приложение записывает по просьбе MCP-агента.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct McpFileOut {
+    /// Путь на диске.
+    pub path: String,
+    /// Содержимое.
+    #[serde(with = "serde_bytes")]
+    #[tsify(type = "Uint8Array")]
+    pub bytes: Vec<u8>,
+}
+
+/// Ответ движка на сообщение MCP.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct McpReply {
+    /// Строка ответа JSON-RPC (у уведомлений — нет).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub response: Option<String>,
+    /// События движка для UI.
+    pub events: Vec<FromEngine>,
+    /// Файлы для записи.
+    pub files: Vec<McpFileOut>,
+}

@@ -254,6 +254,29 @@ impl Engine {
             .map_err(|err| JsError::new(&err.to_string()))
     }
 
+    /// Сообщение MCP-клиента (строка JSON-RPC): ответ, события, файлы экспорта.
+    ///
+    /// # Errors
+    ///
+    /// Ошибка передачи ответа в JS (не должна возникать).
+    #[wasm_bindgen(js_name = mcpMessage)]
+    pub fn mcp_message(&mut self, line: &str) -> Result<Ts<crate::protocol::McpReply>, JsError> {
+        let out = self.state.mcp_message(line);
+        Ok(crate::protocol::McpReply {
+            response: out.response,
+            events: out.events,
+            files: out
+                .files
+                .into_iter()
+                .map(|f| crate::protocol::McpFileOut {
+                    path: f.path,
+                    bytes: f.bytes,
+                })
+                .collect(),
+        }
+        .into_ts()?)
+    }
+
     /// Проект для гостевой ссылки: `.oplan` без двоичных файлов.
     ///
     /// # Errors

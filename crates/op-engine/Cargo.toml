@@ -22,6 +22,8 @@ op-model = { workspace = true, features = ["wasm"] }
 op-render.workspace = true
 op-scan = { workspace = true, features = ["wasm"] }
 serde.workspace = true
+serde_bytes.workspace = true
+serde_json.workspace = true
 tsify.workspace = true
 wasm-bindgen.workspace = true
 

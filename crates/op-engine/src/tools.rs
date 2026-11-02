@@ -1054,7 +1054,7 @@ impl EngineState {
         events
     }
 
-    fn wall_click(&mut self, end: WallEnd) -> Vec<FromEngine> {
+    pub(crate) fn wall_click(&mut self, end: WallEnd) -> Vec<FromEngine> {
         let ToolData::Wall { anchor, start } = self.data.clone() else {
             let start = end.node.clone();
             self.data = ToolData::Wall { anchor: end, start };

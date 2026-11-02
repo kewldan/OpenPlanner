@@ -17,6 +17,7 @@ pub mod geometry;
 pub mod hit;
 pub mod ids;
 pub mod ifc;
+pub mod mcp;
 pub mod model3d;
 mod overlay;
 pub mod plumbing;
