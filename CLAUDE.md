@@ -4,7 +4,7 @@ Guidance for AI coding agents working in this repository.
 
 ## Project
 
-OpenPlanner is an open-source **desktop apartment-renovation planner**. One model of an apartment produces themed working-drawing sheets (survey, demolition, partitions, furniture, electrical, plumbing, finishes), an estimate and a 3D view. Work proceeds in **stages** (no throwaway MVP); Stages 0 (foundation), 1 (survey: walls, openings, rooms, dimensions, leaders, layers, image underlay), 2 (LiDAR scan import with review), 3 (replanning variants: demolition, partitions with materials, comparison), 4 (drawings and export: sheet set with wall elevations, title block, PDF/DXF/SVG/PNG/XLSX) 5 (3D: orbit, walkthrough, saved views, section cut, sun with shadow map) 6 (furniture: catalog, wall snapping, GLB models, layout sheet), 7 (electrical and lighting: points, panel groups with calculations, switch links, scenes, illuminance, four sheets), 8 (plumbing: fixture outlets, risers, manifolds, auto and manual pipes, slope and level checks, pipes and fittings, two sheets), 9 (finishes: room surfaces, material library, tile layout with start optimisation, consumption, floor and ceiling plans, tiles on elevations) and 10 (estimate: price list with quantity rules from the model, rates, reserve and price history, manual quantities, grouping by section and room, purchase list, CSV/XLSX import and export, cost per variant) are done; Stage 11 (extensions) is next.
+OpenPlanner is an open-source **desktop apartment-renovation planner**. One model of an apartment produces themed working-drawing sheets (survey, demolition, partitions, furniture, electrical, plumbing, finishes), an estimate and a 3D view. Work proceeds in **stages** (no throwaway MVP); Stages 0 (foundation), 1 (survey: walls, openings, rooms, dimensions, leaders, layers, image underlay), 2 (LiDAR scan import with review), 3 (replanning variants: demolition, partitions with materials, comparison), 4 (drawings and export: sheet set with wall elevations, title block, PDF/DXF/SVG/PNG/XLSX) 5 (3D: orbit, walkthrough, saved views, section cut, sun with shadow map) 6 (furniture: catalog, wall snapping, GLB models, layout sheet), 7 (electrical and lighting: points, panel groups with calculations, switch links, scenes, illuminance, four sheets), 8 (plumbing: fixture outlets, risers, manifolds, auto and manual pipes, slope and level checks, pipes and fittings, two sheets), 9 (finishes: room surfaces, material library, tile layout with start optimisation, consumption, floor and ceiling plans, tiles on elevations), 10 (estimate: price list with quantity rules from the model, rates, reserve and price history, manual quantities, grouping by section and room, purchase list, CSV/XLSX import and export, cost per variant) and 11 (extensions: photoreal render queue, IFC 4 export, web version with read-only guest links, DXF and glTF import, floors, floor heating, air conditioning and ventilation, cloud-folder sync) are done — all planned stages are complete.
 
 Key documents (written in Russian — read them before larger changes):
 
@@ -39,6 +39,10 @@ WebView ─ UI thread (React)  ⇄ postMessage ⇄  Web Worker: op-engine (WASM)
 - **3D view state is window state, not document**: `Options3d` and the camera live in `EngineState` (`view3d.rs`, `camera3d.rs`); only the site orientation (`site`) and saved views (`views`) are project properties (`setSite`, `setViews`). In 3D the plan tools are disabled; the UI maps mouse, wheel and WASD to `camera3d` messages.
 - **Platform differences live behind `Platform`** (`packages/editor/src/platform`): `desktop.ts` (Tauri) and `browser.ts` (web build / e2e). The editor code must not call Tauri APIs directly.
 - **The estimate is computed, never stored**: the document keeps only the price list (`prices`, `setPrices`) and manual quantities (`overrides`, keyed by price item + room, `setOverrides`). `crates/op-engine/src/estimate.rs` turns each item's `Measure` into lines per room (areas, points, furniture, finishes) or one shared line (demolition, partitions, openings, cable, pipes) for the current view and emits `estimate` after every edit; `ViewSummary.cost` prices every variant. Quantity math is `op_calc::estimate`; CSV and XLSX reading are `op_export::csv` / `op_export::xlsx::read`. `Measure` has a one-line token form (`finish:floor:tile`) shared by the CSV/XLSX price files and `measureKey` in `packages/editor/src/estimate/prices.ts` — keep them in sync.
+- **Floors are a projection like variants**: elements carry `level` (none = the implicit first floor); walls and openings follow their nodes. Always project with `op_model::view::project_level(doc, variant, level)`; the engine tags new elements with the current level in `EngineState::adapt`. Plan, tools and per-trade reports use the current level; summaries, the estimate and IFC iterate `view::levels(doc)`; 3D stacks lower floors under the current one.
+- **Climate** points are `DeviceKind`s (`is_climate()`); floor heating zones are a document list (`heating`, `setHeating`). A thermostat's load in the panel calc is the sum of its zones (`electric::power`). Norms live in `op_calc::climate`, the report in `crates/op-engine/src/climate.rs`.
+- **Render** is a CPU path tracer (`op_render::trace`) run in `render.worker.ts`: the engine encodes scene + camera (`renderInput`), the worker returns PNG (`traceImage`), shots are stored as `assets/renders/*.png` + `renders`. Camera rays see faces one-sided (like the rasteriser), shadow rays two-sided.
+- **Guest mode**: `#guest=<base64url .oplan without assets>` opens the web build read-only (`setReadOnly` makes the engine reject every edit); the project controller skips the journal and saving. Cloud-folder sync compares `Platform.fileStamp` on focus and before autosave.
 - **Drawings are built by the engine** (`crates/op-engine/src/sheets.rs` → `op_export::Sheet`) and written by `op-export`'s own PDF/SVG/DXF/XLSX writers; the UI only rasterises PNG and saves files via `Platform.saveExport` (native `write_export` accepts export extensions only, now including `.csv`). Price files are picked with `Platform.openTable` (native `read_table`: `.csv` / `.xlsx` only).
 - **`.oplan` bytes are produced and parsed by the engine** (`op-format` in WASM). The native side only reads/writes bytes (`apps/desktop/src-tauri/src/files.rs`) and only accepts `.oplan` / `.oplan.journal` paths.
 - **Licensing boundary:** `crates/op-format` and `schema/` are MIT; everything else is AGPL-3.0. `op-format` must not depend on AGPL crates. Dependencies must be AGPL-compatible; GPL-2.0-only is not allowed.
@@ -53,7 +57,7 @@ bun run dev                     # desktop app (Tauri)
 bun run dev:web                 # browser build at http://localhost:1420
 ```
 
-Checks (CI runs all of them; run the relevant ones before pushing):
+Checks (CI runs them on every push; run the relevant ones before pushing):
 
 ```bash
 cargo fmt --all -- --check
@@ -66,7 +70,7 @@ bun test                    # unit tests under packages/ (see bunfig.toml)
 cd apps/desktop && bunx vite build && bunx playwright test   # web e2e: chromium (WebGL2) + webgpu projects
 ```
 
-Desktop checks (real app; need `bunx tauri build --debug --no-bundle` in `apps/desktop` first):
+Desktop checks (real app; need `bunx tauri build --debug --no-bundle` in `apps/desktop` first). CI runs only the selftest on every push; dialogs, the Linux window e2e, WebGPU in WebView2 and GPU frames live in `.github/workflows/desktop-checks.yml` (manual and weekly):
 
 - `scripts/desktop-selftest.sh <binary>` — launches the app, waits for the engine, prints the GPU backend. `EXPECT_BACKEND=BrowserWebGpu` makes it strict.
 - `scripts/desktop-dialogs.sh <binary>` — native Save/Open dialogs, `kill -9`, native recovery prompt (AppleScript / SendKeys / xdotool).
@@ -74,6 +78,7 @@ Desktop checks (real app; need `bunx tauri build --debug --no-bundle` in `apps/d
 
 Other:
 
+- `bun run build:web` in `apps/desktop` — the static web version (release WASM, relative paths).
 - `UPDATE_SCHEMA=1 cargo test -p op-model` — regenerate `schema/model.schema.json` after model changes (a test fails if it is stale).
 - `OPENPLANNER_REQUIRE_GPU=1 cargo test -p op-render -- --nocapture` — the offscreen render test must find a GPU adapter (otherwise it is skipped).
 
